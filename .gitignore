@@ -59,3 +59,21 @@ bld/
 *.suo
 *.user
 .vs/
+
+
+# Python #
+##########
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.pyright/
+*.egg-info/
+build/
+dist/
+
+# Generator scratch output #
+############################
+.ci/unit-tests/_output/
+.ci/unit-tests/**/TestResults/

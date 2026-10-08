@@ -1,0 +1,5 @@
+# Global code owners for all files in this repository
+# These users will be automatically requested for review on all PRs
+
+* @vietle-bh
+

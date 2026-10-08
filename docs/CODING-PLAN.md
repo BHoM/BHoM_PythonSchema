@@ -7,6 +7,25 @@ Revision 3: adds `ProjectIdentification` to the spike set, brings the CI work an
 existing GitHub App, uses the real `BHoM/dKoP_Toolkit` for the rehearsal (no scratch repository), and records the decisions
 taken so far (section 9).
 
+## Implementation status (phases 0 to 6 done, 7 and 8 not started)
+
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (44 tests), pytest (73 tests) and Pyright.
+
+Where the implementation differs from the plan above:
+
+- **Golden files are reviewed generator snapshots**, not hand-written specifications. The behaviour of the spike types is pinned by the pytest suites
+  (`test_fixtures`, `test_spike`); only small, stable real types (`ProjectIdentification`, `IdKoPObject`, `GradientCenteringOptions`) have committed golden files, so a change in the
+  moving BHoM develop branch does not break the golden tests.
+- **Pytest suites are separate sessions** (`test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`) because the fixture and spike packages share assembly folder names such as `BHoM`.
+- **Imports:** a type outside any reference cycle is imported at the top of the module; only cyclic references use bottom-of-module imports plus `model_rebuild()`. The spike set has no cycle; the fixtures
+  contain one on purpose.
+- **Generated model files start with** `# pyright: reportUnknownVariableType=false, reportIncompatibleVariableOverride=false`: Pyright cannot infer `Field(default_factory=list)` with a
+  `description`, and some C# classes redeclare a base property with another type.
+- **Interface members** (names, types, descriptions) are kept in the `__bhom__` marker, because annotations on a plain base class would be collected by Pydantic as fields. Types they mention are generated too.
+- **Required fields** (no default found because the C# type has no parameterless constructor) are drafted back as get-only properties plus a constructor.
+- Same simple type names used by several types are written in full in the drafted C#, because an unqualified name can bind to a type in an enclosing namespace instead of the `using`.
+- Drafts compile against `BHoM.dll` and `Quantities_oM.dll`; types the generator maps specially (for example `FragmentSet`) resolve from there.
+
 ## 1. End goal
 
 1. **C# → Python converter** ready: reads the compiled BHoM oM assemblies and writes one Pydantic class per C# type.

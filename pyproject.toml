@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bhom-schema"
+version = "0.1.0"
+description = "Python classes generated from the BHoM C# object model (oM)."
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+dependencies = ["pydantic>=2.13,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyright==1.1.414"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", ".ci/generation", ".ci/unit-tests/python"]
+testpaths = [".ci/unit-tests/python"]
+addopts = "-ra"
+markers = ["realtypes: needs the real BHoM assemblies installed"]

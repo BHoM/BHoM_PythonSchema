@@ -1,12 +1,23 @@
-# template-repository
-This repository can be used to create brand new BHoM Toolkits :rocket:
+# BHoM_PythonSchema
 
-- Just click on the green button above "Use this template" :point_up_2: . Call the new repo with the name of your software followed by `_Toolkit`, e.g. "MySoftware_Toolkit". If you want to develop outside of a repository, you can download the code by clicking "Code" and then saving it as zip.
-- Go in your repository or unzipped folder, double click the `RenameToolkitFiles.bat` file. When asked, insert the name of your software, e.g. "MySoftware". All the files and folder will be renamed accordingly.
-- Start developing! :rocket:
+Python (Pydantic) classes generated from the BHoM C# object model (oM), the Python counterpart of
+[BHoM_JSONSchema](https://github.com/BHoM/BHoM_JSONSchema).
 
-## Configure development environment
-Learn how to [set up your development environment for BHoM here](https://bhom.xyz/documentation/Guides-and-Tutorials/Coding-with-BHoM/). 
+- `src/bhom_schema/`: the generated Python package (`bhom_schema.<Assembly>.<Namespace>.<Type>`).
+- `.ci/generation/PythonSchemaGeneration*`: the C# to Python converter (reads the compiled oM assemblies).
+- `.ci/generation/py2cs`: the Python to C# converter, used by the linked-PR workflow to draft aligned C#.
+- `.ci/unit-tests`: NUnit and pytest tests, plus `run-all.ps1` that runs everything.
+- `docs/`: research notes and the coding plan.
 
-## Implement the Toolkits
-See the instructions for [creating a new toolkit here](https://bhom.xyz/documentation/Contributing/Implementing-a-new-Toolkit/).
+## Development setup
+
+Prerequisites: .NET 8 SDK, Python 3.12, and the BHoM assemblies installed in `%ProgramData%\BHoM\Assemblies`
+(build the BHoM repos, for example `BHoM`, `BHoM_Engine`, `JSONSchema_Toolkit` and `dKoP_Toolkit`).
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -e ".[dev]"
+.ci\unit-tests\run-all.ps1
+```
+
+`run-all.ps1` starts with a preflight that reports missing assemblies. It never builds a repo for you.
