@@ -77,3 +77,4 @@ dist/
 ############################
 .ci/unit-tests/_output/
 .ci/unit-tests/**/TestResults/
+/.claude

@@ -1,0 +1,64 @@
+{
+  "BHoM/BHoM": [
+    "Acoustic_oM",
+    "Analytical_oM",
+    "Architecture_oM",
+    "BHoM",
+    "Data_oM",
+    "DeepLearning_oM",
+    "Diffing_oM",
+    "Dimensional_oM",
+    "Environment_oM",
+    "Facade_oM",
+    "Geometry_oM",
+    "Graphics_oM",
+    "Ground_oM",
+    "Humans_oM",
+    "Inspection_oM",
+    "LifeCycleAssessment_oM",
+    "Lighting_oM",
+    "MEP_oM",
+    "Matter_oM",
+    "Physical_oM",
+    "Planning_oM",
+    "Programming_oM",
+    "Quantities_oM",
+    "Search_oM",
+    "Security_oM",
+    "Spatial_oM",
+    "Structure_oM",
+    "Test_oM",
+    "Verification_oM",
+    "Versioning_oM"
+  ],
+  "BHoM/BHoM_Adapter": [
+    "Adapter_oM"
+  ],
+  "BHoM/Clipper_Toolkit": [
+    "Clipper_oM"
+  ],
+  "BHoM/Excel_Toolkit": [
+    "Excel_oM"
+  ],
+  "BHoM/File_Toolkit": [
+    "File_oM"
+  ],
+  "BHoM/JSONSchema_Toolkit": [
+    "JsonSchema_oM"
+  ],
+  "BHoM/Python_Toolkit": [
+    "Python_oM"
+  ],
+  "BHoM/Revit_Toolkit": [
+    "Revit_oM"
+  ],
+  "BHoM/Test_Toolkit": [
+    "CodeCompliance_oM",
+    "InteroperabilityTest_oM",
+    "NUnit_oM",
+    "UnitTest_oM"
+  ],
+  "BHoM/dKoP_Toolkit": [
+    "dKoP_oM"
+  ]
+}
