@@ -32,7 +32,7 @@ namespace PythonSchemaGeneration.Mapping
         {
             "System.Collections.Generic.Dictionary`2", "System.Collections.Generic.IDictionary`2", "System.Collections.Generic.SortedDictionary`2",
             "System.Collections.Generic.SortedList`2", "System.Collections.Generic.IReadOnlyDictionary`2",
-            "System.Collections.Concurrent.ConcurrentDictionary`2"
+            "System.Collections.Concurrent.ConcurrentDictionary`2", "System.Collections.ObjectModel.ReadOnlyDictionary`2"
         };
 
         /***************************************************/

@@ -2,6 +2,7 @@ using PythonSchemaGeneration.Mapping;
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PythonSchemaGeneration.Emission
 {
@@ -89,7 +90,23 @@ namespace PythonSchemaGeneration.Emission
                     if (param.Constraints.Count > usable.Count)
                         notes.Add($"{param.Name}: constraint not representable and dropped");
 
-                    parts.Add(usable.Count > 0 ? $"{param.Name}: {lazyMapper.Map(usable[0]).Expression}" : param.Name);
+                    if (usable.Count == 0)
+                    {
+                        parts.Add(param.Name);
+                        continue;
+                    }
+
+                    string bound = lazyMapper.Map(usable[0]).Expression;
+
+                    //A PEP 695 bound cannot mention a type parameter, so those arguments become Any
+                    if (usable[0].ContainsGenericParameters)
+                    {
+                        string any = tracker.AddStandardName("typing", "Any");
+                        foreach (GenericParamModel other in model.GenericParams)
+                            bound = Regex.Replace(bound, $@"\b{Regex.Escape(other.Name)}\b", any);
+                    }
+
+                    parts.Add($"{param.Name}: {bound}");
                 }
 
                 generics = "[" + string.Join(", ", parts) + "]";

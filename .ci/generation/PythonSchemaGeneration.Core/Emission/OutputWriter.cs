@@ -84,8 +84,8 @@ namespace PythonSchemaGeneration.Emission
             foreach (string dir in Directory.GetDirectories(folder))
             {
                 RemoveEmptyDirectories(dir);
-                if (!Directory.EnumerateFileSystemEntries(folder).Any())
-                    Directory.Delete(folder);
+                if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                    Directory.Delete(dir);
             }
         }
 

@@ -249,6 +249,17 @@ class Defaults:
             if isinstance(body, ast.Call) and isinstance(body.func, ast.Name) and body.func.id == "Color":
                 values = {k.arg: ast.literal_eval(k.value) for k in body.keywords}
                 return f"Color.FromArgb({values['A']}, {values['R']}, {values['G']}, {values['B']})"
+            if isinstance(body, (ast.List, ast.Set, ast.Dict)) and not (body.elts if not isinstance(body, ast.Dict) else body.keys):
+                return self._new_collection(clr)
+            if isinstance(body, ast.List) and any(isinstance(e, ast.List) for e in body.elts):
+                node = parse_type(clr)
+                if node.suffix != "[,]" or not all(isinstance(e, ast.List) for e in body.elts):
+                    return None
+
+                element = TypeNode(node.name, node.args, "")
+                cell_type = PropertyInfo(name="", clr_type=self.names._render(element))  # pyright: ignore[reportPrivateUsage]
+                rows = ", ".join("{ " + ", ".join(self._literal(c, cell_type) or "default" for c in row.elts) + " }" for row in body.elts if isinstance(row, ast.List))
+                return f"new {self.names._render(element)}[,] {{ {rows} }}"  # pyright: ignore[reportPrivateUsage]
             if isinstance(body, (ast.List, ast.Set)):
                 items = ", ".join(self._literal(e, PropertyInfo(name="", clr_type=self._element(clr))) or "null" for e in body.elts)
                 return f"new {self._concrete(clr)} {{ {items} }}"
@@ -268,6 +279,11 @@ class Defaults:
         if node.suffix.startswith("[") and "," not in node.suffix:
             element = TypeNode(node.name, node.args, "")
             return f"new {self.names._render(element)}[0]"  # pyright: ignore[reportPrivateUsage]
+        for read_only, writable in (("ObjectModel.ReadOnlyDictionary<", "Generic.Dictionary<"), ("ObjectModel.ReadOnlyCollection<", "Generic.List<")):
+            if read_only in clr:
+                inner = clr.replace(read_only, writable, 1)
+                return f"new {self._concrete(clr)}(new {self._concrete(inner)}())"
+
         return f"new {self._concrete(clr)}()"
 
     @staticmethod

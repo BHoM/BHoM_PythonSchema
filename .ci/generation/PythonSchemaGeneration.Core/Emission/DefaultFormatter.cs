@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using PythonSchemaGeneration.Mapping;
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
@@ -95,6 +96,13 @@ namespace PythonSchemaGeneration.Emission
 
             if (m_Registry.Contains(vt) && !vt.IsAbstract && (vt.IsValueType || vt.GetConstructor(Type.EmptyTypes) != null))
             {
+                //The Python class cannot be created without arguments if one of its own defaults was left out
+                if (HasUnwritableEnum(value, 0))
+                {
+                    m_Reporter.Warn(member, $"default instance of {ClrNames.Format(vt)} cannot be created in Python, field is required");
+                    return new DefaultText();
+                }
+
                 PyRef pyRef = m_Registry.Ref(vt);
                 return Factory($"lambda: {m_Scope.Reference(vt, pyRef, false)}()");
             }
@@ -126,6 +134,13 @@ namespace PythonSchemaGeneration.Emission
             if (System.Enum.IsDefined(type, value))
                 return Literal($"{local}.{Naming.Identifier(value.ToString())}");
 
+            //A plain Python Enum rejects a value that is not a member, so only flags enums can carry one
+            if (!type.IsDefined(typeof(FlagsAttribute), false))
+            {
+                m_Reporter.Warn(member, $"default value {value:D} is not a member of enum {ClrNames.Format(type)}, field is required");
+                return new DefaultText();
+            }
+
             object raw = Convert.ChangeType(value, System.Enum.GetUnderlyingType(type));
             return Literal($"{local}({Convert.ToString(raw, CultureInfo.InvariantCulture)})");
         }
@@ -152,13 +167,18 @@ namespace PythonSchemaGeneration.Emission
             List<object> items = enumerable.Cast<object>().ToList();
 
             //Containers that mention a type parameter need the subscripted form so the factory stays typed
-            bool generic = m_TypeParams.Any(p => expr.Contains(p));
-            string factory = generic ? expr : head;
             if (head != "list" && head != "set" && head != "dict")
             {
                 m_Reporter.Warn(member, $"default collection mapped to {expr} is not supported, field is required");
                 return new DefaultText();
             }
+
+            //A lambda is evaluated after the class exists, so it can name the class itself or a type parameter
+            bool generic = m_TypeParams.Any(p => Regex.IsMatch(expr, $@"\b{Regex.Escape(p)}\b"));
+            string factory = generic ? (head == "set" ? "lambda: set()" : head == "dict" ? "lambda: {}" : "lambda: []") : head;
+
+            if (enumerable is Array array && array.Rank == 2)
+                return Matrix(array, factory, member);
 
             if (items.Count == 0)
                 return Factory(factory);
@@ -181,6 +201,64 @@ namespace PythonSchemaGeneration.Emission
             }
             string body = string.Join(", ", literals);
             return Factory(head == "set" ? $"lambda: {{{body}}}" : $"lambda: [{body}]");
+        }
+
+        private bool HasUnwritableEnum(object value, int depth)
+        {
+            if (value == null || depth > 4)
+                return false;
+
+            Type type = value.GetType();
+            foreach (System.Reflection.PropertyInfo property in type.GetProperties())
+            {
+                if (property.GetIndexParameters().Length > 0 || !property.CanRead)
+                    continue;
+
+                object item;
+                try { item = property.GetValue(value); }
+                catch { continue; }
+
+                if (item == null)
+                    continue;
+
+                Type itemType = item.GetType();
+                if (itemType.IsEnum && m_Registry.Contains(itemType))
+                {
+                    if (!System.Enum.IsDefined(itemType, item) && !itemType.IsDefined(typeof(FlagsAttribute), false))
+                        return true;
+                }
+                else if (m_Registry.Contains(itemType) && !itemType.IsEnum && HasUnwritableEnum(item, depth + 1))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private DefaultText Matrix(Array array, string emptyFactory, string member)
+        {
+            List<string> rows = new List<string>();
+            for (int row = array.GetLowerBound(0); row <= array.GetUpperBound(0); row++)
+            {
+                List<string> cells = new List<string>();
+                for (int column = array.GetLowerBound(1); column <= array.GetUpperBound(1); column++)
+                {
+                    string text = SimpleLiteral(array.GetValue(row, column));
+                    if (text == null)
+                    {
+                        m_Reporter.Warn(member, "default array holds complex items, an empty collection is used instead");
+                        return Factory(emptyFactory);
+                    }
+
+                    cells.Add(text);
+                }
+
+                rows.Add("[" + string.Join(", ", cells) + "]");
+            }
+
+            if (rows.Count == 0)
+                return Factory(emptyFactory);
+
+            return Factory("lambda: [" + string.Join(", ", rows) + "]");
         }
 
         private static string SimpleLiteral(object item)

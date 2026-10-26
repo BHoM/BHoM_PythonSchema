@@ -192,7 +192,37 @@ namespace PythonSchemaGeneration.Tests
             Assert.That(wrapper.Ref.Name, Is.EqualTo("Wrapper_1"));
             Assert.That(wrapper.Text, Does.Contain("class Wrapper_1[T: IBHoMObject](BHoMObject):"));
             Assert.That(wrapper.Text, Does.Contain("'clr_name': 'BH.oM.FixtureAlpha.Wrapper`1'"));
-            Assert.That(wrapper.Text, Does.Contain("Items: list[T] = Field(default_factory=list[T])"));
+            Assert.That(wrapper.Text, Does.Contain("Items: list[T] = Field(default_factory=lambda: [])"));
+        }
+
+        [Test]
+        public void GenericClassNamingItselfInADefaultUsesALambda()
+        {
+            RenderedType tree = R(typeof(TreeLike<>));
+            Assert.That(tree.Text, Does.Contain("Children: dict[str, TreeLike_1[T]] = Field(default_factory=lambda: {})"));
+        }
+
+        [Test]
+        public void EnumDefaultThatIsNotAMemberMakesTheFieldRequired()
+        {
+            Assert.That(R(typeof(SparseHolder)).Text, Does.Contain("    Level: Sparse\n"));
+            Assert.That(R(typeof(SparseParent)).Text, Does.Contain("    Holder: SparseHolder\n"));
+            Assert.That(FixtureOutput.Result.Reporter.Warnings, Has.Some.Contain("is not a member of enum"));
+        }
+
+        [Test]
+        public void TwoDimensionalArrayDefaultIsWrittenAsRows()
+        {
+            string text = R(typeof(GridHolder)).Text;
+            Assert.That(text, Does.Contain("Field(default_factory=lambda: [[0.0, 0.0], [0.0, 0.0]])"));
+            Assert.That(text, Does.Contain("dict[str, float]"));
+        }
+
+        [Test]
+        public void ConstraintThatNamesATypeParameterGetsAny()
+        {
+            string text = R(typeof(IPanelLike<,>)).Text;
+            Assert.That(text, Does.Contain("class IPanelLike_2[TEdge, TOpening: IOpeningLike_1[Any]]"));
         }
 
         [Test]

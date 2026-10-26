@@ -1,7 +1,7 @@
 # Converting all oM classes to Python, and checking the result
 
 This is a procedure for a full test conversion, plus what a trial run on 2026-10-26 showed. The full-corpus run and hardening is
-phase 7 of the coding plan, so expect the checks below to find problems; section 6 lists the ones already found.
+phase 7 of the coding plan; section 5 records the problems found and fixed so far.
 
 ## 1. What actually gets converted
 
@@ -190,40 +190,54 @@ Automated checks cannot tell whether a file is a *good* Python class. Open these
 5. The type list matches the JSON schema repo for the assemblies both contain.
 6. Your hand review of the sample files shows what the C# says.
 
-## 5. What the trial run on 2026-10-26 showed
+## 5. What the trial runs showed
 
-Run against the 1,800 types installed on this machine:
+Both runs used the 1,800 types installed on this machine (2,033 files including `__init__.py`, about 20 s, 0 types in reference cycles).
 
-| Measure | Result |
-|---|---|
-| Types generated | 1,800 of 1,800 (2,033 files including `__init__.py`) |
-| Time | about 20 s |
-| Types in reference cycles | 0 |
-| Warnings | 165 |
-| Modules that import | **1,789 of 1,800 (11 fail)** |
-| Pyright strict | **6 errors** |
+| Measure | First run (2026-10-26) | After the fixes below |
+|---|---|---|
+| Modules that import | 1,789 of 1,800 (11 failed) | **1,800 of 1,800** |
+| Pyright strict | 6 errors | **0 errors** |
+| Structural comparison (check 5) | not run | **0 problems** |
+| Warnings | 165 | 181 |
 
-The 165 warnings, by kind:
+The 16 extra warnings are deliberate: fields that used to crash on import are now reported as required (see the bugs below).
+
+The 181 warnings, by kind:
 
 | Count | Warning | Is it a problem? |
 |---|---|---|
-| about 106 | A .NET type with no Python equivalent was mapped to `Any` (for example `System.IComparable`, `System.IO.FileAttributes`) | Acceptable for now. The original type is kept in a `ClrType` marker. |
+| 104 | A .NET type with no Python equivalent was mapped to `Any` (for example `System.IComparable`, `System.IO.FileAttributes`) | Acceptable for now. The original type is kept in a `ClrType` marker. |
 | 32 | Base type `System.Attribute` dropped (the C# attribute classes such as `DisplayTextAttribute`) | Acceptable: the attribute classes are generated as plain classes. Consider excluding attribute classes from the output. |
 | 16 | A default value could not be written in Python, so the field is required (for example `System.RuntimeType`) | Review: these fields become required in Python. |
+| 14 | The default instance of a type cannot be created in Python because that type has a required field, so the field is required too (the `dKoP` part types holding `AdministrativeInformation`) | Follows from the `DFMACategory` row below; fixing that C# default removes it. |
 | 6 | A default collection holds complex items, an empty one was used instead | Review: the default differs from C#. |
 | 4 | A generic type could not be instantiated to read its defaults (`PriorityQueue<T>`, `Quantity<T>`) | The fields are then required; acceptable but note it. |
+| 2 | `DFMACategory` default is the value 0, which is not a member of the enum | Real C# oddity: `Overview.DFMACategory` defaults to an undefined value, so Python makes it required. |
+| 3 | Other (types with no Python equivalent in toolkits, a malformed base) | Review individually. |
 
-Real bugs found by checks 3 and 4 (all in the generator, to be fixed in phase 7):
+### Bugs found by the first run, and what was done
 
-| Symptom | Cause | Types |
+All four were in the generator (not in the C# source) and are fixed, with regression fixtures in `FixtureAlpha_oM/Hardening.cs`:
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `NameError: name 'Tree_1' is not defined` | A generic class uses its own name in `Field(default_factory=dict[str, Tree_1[T]])`, which runs while the class is still being defined | `Data_oM/Collections/Tree_1`, `DomainTree_1`, and `DeepLearning_oM/Models/Graph` through its import |
-| `ValueError: 0 is not a valid DFMACategory` | The C# default is the enum value 0, but the enum has no member with that value, and the generated default `DFMACategory(0)` fails at import | 8 `dKoP_oM` types that use `DFMACategory` |
-| Pyright: `list[str]` not assignable to `list[T]` | A default list of literals in a generic class | `Data_oM/Collections/VennDiagram_1` (2 errors) |
-| Pyright: `list[float]` not assignable to `list[list[float]]` | A multi-dimensional array default written as a flat list | `Geometry_oM/TransformMatrix` and similar |
+| `NameError: name 'Tree_1' is not defined` (`Tree_1`, `DomainTree_1`, `Graph`) | A generic class named itself in `Field(default_factory=dict[str, Tree_1[T]])`, evaluated while the class was still being defined | Defaults of collections that mention a type parameter are now `lambda: []`, `lambda: {}` or `lambda: set()` |
+| `ValueError: 0 is not a valid DFMACategory` (8 `dKoP_oM` types) | The C# default is 0 but the enum has no member 0 | A default that is not an enum member (and the enum is not `[Flags]`) is dropped and reported: the field is required. A field whose default instance cannot be built is required too |
+| Pyright: `list[str]` not assignable to `list[T]` (`VennDiagram_1`) | `default_factory=list[T]` was inferred wrongly | Same lambda fix as the first row |
+| Pyright: `list[float]` not assignable to `list[list[float]]` (`TransformMatrix`) | A `double[,]` default was written as a flat list | Two-dimensional arrays are written as rows: `lambda: [[...], [...]]` |
 
-None of these indicate a problem with the C# source; each is a case the generator does not handle yet. After fixing the generator,
-repeat sections 2 and 3 and expect the failure counts to fall to 0.
+Three more problems turned up while re-running and were fixed too:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Pyright: "TypeVar constraint type cannot be generic" (`IPanel_2`) | A bound that names another type parameter (`TOpening : IOpening<TEdge>`) is illegal in a Python type parameter | The other parameter is replaced by `Any`: `TOpening: IOpening_1[Any]` |
+| `ReadOnlyDictionary<K, V>` read back as a list of tuples (`IEnvironmentalResult` base) | The type was missing from the dictionary list of the type mapper | Added; the structural comparison also ignores collection flavour in base type arguments, which carry no `ClrType` marker, and line-ending differences in descriptions |
+| Empty folders left behind by a clean-up run | `OutputWriter` checked the parent instead of the sub-folder | Fixed (caught by the existing clean-up test) |
+
+The golden files were regenerated: besides the intended default changes, the committed ones still said `2015 - 2025` while the generator writes `2015 - 2026`.
+
+Check 6 (the Python to C# round trip on the full corpus) is still not run; the fixture and spike round trips pass, including the new fixture types.
 
 ## 6. After a clean result
 

@@ -397,6 +397,88 @@ Consequences for the Python → C# side:
 
 ---
 
+### 15. Findings from the full-corpus run (all 1,800 types)
+
+Measured against every installed BHoM-organisation oM assembly (about 70 assemblies), not a sample. These supersede the
+estimates earlier in this document.
+
+| Measure | Result |
+|---|---|
+| Types generated | 1,800 of 1,800, in 2,033 files (the rest are `__init__.py`) |
+| Generation time | about 20 s |
+| Import every module | about 4 s |
+| Pyright strict over the whole package | about 17 s, 0 errors after the fixes below |
+| Python-level reference cycles among concrete classes | 0 (interfaces list their properties in the marker, so they are dead ends) |
+| Warnings | 181: 104 types mapped to `Any`, 32 `System.Attribute` bases dropped, 16 defaults not writable, 14 default instances not creatable, 6 complex collection defaults, 4 generic types not instantiable, 2 enum defaults not members, 3 other |
+
+The first run found four generator bugs and three more appeared while re-running. All are mapping gaps, none is a fault in the C#:
+
+1. **A generic class naming itself in a default.** `Field(default_factory=dict[str, Tree_1[T]])` is evaluated while the class body
+   runs, so `Tree_1` does not exist yet: `NameError` on import. Use a lambda (`lambda: {}`), which is evaluated later. The
+   subscripted-type form `list[T]` also makes Pyright strict infer the wrong element type, so every collection default in a class
+   that mentions a type parameter is now a lambda.
+2. **An enum default that is not a member.** C# `Sparse Level { get; set; }` defaults to `default(Sparse)`, which is 0 even when no
+   member has the value 0 (real case: `dKoP.Overview.DFMACategory`). A plain Python `Enum` rejects it at import. Only `[Flags]`
+   enums may carry an undefined value. The field becomes required, and so does any field whose default instance contains it
+   (the `dKoP` part types holding `AdministrativeInformation`), otherwise Python code such as `Overview()` would fail.
+3. **Multi-dimensional arrays.** `double[,]` maps to `list[list[float]]`, but reading the default by enumeration returns every cell
+   in one flat sequence. Write rows (`lambda: [[0.0, 0.0], [0.0, 0.0]]`). The C# draft needs `new double[,] { { 0.0, 0.0 }, { 0.0, 0.0 } }`.
+4. **PEP 695 bounds cannot mention another type parameter.** C# `where TOpening : IOpening<TEdge>` would become
+   `TOpening: IOpening_1[TEdge]`, which Pyright rejects ("TypeVar constraint type cannot be generic"). The other parameter is
+   replaced by `Any`: `TOpening: IOpening_1[Any]`. The full constraint stays in the `generic_params` marker.
+5. **`ReadOnlyDictionary<K, V>`** was missing from the mapper's dictionary list and fell through to the list-of-tuples fallback.
+   Drafting C# back also needs `new ReadOnlyDictionary<K, V>(new Dictionary<K, V>())`, because it has no parameterless constructor.
+6. **Collection flavour is not recoverable from a base type argument.** Properties carry a `ClrType` marker, base type arguments
+   (`ILifeCycleAssessmentModuleData<ReadOnlyDictionary<…>>`) do not, so the Python reads back as `Dictionary<…>`. The structural
+   comparison therefore treats `IList`, `ReadOnlyCollection`, `ISet`, `ReadOnlyDictionary` and similar as their default flavour in bases.
+7. **Descriptions are not clean text.** C# XML descriptions can end in `\r\n\r`. Comparisons must normalise line endings and trailing blanks.
+
+### 16. The oM does not model a project hierarchy
+
+Checked across the whole generated corpus, for anyone looking for project, building, storey, slab classes to reuse:
+
+- There is no `Project`, `Site` or `Storey` container. `Spatial.SettingOut.Level` (name, elevation) and
+  `Environment.Elements.Building` (location, elevation, type) exist, but **no other class has a property of either type**.
+- Links between levels are by name strings (`Environment.Panel.ConnectedSpaces`, `Space.Zones`, `dKoP.SettingOut.BuildingLevel`,
+  `dKoP.PartIdentification.BuildingReference`), not by objects.
+- Real nesting exists only in generic containers (`BHoMGroup<T>.Elements`, `Tree<T>.Children`, `DomainTree<T>`, `Graph<T>`),
+  `ProjectLifeCycleAssessment.Elements: List<IElementM>`, `Physical.Floor/Wall/Roof.Openings`, `Panel.Openings` (several domains),
+  `Construction.Layers` and `MEP` equipment `Parts`.
+- Several domains model the same thing separately (Physical, Environment, Structure, Facade, dKoP), with no shared base beyond
+  `BHoMObject` and the dimensional interfaces (`IElement0D/1D/2D/M`).
+
+A project tree therefore has to be composed on top of the oM, not read from it.
+
+### 17. Existing tools do not replace the converters (researched, tested where allowed)
+
+| Direction | Candidate | Finding |
+|---|---|---|
+| Python to C# | py2many 0.9 | Active, but its backends are C++, Rust, Julia, Kotlin, Lean, Nim, Mojo, D, Dart, Go, V, Zig, SMT. **No C#** (checked on the installed CLI). |
+| Python to C# | pytocs | Last commit February 2023, Python 2 era, all output typed `object`. Annotated assignments are parsed but never used by the translator, so field types would not reach the C#. Source read; not built (the sandbox blocked building the clone). |
+| C# to Python | cs2python | Last commit 2018, early stage. |
+| Either, through JSON Schema | Pydantic `model_json_schema()` | Loses the base class, the `__bhom__` provenance, enum member names (only `[0, 1, 2]`), generic parameters, quantity markers and factory defaults. Tested. |
+| Either, through JSON Schema | datamodel-code-generator on the `BHoM_JSONSchema` files | No base classes, no defaults, BHoM-JSON `_t` and `_bhomVersion` fields, and the enum duplicated with `System.Enum` wrapper models. Tested. |
+| C# to Python | pythonnet stub generators | Produce `.pyi` stubs for calling .NET from Python, not Pydantic classes. |
+| C# to TypeScript or JavaScript | Rosetta, Transpose | Wrong target language. |
+
+Not run, for lack of permission to build or download third-party code: NJsonSchema, quicktype and a pytocs build. Their verdicts rest
+on source and documentation plus the schema tests above, which show the information is lost before they would run.
+
+### 18. Environment and workflow gotchas hit while building this
+
+- **A local run converts whatever is built on that machine.** `%ProgramData%\BHoM\Assemblies` holds every toolkit built there, at
+  whatever commit was built. There is no repository filter, so "convert `C:\Github\BHoM`" actually converts every installed
+  BHoM-organisation assembly (filter the manifest on `repo == "BHoM/BHoM"` to isolate it). The weekly CI job, built in a clean
+  environment, is the only reproducible source.
+- **Golden files are time-dependent** while the generated header carries the year (`2015 - 2026`). They went stale when the year
+  changed. Regenerate with `UPDATE_GOLDEN=1` and review the diff.
+- **Line endings.** The repository mixes LF and CRLF with `core.autocrlf=true`. Generated files are written with LF. Editing a CRLF
+  file with a Python text-mode script silently rewrites every line ending; use the editor tool or write bytes.
+- **Windows PowerShell 5.1** does not support `&&` (and `mkdir -p`, `cp -r`). Documentation commands are written for PowerShell,
+  one command per line.
+- **A clean-up bug can hide for a long time.** The empty-folder removal in `OutputWriter` checked the parent folder instead of the
+  sub-folder. Only the clean-up test caught it, which is why that test must stay.
+
 ## 5. Proposed type mapping **[unverified: to confirm in the spike]**
 
 | C# | Python | Notes |
@@ -600,3 +682,12 @@ Run in a throw-away virtual environment, not part of the repo.
 | PEP 695 generic `class Group[T: BHoMObject](BaseModel)` | Works on 3.12 |
 | Pyright 1.1.414 strict on generated-style code | Clean; flagged bad argument type, missing argument, wrong interface, typo attribute |
 | Pyright strict, `Field(default_factory=list)` in a generic class | `list[Unknown]` warning |
+| Full corpus (1,800 types, 70 assemblies): generate, import, Pyright strict | 20 s, 4 s, 17 s; 0 cycles; 181 warnings; after the fixes 0 import failures, 0 Pyright errors, 0 structural mismatches |
+| `Field(default_factory=dict[str, Tree_1[T]])` inside `Tree_1` | `NameError` at import; `lambda: {}` works |
+| Pyright strict, `default_factory=list[T]` in a generic class | Infers `list[str]`, error; `lambda: []` is clean |
+| `Enum` instance `E(0)` when no member is 0 | `ValueError`; the field must be required (`Flag` enums accept it) |
+| `double[,]` default read by enumeration | One flat sequence of cells; needs row-wise writing |
+| `class P[A, B: IOpening[A]]` | Pyright: "TypeVar constraint type cannot be generic"; `IOpening[Any]` works |
+| `datamodel-codegen` on `BHoM_JSONSchema` `ProjectIdentification.json` and `GradientCenteringOptions.json` | No base class, no defaults, wire-format fields, doubled enum |
+| Pydantic `model_json_schema()` of the probe models | Base class, provenance, enum names, generics, quantities lost |
+| `py2many --help` (v0.9) | No C# backend |

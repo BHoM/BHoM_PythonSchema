@@ -4,13 +4,25 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 
 from py2cs.model import Manifest, PropertyInfo, TypeInfo
 
 
 def clean(text: str | None) -> str | None:
     """Docstring-style normalisation, so indentation and trailing blanks do not matter."""
-    return None if text is None else inspect.cleandoc(text)
+    return None if text is None else inspect.cleandoc(text.replace("\r\n", "\n").replace("\r", "\n")).strip()
+
+
+def same_collections(text: str) -> str:
+    """A base type argument carries no ClrType marker, so collection flavours (IList, ReadOnlyDictionary, ...) read back as the default one."""
+    text = re.sub(r"System\.Collections\.(Generic|ObjectModel)\.(I?ReadOnly|I|Sorted)?(Dictionary|SortedList)<", "System.Collections.Generic.Dictionary<", text)
+    text = re.sub(r"System\.Collections\.(Generic|ObjectModel)\.(I?ReadOnly|I|Sorted)?(HashSet|Set)<", "System.Collections.Generic.HashSet<", text)
+    return re.sub(
+        r"System\.Collections\.(Generic|ObjectModel)\.(IList|ICollection|IEnumerable|IReadOnlyList|IReadOnlyCollection|ReadOnlyCollection|ObservableCollection|Collection|Queue|Stack|LinkedList)<",
+        "System.Collections.Generic.List<",
+        text,
+    )
 
 
 def normalise_default(text: str | None) -> str | None:
@@ -52,7 +64,7 @@ def compare_types(left: TypeInfo, right: TypeInfo, check_defaults: bool = True, 
     check("path", left.relative_path, right.relative_path)
     check("flags", left.flags, right.flags)
     check("name", left.name, right.name)
-    check("bases", left.bases, right.bases)
+    check("bases", [same_collections(b) for b in left.bases], [same_collections(b) for b in right.bases])
     check("generic params", [(g.name, g.constraints) for g in left.generic_params], [(g.name, g.constraints) for g in right.generic_params])
     check("description", clean(left.description), clean(right.description))
     check("property names", [p.name for p in left.properties], [p.name for p in right.properties])

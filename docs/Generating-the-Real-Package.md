@@ -14,19 +14,16 @@ them. All commands are PowerShell, run one at a time from the repository root.
   have built, at whatever commit you built it, so a local run is only as current and as clean as your last builds.
 - The generator needs no internet and does not read `BHoM_JSONSchema`.
 
-### Known problems that a run today would commit
+### Known limits of the generated package
 
-The trial run (see section 5 of the trial guide) found generator bugs that are still open (phase 7 of the coding plan):
+The trial run (see section 5 of the trial guide) found four generator bugs, now fixed; a full run imports all 1,800 modules, passes
+Pyright strict and the structural comparison. What remains is deliberate and shows up as warnings:
 
-| Problem | Effect on a real run |
+| Limit | Effect |
 |---|---|
-| Generic self-reference, for example `Tree_1`, `DomainTree_1` | These modules raise `NameError` on import, and `Graph` (DeepLearning) with them |
-| Enum default `DFMACategory(0)` with no member 0 | 8 `dKoP_oM` types fail to import |
-| `list` / multi-dimensional array defaults in generic classes | 6 Pyright strict errors (`VennDiagram_1`, `TransformMatrix`) |
-
-**Recommendation:** fix these first (or accept them on a throwaway branch). Landing the package with 11 modules that fail to
-import means `pip install` works but `from bhom_schema.dKoP_oM.ProjectIdentification import ...` can still fail for dKoP
-types. The success criteria in section 5 are written so you can tell either way.
+| `Overview.DFMACategory` defaults to the undefined enum value 0 in C# | The field is required in Python, and so are the fields holding a `dKoP` `Overview` or `AdministrativeInformation` (for example `UpperFloor()` needs its `AdministrativeInformation`) |
+| About 16 other defaults cannot be written (for example `System.RuntimeType`) | Those fields are required |
+| About 104 .NET types have no Python equivalent | Mapped to `Any`, with the C# type kept in a `ClrType` marker |
 
 ## 2. Before you start
 
@@ -166,8 +163,8 @@ deterministic and must not be committed.
 ## 5. Success criteria for committing
 
 1. `Types available` equals `Types generated` in the report.
-2. Every module imports (0 failures), or the failures are exactly the known bugs in section 1 and you have decided to accept them.
-3. Pyright strict reports 0 errors (same caveat).
+2. Every module imports (0 failures).
+3. Pyright strict reports 0 errors.
 4. The structural comparison reports 0 problems.
 5. `run-all.ps1` finishes green, including the build step.
 6. A second run produces no further changes.
