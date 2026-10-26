@@ -359,6 +359,36 @@
       ]
     },
     {
+      "clrName": "BH.oM.FixtureAlpha.GridHolder",
+      "name": "BH.oM.FixtureAlpha.GridHolder",
+      "pythonName": "GridHolder",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.GridHolder",
+      "relativePath": "FixtureAlpha_oM/GridHolder.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "class",
+      "bases": [
+        "BH.oM.Base.BHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "properties": [
+        {
+          "name": "Matrix",
+          "clrType": "double[,]",
+          "pyName": "Matrix",
+          "hasDefault": true,
+          "default": "<factory> lambda: [[0.0, 0.0], [0.0, 0.0]]"
+        },
+        {
+          "name": "Table",
+          "clrType": "System.Collections.ObjectModel.ReadOnlyDictionary<string, double>",
+          "pyName": "Table",
+          "hasDefault": true,
+          "default": "<factory> dict"
+        }
+      ]
+    },
+    {
       "clrName": "BH.oM.FixtureAlpha.ICurveLike",
       "name": "BH.oM.FixtureAlpha.ICurveLike",
       "pythonName": "ICurveLike",
@@ -423,6 +453,54 @@
           "clrType": "string"
         }
       ]
+    },
+    {
+      "clrName": "BH.oM.FixtureAlpha.IOpeningLike`1",
+      "name": "BH.oM.FixtureAlpha.IOpeningLike<T>",
+      "pythonName": "IOpeningLike_1",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.IOpeningLike_1",
+      "relativePath": "FixtureAlpha_oM/IOpeningLike_1.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "interface",
+      "bases": [
+        "BH.oM.Base.IBHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "genericParams": [
+        {
+          "name": "T",
+          "constraints": []
+        }
+      ],
+      "properties": []
+    },
+    {
+      "clrName": "BH.oM.FixtureAlpha.IPanelLike`2",
+      "name": "BH.oM.FixtureAlpha.IPanelLike<TEdge, TOpening>",
+      "pythonName": "IPanelLike_2",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.IPanelLike_2",
+      "relativePath": "FixtureAlpha_oM/IPanelLike_2.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "interface",
+      "bases": [
+        "BH.oM.Base.IBHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "genericParams": [
+        {
+          "name": "TEdge",
+          "constraints": []
+        },
+        {
+          "name": "TOpening",
+          "constraints": [
+            "BH.oM.FixtureAlpha.IOpeningLike<TEdge>"
+          ]
+        }
+      ],
+      "properties": []
     },
     {
       "clrName": "BH.oM.FixtureAlpha.ImmutableThing",
@@ -703,6 +781,73 @@
       ]
     },
     {
+      "clrName": "BH.oM.FixtureAlpha.Sparse",
+      "name": "BH.oM.FixtureAlpha.Sparse",
+      "pythonName": "Sparse",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.Sparse",
+      "relativePath": "FixtureAlpha_oM/Sparse.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "enum",
+      "bases": [],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "properties": [],
+      "members": [
+        {
+          "name": "One",
+          "value": "1"
+        },
+        {
+          "name": "Two",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "clrName": "BH.oM.FixtureAlpha.SparseHolder",
+      "name": "BH.oM.FixtureAlpha.SparseHolder",
+      "pythonName": "SparseHolder",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.SparseHolder",
+      "relativePath": "FixtureAlpha_oM/SparseHolder.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "class",
+      "bases": [
+        "BH.oM.Base.BHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "properties": [
+        {
+          "name": "Level",
+          "clrType": "BH.oM.FixtureAlpha.Sparse",
+          "pyName": "Level",
+          "hasDefault": false
+        }
+      ]
+    },
+    {
+      "clrName": "BH.oM.FixtureAlpha.SparseParent",
+      "name": "BH.oM.FixtureAlpha.SparseParent",
+      "pythonName": "SparseParent",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.SparseParent",
+      "relativePath": "FixtureAlpha_oM/SparseParent.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "class",
+      "bases": [
+        "BH.oM.Base.BHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "properties": [
+        {
+          "name": "Holder",
+          "clrType": "BH.oM.FixtureAlpha.SparseHolder",
+          "pyName": "Holder",
+          "hasDefault": false
+        }
+      ]
+    },
+    {
       "clrName": "BH.oM.FixtureAlpha.SupportKind",
       "name": "BH.oM.FixtureAlpha.SupportKind",
       "pythonName": "SupportKind",
@@ -747,6 +892,42 @@
       "properties": []
     },
     {
+      "clrName": "BH.oM.FixtureAlpha.TreeLike`1",
+      "name": "BH.oM.FixtureAlpha.TreeLike<T>",
+      "pythonName": "TreeLike_1",
+      "pythonModule": "bhom_schema.FixtureAlpha_oM.TreeLike_1",
+      "relativePath": "FixtureAlpha_oM/TreeLike_1.py",
+      "namespace": "BH.oM.FixtureAlpha",
+      "assembly": "FixtureAlpha_oM",
+      "kind": "class",
+      "bases": [
+        "BH.oM.Base.BHoMObject"
+      ],
+      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "genericParams": [
+        {
+          "name": "T",
+          "constraints": []
+        }
+      ],
+      "properties": [
+        {
+          "name": "Children",
+          "clrType": "System.Collections.Generic.Dictionary<string, BH.oM.FixtureAlpha.TreeLike<T>>",
+          "pyName": "Children",
+          "hasDefault": true,
+          "default": "<factory> lambda: {}"
+        },
+        {
+          "name": "Values",
+          "clrType": "System.Collections.Generic.List<T>",
+          "pyName": "Values",
+          "hasDefault": true,
+          "default": "<factory> lambda: []"
+        }
+      ]
+    },
+    {
       "clrName": "BH.oM.FixtureAlpha.Wrapper`1",
       "name": "BH.oM.FixtureAlpha.Wrapper<T>",
       "pythonName": "Wrapper_1",
@@ -773,7 +954,7 @@
           "clrType": "System.Collections.Generic.List<T>",
           "pyName": "Items",
           "hasDefault": true,
-          "default": "<factory> list[T]"
+          "default": "<factory> lambda: []"
         }
       ]
     },
