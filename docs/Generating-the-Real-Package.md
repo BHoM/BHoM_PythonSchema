@@ -200,9 +200,9 @@ Rebuild the C# you changed, repeat section 3, then review `git diff`. The diff s
 run, for example one toolkit built from a different branch; fix the inputs rather than committing the noise.
 
 The weekly generation workflow (phase 8 of the plan) will do exactly this in a clean environment: clone the repositories in
-`Included-repositories.txt`, build them, run this command and open a pull request. Until that exists, the package is only as
-reproducible as the machine it was generated on, so note the commits of the repositories you built in the pull request
-description.
+`Included-repositories.txt`, build them, run this command and commit the result straight to `develop` (no pull request, since the
+C# is the source of truth). Until that exists, the package is only as reproducible as the machine it was generated on, so note
+the commits of the repositories you built in the pull request description.
 
 ## 8. If something goes wrong
 

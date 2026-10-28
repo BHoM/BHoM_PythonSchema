@@ -1,6 +1,6 @@
 # Audit 1: plan to fix the review findings
 
-Date: 2026-10-26. Status: **Steps 1 and 2 done** (2026-10-26); Steps 3 to 8 not started.
+Date: 2026-10-26. Status: **Steps 1 to 3 done**; Steps 4 to 8 not started.
 
 The solution was reviewed against the Option 2 system design: the C# oM is the "source of truth", meaning that when the
 Python and the C# disagree, the C# wins. The review found eight issues (**Issue 1** to **Issue 8**). This plan fixes them in
@@ -60,7 +60,7 @@ What the scope decision changes in the other steps:
 |---|---|---|---|
 | 1 (done) | Issue 2 | Make py2cs understand Python written by people, not only by the generator | Everything py2cs drafts depends on reading the Python correctly |
 | 2 (done) | Issue 1 | Change only the lines that need changing in an existing C# file | So the drafted C# is something BHoM reviewers will accept |
-| 3 | Issue 4 | Agree how the Python PR and the C# PR stay in step, and warn about breaking changes | The rules must exist before they are automated |
+| 3 (done) | Issue 4 | Agree how the Python PR and the C# PR stay in step, and warn about breaking changes | The rules must exist before they are automated |
 | 4 | Issue 5 | Automate everything on GitHub, using the JSON repository's build | Once the loop is safe, make it run by itself |
 | 5 | Issue 3 | Let objects with interface-typed fields be saved to JSON and loaded back | Makes the package useful to other Python projects (decision needed) |
 | 6 | Issue 6 | Limit the package to BHoM/BHoM, give it a real version number, publish it | Needed before anyone installs it |
@@ -211,6 +211,26 @@ whole new file. Anything the tool could not translate is listed in the PR descri
 
 ---
 
+## What was done in Step 3
+
+- **3.1 rules:** README section "Life of a Python change", and a checklist for Python schema changes in
+  `.github/PULL_REQUEST_TEMPLATE.md`.
+- **3.2 alignment check:** `python -m py2cs align` (`py2cs/align.py`). It diffs base against head, runs the generator for the
+  changed classes over a folder of built oM dlls (`--assemblies`), reads the result back and compares it with the PR using
+  `compare.py`. Exit code 0 when they match, 1 with the differences listed (first value from the C#, second from the PR), 2 when
+  it could not run. `--generated-root` takes a package that was already generated. Building the merged C# is left to the caller:
+  the Step 4 workflow does it.
+- **3.3 breaking changes:** `diff.py` lists them per type (`breaking_changes`, plus a rename guess when exactly one removed and
+  one added property share a type). `py2cs plan` puts them in a "Breaking changes" section of the report and writes the
+  `breaking-change` label to `plan.json` (`labels`). Kind changes are also treated as breaking. Putting the label on the C# PR is
+  part of `pr.py` in Step 4.
+- **3.4 loop guard:** first built (`py2cs/guard.py`), then removed on 2026-10-28 because it guarded against a pull request that
+  does not exist: the weekly generation commits directly. Nothing in the code opens a weekly generation PR.
+- **Tests:** `test_py2cs/test_lifecycle.py`, and `test_alignment/test_align_with_generator.py`, which runs the real generator over
+  the fixture assemblies.
+
+---
+
 ## Step 3 (Issue 4): keep the Python PR and the C# PR in step, and warn about breaking changes
 
 ### What's wrong, in plain words
@@ -230,7 +250,7 @@ situations that can go wrong today:
 1. A Python PR is a **proposal**. It is never merged before its C# PR.
 2. The C# PR is reviewed and merged in its own repository, as usual.
 3. Before the Python PR can be merged, an automatic **alignment check** (3.2) must pass. Or simply close the Python PR and
-   let the next weekly generation PR bring in the same change; both give the same files.
+   let the next weekly generation bring in the same change; both give the same files.
 4. If the C# PR is closed without merging, the Python PR is closed too, with a comment explaining why.
 
 3.2 **Add the alignment check**, `python -m py2cs align`. It asks: "if we generate the Python from the C# that was actually
@@ -243,8 +263,9 @@ changed classes, and compares the result with the PR using the comparison code w
 as one removed and one added with the same type), a property's type changed, an enum value removed or renumbered, a class
 removed, or a base class or interface removed. Nothing is blocked automatically; the reviewer decides.
 
-3.4 **Stop the loop going round forever.** The weekly generation PR must not itself raise C# PRs. py2cs refuses to raise C# PRs
-for the `schema-updates` branch or for the bot account. (This was already in CODING-PLAN section 6.)
+3.4 ~~**Stop the loop going round forever.**~~ **Not needed (decided 2026-10-28).** The weekly generation writes the Python
+straight from the C# and commits it to `develop`. It is not a pull request, so it can never raise a C# PR, and there is no loop
+to stop. The only rule left is that `linked-csharp-pr.yml` triggers on `pull_request` and never on `push` (Step 4).
 
 ### How we'll know it works
 
@@ -283,11 +304,12 @@ that repository. This applies the scope decision while still reading the shared 
   stay separate; only the build is shared.
 - This needs a small change in the BHoM_JSONSchema repository, so its maintainers must agree. Until then, a stop-gap is to
   build `BHoM`, `BHoM_Engine` and `JSONSchema_Toolkit` ourselves, which is small now that only BHoM/BHoM is in scope.
-- The generation PR lists the commit of every repository that was built, so anyone can reproduce it.
+- The generation commit message lists the commit of every repository that was built, so anyone can reproduce it.
 
 4.4 **Weekly generation workflow** (`python-schema-generation.yml`): get the `.dll` files (4.3), run the generator into
-`src/bhom_schema`, run the checks (every module imports, Pyright, the C# vs Python comparison), then commit to the
-`schema-updates` branch and open or update a PR to `develop`.
+`src/bhom_schema`, run the checks (every module imports, Pyright, the C# vs Python comparison), then commit the result straight
+to `develop`. It is not a pull request: the C# is the source of truth, so the weekly run just rewrites the Python. If a check
+fails, nothing is committed. If `develop` is protected, the GitHub App must be allowed to bypass the pull request rule.
 
 4.5 **PR checks workflow** (`pr-checks.yml`), on every PR: build, NUnit, pytest, Pyright, `py2cs check` (Step 1), and
 `py2cs align` (Step 3) for PRs that change the Python classes.
@@ -309,7 +331,7 @@ but it doesn't test the GitHub App's access to the real repository).
 ### How we'll know it works
 
 - Tests: exit codes; a new warning kind fails; the repository filter keeps only BHoM/BHoM.
-- Tests with the fake GitHub: branch names, re-running updates the same PR, the loop guard, closing behaviour.
+- Tests with the fake GitHub: branch names, re-running updates the same PR, closing behaviour.
 - The three workflows run green on a test branch of this repository.
 - The build and test gate passes.
 
@@ -414,7 +436,7 @@ The generator writes it into a generated file `bhom_schema/_version.py` and into
 always tell which BHoM version an object came from.
 
 6.4 **Publishing**: decide where users will install it from (a company package index, GitHub Packages, or the public PyPI),
-then add a workflow that builds the wheel when a generation PR is merged. This needs a decision, but not before Step 6.
+then add a workflow that builds the wheel after the weekly generation commits. This needs a decision, but not before Step 6.
 
 ### How we'll know it works
 

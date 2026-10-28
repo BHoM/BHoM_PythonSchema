@@ -45,3 +45,32 @@ without running it, so it only understands these rules:
 $env:PYTHONPATH = ".ci/generation"
 .venv\Scripts\python -m py2cs check --root src/bhom_schema
 ```
+
+## Life of a Python change
+
+The C# is the source of truth. A Python pull request is a **proposal**, and it is linked to a C# pull request in the
+repository that owns the class.
+
+1. Open the Python PR. `py2cs` drafts the linked C# PR (a draft, with a report). The Python PR is **never merged before its
+   C# PR**.
+2. The C# PR is reviewed and merged in its own repository, as usual. Reviewers may change it.
+3. Before the Python PR can be merged, the **alignment check** must pass. It generates the Python from the merged C# and
+   compares it with the PR. If they differ, change the Python PR to match what was merged. Or close the Python PR and let the
+   next weekly generation bring in the same change; both give the same files.
+4. If the C# PR is closed without merging, close the Python PR too, with a comment saying why. Otherwise the next weekly
+   generation removes the change from the Python again.
+
+```powershell
+# After the C# is merged and built (the folder holds the built oM dlls)
+.venv\Scripts\python -m py2cs align --base-root <Python before the PR> --head-root src/bhom_schema --assemblies <folder with the oM dlls>
+```
+
+It exits with 0 when they match, and lists every difference otherwise (the first value is from the C#, the second from your PR).
+
+**Breaking changes** are listed in their own section of the C# PR, which also gets the `breaking-change` label. They are:
+a property removed or renamed, a property whose type changed, an enum member removed or renumbered, a class removed, and a base
+class or interface removed. BHoM needs an upgrade in Versioning_Toolkit for these so old files still open. Nothing is blocked
+automatically; the reviewer decides.
+
+The weekly generation writes the Python straight from the C# and commits it to `develop`. It is not a pull request, so it never
+raises a C# PR.

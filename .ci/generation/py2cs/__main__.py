@@ -1,4 +1,4 @@
-"""Command line: python -m py2cs check | manifest | diff | plan | drafts | resolve"""
+"""Command line: python -m py2cs check | manifest | diff | align | plan | drafts | resolve"""
 
 from __future__ import annotations
 
@@ -6,8 +6,10 @@ import argparse
 import json
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
+from py2cs.align import AlignError, align, changed_types, generate
 from py2cs.check import check_package
 from py2cs.csharp import emit_new
 from py2cs.diff import diff_manifests
@@ -35,6 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--head-root", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
 
+    p = sub.add_parser("align", help="compare the changed classes of a Python PR with the Python generated from the merged C#")
+    p.add_argument("--base-root", required=True, type=Path)
+    p.add_argument("--head-root", required=True, type=Path)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--assemblies", type=Path, help="folder with the built oM dlls of the merged C#; the generator is run for the changed classes")
+    source.add_argument("--generated-root", type=Path, help="a bhom_schema folder that was already generated from the merged C#")
+    p.add_argument("--generator", type=Path, help="PythonSchemaGeneration.dll, when not in its build folder")
+    p.add_argument("--work", type=Path, help="folder for the generated Python (default: a temporary one)")
+
     p = sub.add_parser("plan", help="draft the C# files for a diff; never writes into the C# checkouts")
     p.add_argument("--base-root", required=True, type=Path)
     p.add_argument("--head-root", required=True, type=Path)
@@ -55,6 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return run(args)
+    except AlignError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     except ReadErrors as e:
         for error in e.errors:
             print(f"error: {error}", file=sys.stderr)
@@ -80,6 +94,29 @@ def run(args: argparse.Namespace) -> int:
         args.out.write_text(json.dumps(diff.to_json(), indent=2) + "\n", encoding="utf-8")
         print(f"{len(diff.changes)} changed types")
         return 0
+
+    if args.command == "align":
+        base, head = read_package(args.base_root), read_package(args.head_root)
+        changed, removed = changed_types(base, head)
+        if not changed and not removed:
+            print("no changed classes, nothing to compare")
+            return 0
+
+        if args.generated_root is not None:
+            generated = read_package(args.generated_root)
+        else:
+            with tempfile.TemporaryDirectory() as scratch:
+                output = (args.work or Path(scratch)) / "bhom_schema"
+                if output.exists():
+                    shutil.rmtree(output)
+                generate(changed + removed, args.assemblies, output, args.generator)
+                generated = read_package(output)
+
+        result = align(base, head, generated)
+        for problem in result.problems:
+            print(f"difference: {problem}")
+        print(f"{len(result.checked)} classes compared, {len(result.problems)} differences" + ("" if result.ok else " (first value: the C#, second: this PR)"))
+        return 0 if result.ok else 1
 
     if args.command == "plan":
         base, head = read_package(args.base_root), read_package(args.head_root)

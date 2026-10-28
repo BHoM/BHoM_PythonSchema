@@ -27,6 +27,8 @@ class PlannedFile:
     rule: str = ""
     notes: list[str] = field(default_factory=lambda: [])
     changes: list[str] = field(default_factory=lambda: [])
+    # The changes that can break existing C# code or saved data, for the "Breaking changes" section of the report
+    breaking: list[str] = field(default_factory=lambda: [])
     # The existing file starts with a byte order mark, kept when the file is written
     bom: bool = False
 
@@ -39,10 +41,16 @@ class Plan:
     def repos(self) -> list[str]:
         return sorted({f.repo for f in self.files} | {r for r, _ in self.removed if r != "?"})
 
+    def labels(self) -> list[str]:
+        """Labels for the C# pull request: breaking-change when any file changes or removes something existing code may use."""
+        return ["breaking-change"] if self.removed or any(f.breaking for f in self.files) else []
+
     def summary(self) -> dict[str, Any]:
         return {
-            "files": [{"repo": f.repo, "path": f.path, "action": f.action, "type": f.clr_name, "rule": f.rule, "notes": f.notes} for f in self.files],
+            "files": [{"repo": f.repo, "path": f.path, "action": f.action, "type": f.clr_name, "rule": f.rule, "notes": f.notes, "breaking": f.breaking}
+                      for f in self.files],
             "removed": [{"repo": r, "type": t} for r, t in self.removed],
+            "labels": self.labels(),
             "errors": self.errors,
         }
 
@@ -88,7 +96,7 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
                 plan.errors += [f"{change.clr_name}: {n}" for n in patch.notes or ["nothing to change in C#"]]
                 continue
             planned = PlannedFile(repo, relative, "patch", change.clr_name, "", "existing file found by searching for the declaration",
-                                  notes + patch.notes, change.details)
+                                  notes + patch.notes, change.details, change.breaking)
             plan.files.append(planned)
             pending.append((planned, patch))
         else:
@@ -96,7 +104,7 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
             if change.kind == "modified":
                 notes.append("the existing C# declaration was not found, so the type is drafted as a new file")
             text = emit_new(info, head, notes)
-            plan.files.append(PlannedFile(repo, placement.path, "new", change.clr_name, text, placement.rule, notes, change.details))
+            plan.files.append(PlannedFile(repo, placement.path, "new", change.clr_name, text, placement.rule, notes, change.details, change.breaking))
 
     if pending:
         try:

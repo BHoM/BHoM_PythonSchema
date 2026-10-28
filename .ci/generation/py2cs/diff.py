@@ -14,6 +14,8 @@ class TypeChange:
     clr_name: str
     kind: str                       # added | removed | modified
     details: list[str] = field(default_factory=lambda: [])
+    # The details that break existing C# code or saved data and may need a versioning upgrade
+    breaking: list[str] = field(default_factory=lambda: [])
 
 
 @dataclass
@@ -27,11 +29,11 @@ class Diff:
         return [c for c in self.changes if c.kind == kind]
 
     def to_json(self) -> dict[str, Any]:
-        return {"changes": [{"clrName": c.clr_name, "kind": c.kind, "details": c.details} for c in self.changes]}
+        return {"changes": [{"clrName": c.clr_name, "kind": c.kind, "details": c.details, "breaking": c.breaking} for c in self.changes]}
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "Diff":
-        return Diff([TypeChange(c["clrName"], c["kind"], list(c["details"])) for c in data["changes"]])
+        return Diff([TypeChange(c["clrName"], c["kind"], list(c["details"]), list(c.get("breaking", []))) for c in data["changes"]])
 
 
 def diff_manifests(base: Manifest, head: Manifest) -> Diff:
@@ -41,11 +43,11 @@ def diff_manifests(base: Manifest, head: Manifest) -> Diff:
         if before is None:
             changes.append(TypeChange(key, "added", ["new type"]))
         elif after is None:
-            changes.append(TypeChange(key, "removed", ["type removed"]))
+            changes.append(TypeChange(key, "removed", ["type removed"], ["type removed"]))
         else:
             details = type_details(before, after)
             if details:
-                changes.append(TypeChange(key, "modified", details))
+                changes.append(TypeChange(key, "modified", details, breaking_changes(before, after)))
     return Diff(changes)
 
 
@@ -95,3 +97,41 @@ def type_details(before: TypeInfo, after: TypeInfo) -> list[str]:
         if name not in new_members:
             details.append(f"enum member removed: {name}")
     return details
+
+
+def breaking_changes(before: TypeInfo, after: TypeInfo) -> list[str]:
+    """The changes of a modified type that can break existing C# code or saved data.
+
+    A removed property that has an added property of the same type to take its place is reported as a rename. That is a guess
+    from the types, so a person confirms it; it is breaking either way.
+    """
+    breaking: list[str] = []
+    if before.kind != after.kind:
+        breaking.append(f"kind changed from {before.kind} to {after.kind}")
+    removed_bases = [b for b in before.bases if b not in after.bases]
+    if removed_bases:
+        breaking.append(f"base removed: {', '.join(removed_bases)}")
+
+    old = {p.name: p for p in before.properties}
+    new = {p.name: p for p in after.properties}
+    removed = [p for name, p in old.items() if name not in new]
+    added = [p for name, p in new.items() if name not in old]
+    for prop in removed:
+        same_type_removed = [p for p in removed if p.clr_type == prop.clr_type]
+        same_type_added = [p for p in added if p.clr_type == prop.clr_type]
+        if len(same_type_removed) == 1 and len(same_type_added) == 1:
+            breaking.append(f"property renamed: {prop.name} to {same_type_added[0].name} ({prop.clr_type})")
+        else:
+            breaking.append(f"property removed: {describe(prop)}")
+    for name, prop in new.items():
+        if name in old and old[name].clr_type != prop.clr_type:
+            breaking.append(f"property {name} type changed from {old[name].clr_type} to {prop.clr_type}")
+
+    old_members = {m.name: m.value for m in before.members}
+    new_members = {m.name: m.value for m in after.members}
+    for name, value in old_members.items():
+        if name not in new_members:
+            breaking.append(f"enum member removed: {name}")
+        elif new_members[name] != value:
+            breaking.append(f"enum member {name} value changed from {value} to {new_members[name]}")
+    return breaking

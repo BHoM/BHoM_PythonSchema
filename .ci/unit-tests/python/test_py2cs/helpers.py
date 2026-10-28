@@ -101,3 +101,30 @@ def demo_package(root: Path, extra_fields: Iterable[str] = ()) -> Path:
             "Mode", "BH.oM.Demo.Mode", "BH.oM.Demo", "Demo_oM", kind="enum", bases="Enum", imports=["from enum import Enum"],
             marker_extra=["'renamed_members': {'None_': 'None'}"], body=["None_ = 0", "# Faster.", "Fast = 1"]),
     })
+
+
+def cs(namespace: str, declaration: str) -> str:
+    return f"using System;\n\nnamespace {namespace}\n{{\n    {declaration}\n    {{\n    }}\n}}\n"
+
+
+def csharp_tree(root: Path) -> Path:
+    """A repository whose folders do not follow the namespaces, like many real ones."""
+    repo = root / "Demo_Toolkit"
+    files = {
+        "Demo_oM/AdministrativeInformation/ProjectInfo.cs": cs("BH.oM.Demo", "public class ProjectInfo : IdentityBase"),
+        "Demo_oM/AdministrativeInformation/IdentityBase.cs": cs("BH.oM.Demo", "public interface IdentityBase : IObject"),
+        "Demo_oM/Enums/Colour.cs": cs("BH.oM.Demo", "public enum Colour"),
+        "Demo_oM/Enums/Shade.cs": cs("BH.oM.Demo", "public enum Shade"),
+        "Demo_oM/Enums/Elements/Wall.cs": cs("BH.oM.Demo.Elements", "public class Wall : IObject"),
+        "Demo_oM/Misc/Several.cs": cs("BH.oM.Demo", "public class Alpha : IObject") + cs("BH.oM.Demo", "public class Beta : IObject"),
+        "Demo_oM/Curves/Line.cs": cs("BH.oM.Demo", "public class Line : IObject"),
+        "Demo_oM/Other/Line.cs": cs("BH.oM.Other", "public class Line : IObject"),
+        "Demo_oM/Elements/Door.cs": cs("BH.oM.Demo.Elements", "public class Door : IObject"),
+        "Demo_oM/obj/Debug/Ghost.cs": cs("BH.oM.Demo", "public class Ghost : IObject"),
+        "Other_oM/Thing.cs": cs("BH.oM.Other", "public class Thing : IObject"),
+    }
+    for relative, text in files.items():
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return repo

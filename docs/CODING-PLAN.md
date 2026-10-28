@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (65 tests), pytest (88 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (65 tests), pytest (108 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -54,7 +54,7 @@ BHoM_PythonSchema/
 │  ├─ CODEOWNERS (new, copied from the JSON repo)
 │  └─ workflows/
 │     ├─ build.ps1 (copied from the JSON repo)
-│     ├─ python-schema-generation.yml   weekly + manual: C# → Python, opens the schema-update PR
+│     ├─ python-schema-generation.yml   weekly + manual: C# → Python, commits straight to develop (no PR)
 │     ├─ pr-checks.yml                  build, NUnit, pytest, Pyright on every PR
 │     └─ linked-csharp-pr.yml           Python PR → draft C# PR(s), uses the GitHub App
 ├─ .ci/
@@ -137,6 +137,11 @@ Extend `.gitignore`: it currently has no entries for `bin/`, `obj/`, `__pycache_
               │      never into the C# checkout (`plan` runs locate, emit and patch in one command)
               │
       py2cs pr       draft C# PR per repo, linked both ways   [phase 8, not built yet]
+
+ C# PR reviewed and merged, then built
+              │
+      py2cs align    generator runs for the changed classes over the built C#; its Python must equal the PR's
+                     Python (the Python PR is a proposal and is only merged when this passes)
 ```
 
 Both converters share one **language-neutral type manifest** (name, namespace, assembly, repo, kind, bases, generic
@@ -199,14 +204,15 @@ and under test, never overwritten by the generator.
 |---|---|
 | `check` | Strict read of a package: collects every problem (file, line, message) and warns about missing descriptions; drafts nothing |
 | `reader` | Parse a `.py` file with `ast` (no import side effects, works per file) into the same type manifest. Accepts the common hand-written styles (`Optional`, `List`, positional `Field` default), works out a missing `__bhom__` marker, and collects problems instead of stopping at the first |
-| `diff` | Compare the manifest at the PR base and head: added, removed, modified types and members |
+| `diff` | Compare the manifest at the PR base and head: added, removed, modified types and members. Also lists the **breaking** changes (property removed or renamed, type changed, enum member removed or renumbered, class or base removed) |
+| `align` | Alignment check: runs the generator over the built merged C# for the changed classes and compares the result with the PR (`compare.py`). A Python PR may only be merged when it passes |
 | `resolve` | `__bhom__["repo"]` → repository, validated against the GitHub API; falls back to scanning the repos in `Included-repositories.txt` for a folder named after the assembly; compares names case-insensitively |
 | `locate` | Finds the existing `.cs` file inside a checked-out C# repo by searching for the declaration (`class/interface/enum/struct <Name>`), file name first. **Never derives the path from the namespace** (43% of files don't match, gotcha 14) |
 | `place` | Chooses a path for a **new** type: folder of sibling types in the same namespace, else `Enums/` convention, else namespace folder, else assembly root; the choice is stated in the PR |
 | `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **member-level patch**: py2cs writes a change list and the Roslyn patcher (`PythonSchemaGeneration.Patcher`) changes only those members, keeping everything else in the file (audit 1, step 2) |
-| `report` | Structured change report per type (added/removed/changed members) for the PR body |
+| `report` | Structured change report per type (added/removed/changed members) for the PR body, with a "Breaking changes" section and the `breaking-change` label (`plan.json` carries `labels`) |
 | `pr` | Creates or updates the draft C# PR and the links back (section 8); real and fake GitHub clients |
-| `__main__` | `python -m py2cs check / manifest / diff / plan / drafts / resolve` (`pr` comes with phase 8) |
+| `__main__` | `python -m py2cs check / manifest / diff / align / plan / drafts / resolve` (`pr` comes with phase 8) |
 
 The reader does static parsing instead of importing so it can run on exactly the files a PR changed, on the base
 revision without installing it, and without executing any code.
@@ -343,7 +349,8 @@ Both parts are in scope.
 
 - **8a `python-schema-generation.yml`** (the diagram's "Create/Update schema"): weekly and manual. Same recipe as the JSON
   repo's weekly job (clone the repos in `Included-repositories.txt`, build in dependency order with `build.ps1`, build and
-  run the generator), then commit to a `schema-updates` branch and open or update the PR to `develop`.
+  run the generator and the checks), then commit the result straight to `develop`. The C# is the source of truth, so the weekly
+  run just rewrites the Python from it; it is not a pull request. If a check fails, nothing is committed.
 - **8b `pr-checks.yml`:** on every PR run `dotnet build`, NUnit, pytest and Pyright.
 - **8c `linked-csharp-pr.yml`:** the two linked PRs. Full design and wiring in section 8.
 - **8d Rehearsal on the real `dKoP_Toolkit`** (no scratch repository needed). The test subject is a new property added to the
@@ -389,7 +396,7 @@ installed, the real-type tests and the full-corpus run. A phase is only finished
 | Alignment of Python and C# changes | Round trip of the spike set compiles and matches the original manifest | NUnit + pytest (orchestrated) |
 | Locating the C# repository for the linked PR | `__bhom__["repo"]` used first; scan fallback; case-insensitive; unknown assembly gives a clear error | pytest |
 | Class carries what the Action needs | `__bhom__` has CLR name, namespace, assembly and repo on every generated class | pytest |
-| **Loop guard:** the weekly schema PR must not spawn C# PRs | Workflow condition and `py2cs pr` refuse when the head branch is `schema-updates` or the actor is the App | pytest (+ workflow dry run) |
+| The weekly generation never raises C# PRs | It commits directly and `linked-csharp-pr.yml` only triggers on `pull_request`, never on `push` | workflow review + dry run |
 | Idempotent re-run | Pushing again to the same Python PR updates the same C# branch and PR, no duplicates | pytest with fake GitHub client |
 | Closing the Python PR | Closed unmerged → linked C# PRs closed with a comment; merged → comment only | pytest with fake GitHub client |
 | App token is least-privilege | One token per target repository, minted for that repository only; token never printed | workflow review + dry run |
@@ -429,7 +436,8 @@ and **real-type tests** (the actual oM) run when the BHoM assemblies are install
 | Round-trip comparison is too strict or too loose | Define the loose comparison once and keep it in one test helper; review differences in phase 6 |
 | Suggested replacement files create noisy C# diffs | Reuse the existing header, usings and comments; always a draft PR; report in the PR body |
 | New-file placement guesses wrong | State the rule used in the PR; reviewer moves the file |
-| Weekly schema PR triggers C# PRs (feedback loop) | Branch and actor guard, tested (section 6) |
+| Weekly generation commit triggers C# PRs | It is a push, not a PR, and the linked-PR workflow has no `push` trigger |
+| `develop` is protected, so the weekly job cannot push to it | Allow the GitHub App (or a deploy key) to bypass the pull request rule for this one commit; the generation checks run before the commit |
 | App token over-privileged or leaked | One token per target repo, short-lived, `permissions` minimised, masked in logs, no fork access |
 | Target repo not covered by the App installation | `resolve` checks reachability first and comments on the Python PR with the missing repo instead of failing silently |
 
@@ -464,8 +472,8 @@ this repository.
 - **Triggers:** `pull_request` (opened, synchronize, reopened, ready_for_review, closed) with a path filter on
   `src/bhom_schema/**`, plus `workflow_dispatch` with `pr_number` and `dry_run` inputs. `concurrency` is per PR number so a
   newer push cancels an older run.
-- **Guards (job `if`):** head repository is this repo (not a fork, because forks never receive secrets); head branch is not
-  `schema-updates`; actor is not the App's bot account.
+- **Guard (job `if`):** head repository is this repo (not a fork, because forks never receive secrets). There is no `push`
+  trigger, so the weekly generation commit never starts this workflow.
 - **Job `plan`:** check out with full history, set up Python, `pip install`, run `py2cs diff` between the PR base and head, and
   `py2cs resolve` to list the affected repositories. Exit cleanly if there are no changes. Output the repo list as a matrix.
 - **Job `raise` (one matrix leg per affected repo):**
@@ -491,7 +499,7 @@ this repository.
 `py2cs.pr` talks to GitHub only through a small `GitHubClient` interface (get repo, list tree, create or update branch and
 file, create or update PR, comment, close). The real client wraps the REST API directly (the `gh` CLI is not installed on
 this machine, so local dry runs must not depend on it; GitHub-hosted runners have it, but we don't rely on it). Tests use a
-fake client with recorded responses, so branch naming, idempotence, the loop guard and the close behaviour are unit-tested
+fake client with recorded responses, so branch naming, idempotence and the close behaviour are unit-tested
 without network access.
 
 ### 8.4 What I need from you before phase 8c

@@ -13,6 +13,14 @@ def render_report(plan: Plan, python_pr: str = "") -> str:
     lines.append("This is a draft generated from the Python classes in BHoM_PythonSchema. It aligns the C# with the Python change, it is not a")
     lines.append("finished implementation: review every file. Existing files are only changed where the Python changed.")
 
+    if plan.labels():
+        lines += ["", "## Breaking changes", "",
+                  "Some changes below can break existing C# code or objects saved with an earlier version (labelled `breaking-change`).",
+                  "Add the matching upgrade in Versioning_Toolkit so old files still open, or confirm none is needed. Nothing here is blocked",
+                  "automatically; the reviewer decides.", ""]
+        lines += [f"- `{f.clr_name}`: {c}" for f in plan.files for c in f.breaking]
+        lines += [f"- `{t}`: type removed" for _, t in plan.removed]
+
     for repo in plan.repos():
         lines += ["", f"## {repo}"]
         for f in [x for x in plan.files if x.repo == repo]:
@@ -21,6 +29,8 @@ def render_report(plan: Plan, python_pr: str = "") -> str:
                 lines.append(f"Location: {f.rule}")
             if f.changes:
                 lines += ["", "Changes in Python:"] + [f"- {c}" for c in f.changes]
+            if f.breaking:
+                lines += ["", "Breaking changes:"] + [f"- {c}" for c in f.breaking]
             if f.notes:
                 lines += ["", "Notes:"] + [f"- {n}" for n in f.notes]
         removed = [t for r, t in plan.removed if r == repo]
