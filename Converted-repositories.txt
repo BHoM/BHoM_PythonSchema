@@ -1,0 +1,3 @@
+# Repositories whose C# classes are converted to Python in src/bhom_schema, and where linked C# pull requests may be raised.
+# Nothing else is written to: a Python pull request cannot aim a C# pull request at any other repository.
+BHoM/CSharpSchema_Test

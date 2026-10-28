@@ -1,0 +1,90 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    env:
+      # Real-type tests fail instead of being skipped when an assembly is missing
+      CI: 'true'
+      PYTHONPATH: ${{ github.workspace }}/.ci/generation
+      # The test classes are cloned into .repos, not next to this repository
+      CSharpSchemaTestRoot: ${{ github.workspace }}\.repos\CSharpSchema_Test\
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - uses: NuGet/setup-nuget@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The real-type tests also use dKoP_oM, which needs BHoM_Adapter to build
+      - name: Clone the repositories
+        shell: pwsh
+        run: ./.github/scripts/Clone-Repositories.ps1 -List Included-repositories.txt -Extra BHoM/BHoM_Adapter,BHoM/dKoP_Toolkit
+
+      - name: Build the repositories in dependency order
+        shell: pwsh
+        run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt -Extra BHoM/BHoM_Adapter,BHoM/dKoP_Toolkit
+
+      - name: Create the virtual environment
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install -e ".[dev]"
+
+      # Build, NUnit, py2cs drafts and the Roslyn round trip, pytest, and Pyright
+      - name: Build and test
+        shell: pwsh
+        run: ./.ci/unit-tests/run-all.ps1
+
+      - name: Does the Python PR change the classes?
+        id: changed
+        shell: pwsh
+        if: github.event_name == 'pull_request'
+        run: |
+          $base = "${{ github.event.pull_request.base.sha }}"
+          $changed = git diff --name-only $base HEAD -- src/bhom_schema
+          "classes=$([bool]$changed)".ToLower() | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Get the classes before the change
+        if: steps.changed.outputs.classes == 'true'
+        shell: pwsh
+        run: git worktree add "$env:RUNNER_TEMP/base" ${{ github.event.pull_request.base.sha }}
+
+      - name: py2cs check (every problem of the changed Python, descriptions)
+        if: steps.changed.outputs.classes == 'true'
+        shell: pwsh
+        run: .venv\Scripts\python -m py2cs check --root src/bhom_schema --base-root "$env:RUNNER_TEMP/base/src/bhom_schema"
+
+      # The Python PR is a proposal: it only passes once the linked C# PR is merged, because the clones above are the C# develop branches.
+      # After the C# PR is merged, re-run this workflow.
+      - name: py2cs align (fails until the linked C# PR is merged)
+        if: steps.changed.outputs.classes == 'true'
+        shell: pwsh
+        run: |
+          .venv\Scripts\python -m py2cs align `
+            --base-root "$env:RUNNER_TEMP/base/src/bhom_schema" `
+            --head-root src/bhom_schema `
+            --assemblies "$env:ProgramData\BHoM\Assemblies"
