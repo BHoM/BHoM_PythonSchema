@@ -115,20 +115,37 @@ Extend `.gitignore`: it currently has no entries for `bin/`, `obj/`, `__pycache_
 
  Python PR in this repo  (not from the weekly job)
               │
-      py2cs diff     what changed between base and head (static read with ast)
+      py2cs check    strict read of the changed Python: every problem listed per file and line, descriptions
+              │      checked; drafts nothing (a failing check stops the flow)
+              │
+      py2cs diff     reader (static, ast) → manifest at PR base and head → what changed.
+              │      A class without a __bhom__ marker is not skipped: its marker is worked out from the folder
+              │      and the generated classes next to it (the PR report says so)
               │
       py2cs resolve  repo(s) from each class's __bhom__["repo"]  (validated through the GitHub App)
               │
       py2cs locate   find the existing .cs file by searching the C# repo (never by namespace)
               │
-      py2cs emit     new types → whole new files; modified types → member-level patch (Roslyn)
+              ├── type not in C# yet ──► emit_new: whole new file, placed by the `place` rules
               │
-      py2cs pr       draft C# PR per repo, linked both ways
+              └── type exists in C#  ──► change list (py2cs/patch.py)
+                                              │
+                                         Roslyn patcher (PythonSchemaGeneration.Patcher)
+                                         changes only the listed members, rest of the file untouched
+              │
+      py2cs plan     files + change report (reviewer notes, breaking changes) written to a scratch folder,
+              │      never into the C# checkout (`plan` runs locate, emit and patch in one command)
+              │
+      py2cs pr       draft C# PR per repo, linked both ways   [phase 8, not built yet]
 ```
 
 Both converters share one **language-neutral type manifest** (name, namespace, assembly, repo, kind, bases, generic
 parameters, properties with C# type and metadata). C# → Python writes it next to the Python it generates; Python → C#
 rebuilds it from Python. Structural tests compare two manifests, so each converter is testable without the other.
+
+Two parts of the flow are separate programs: py2cs is Python and only reads Python, and the Roslyn patcher is C# and
+only reads C#. They talk through a JSON job file (type, namespace, usings, list of member changes), so the patcher needs
+no knowledge of Python and py2cs needs no knowledge of Roslyn.
 
 ---
 
@@ -180,7 +197,8 @@ and under test, never overwritten by the generator.
 
 | Stage | Responsibility |
 |---|---|
-| `reader` | Parse a `.py` file with `ast` (no import side effects, works per file) into the same type manifest |
+| `check` | Strict read of a package: collects every problem (file, line, message) and warns about missing descriptions; drafts nothing |
+| `reader` | Parse a `.py` file with `ast` (no import side effects, works per file) into the same type manifest. Accepts the common hand-written styles (`Optional`, `List`, positional `Field` default), works out a missing `__bhom__` marker, and collects problems instead of stopping at the first |
 | `diff` | Compare the manifest at the PR base and head: added, removed, modified types and members |
 | `resolve` | `__bhom__["repo"]` → repository, validated against the GitHub API; falls back to scanning the repos in `Included-repositories.txt` for a folder named after the assembly; compares names case-insensitively |
 | `locate` | Finds the existing `.cs` file inside a checked-out C# repo by searching for the declaration (`class/interface/enum/struct <Name>`), file name first. **Never derives the path from the namespace** (43% of files don't match, gotcha 14) |
@@ -188,7 +206,7 @@ and under test, never overwritten by the generator.
 | `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **member-level patch**: py2cs writes a change list and the Roslyn patcher (`PythonSchemaGeneration.Patcher`) changes only those members, keeping everything else in the file (audit 1, step 2) |
 | `report` | Structured change report per type (added/removed/changed members) for the PR body |
 | `pr` | Creates or updates the draft C# PR and the links back (section 8); real and fake GitHub clients |
-| `__main__` | `python -m py2cs diff / resolve / locate / emit / pr` |
+| `__main__` | `python -m py2cs check / manifest / diff / plan / drafts / resolve` (`pr` comes with phase 8) |
 
 The reader does static parsing instead of importing so it can run on exactly the files a PR changed, on the base
 revision without installing it, and without executing any code.
