@@ -14,6 +14,6 @@ class ThingIdentity(IObject):
         'clr_name': 'BH.oM.FixtureAlpha.ThingIdentity',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'interface',
     }

@@ -27,7 +27,7 @@ def test_every_generated_class_names_a_resolvable_repo():
 
     package = require_output("fixtures")
     manifest = read_package(package)
-    listing = {"BHoM/FixtureAlpha_Toolkit": ["FixtureAlpha_oM"], "BHoM/FixtureBeta_Toolkit": ["FixtureBeta_oM"], "BHoM/BHoM": ["BHoM"]}
+    listing = {"BuroHappoldEngineering/CSharpSchema_Test": ["FixtureAlpha_oM", "FixtureBeta_oM"], "BHoM/BHoM": ["BHoM"]}
     for info in manifest.values():
         resolve_repo(info, listing)
 

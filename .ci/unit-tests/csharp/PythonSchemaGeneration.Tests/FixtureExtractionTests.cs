@@ -58,9 +58,9 @@ namespace PythonSchemaGeneration.Tests
         [Test]
         public void RepoComesFromTheAssemblyDescription()
         {
-            Assert.That(R(typeof(ProjectLike)).Model.Repo, Is.EqualTo("BHoM/FixtureAlpha_Toolkit"));
-            Assert.That(FixtureOutput.Rendered(typeof(BH.oM.FixtureBeta.PointLike).FullName).Model.Repo, Is.EqualTo("BHoM/FixtureBeta_Toolkit"));
-            Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'repo': 'BHoM/FixtureAlpha_Toolkit'"));
+            Assert.That(R(typeof(ProjectLike)).Model.Repo, Is.EqualTo("BuroHappoldEngineering/CSharpSchema_Test"));
+            Assert.That(FixtureOutput.Rendered(typeof(BH.oM.FixtureBeta.PointLike).FullName).Model.Repo, Is.EqualTo("BuroHappoldEngineering/CSharpSchema_Test"));
+            Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'repo': 'BuroHappoldEngineering/CSharpSchema_Test'"));
             Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'namespace': 'BH.oM.FixtureAlpha'"));
             Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'assembly': 'FixtureAlpha_oM'"));
         }
@@ -73,7 +73,7 @@ namespace PythonSchemaGeneration.Tests
                 Assert.That(type.Text, Does.Contain("'clr_name': '" + type.Model.ClrName + "'"), type.Model.ClrName);
                 Assert.That(type.Text, Does.Contain("'namespace':"), type.Model.ClrName);
                 Assert.That(type.Text, Does.Contain("'assembly':"), type.Model.ClrName);
-                Assert.That(type.Text, Does.Contain("'repo': 'BHoM/"), type.Model.ClrName);
+                Assert.That(type.Text, Does.Contain("'repo': '"), type.Model.ClrName);
                 Assert.That(type.Text, Does.Contain("'kind':"), type.Model.ClrName);
             }
         }

@@ -16,7 +16,7 @@ class PointLike(SchemaModel, IObject):
         'clr_name': 'BH.oM.FixtureBeta.PointLike',
         'assembly': 'FixtureBeta_oM',
         'namespace': 'BH.oM.FixtureBeta',
-        'repo': 'BHoM/FixtureBeta_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'class',
     }
 

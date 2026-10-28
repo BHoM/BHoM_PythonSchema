@@ -68,8 +68,7 @@ BHoM_PythonSchema/
 │  └─ unit-tests/
 │     ├─ csharp/
 │     │  ├─ PythonSchemaGeneration.Tests/     NUnit tests
-│     │  ├─ Fixtures.Alpha_oM/                small fake oM assembly used as test input
-│     │  └─ Fixtures.Beta_oM/                 second fake assembly (same-named types, other repo URL, folder ≠ namespace)
+│     │  └─ (FixtureAlpha_oM, FixtureBeta_oM: moved to the CSharpSchema_Test repository, cloned next to this one)
 │     ├─ python/                              pytest tests (converters, PR raiser, generated package)
 │     ├─ golden/                              hand-written expected .py / .cs / report outputs
 │     ├─ github-fixtures/                     recorded repository listings and API replies for offline tests

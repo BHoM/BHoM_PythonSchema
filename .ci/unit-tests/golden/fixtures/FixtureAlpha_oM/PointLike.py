@@ -16,7 +16,7 @@ class PointLike(SchemaModel, IGeometryLike):
         'clr_name': 'BH.oM.FixtureAlpha.PointLike',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'class',
     }
 

@@ -9,10 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PythonSchemaGeneration", "P
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PythonSchemaGeneration.Tests", "..\unit-tests\csharp\PythonSchemaGeneration.Tests\PythonSchemaGeneration.Tests.csproj", "{A9209835-DDD9-470D-A1F4-C9EB8015ABED}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixtureAlpha_oM", "..\unit-tests\csharp\FixtureAlpha_oM\FixtureAlpha_oM.csproj", "{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixtureBeta_oM", "..\unit-tests\csharp\FixtureBeta_oM\FixtureBeta_oM.csproj", "{517B667A-E6AD-4882-9132-E0DDC1D388A7}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PythonSchemaGeneration.Patcher", "PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj", "{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}"
 EndProject
 Global
@@ -61,30 +57,6 @@ Global
 		{A9209835-DDD9-470D-A1F4-C9EB8015ABED}.Release|x64.Build.0 = Release|Any CPU
 		{A9209835-DDD9-470D-A1F4-C9EB8015ABED}.Release|x86.ActiveCfg = Release|Any CPU
 		{A9209835-DDD9-470D-A1F4-C9EB8015ABED}.Release|x86.Build.0 = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|x64.Build.0 = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Debug|x86.Build.0 = Debug|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|Any CPU.Build.0 = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|x64.ActiveCfg = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|x64.Build.0 = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|x86.ActiveCfg = Release|Any CPU
-		{99F41F7D-0492-4FAF-954F-4F1DDF1C14A8}.Release|x86.Build.0 = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|x64.Build.0 = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Debug|x86.Build.0 = Debug|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|Any CPU.Build.0 = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x64.ActiveCfg = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x64.Build.0 = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x86.ActiveCfg = Release|Any CPU
-		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x86.Build.0 = Release|Any CPU
 		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|x64.ActiveCfg = Debug|Any CPU

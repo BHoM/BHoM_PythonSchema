@@ -16,7 +16,7 @@ class ImmutableThing(BHoMObject, IImmutable):
         'clr_name': 'BH.oM.FixtureAlpha.ImmutableThing',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'class',
     }
 

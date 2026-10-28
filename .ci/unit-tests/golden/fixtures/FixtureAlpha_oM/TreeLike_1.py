@@ -17,7 +17,7 @@ class TreeLike_1[T](BHoMObject):
         'clr_name': 'BH.oM.FixtureAlpha.TreeLike`1',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'class',
         'generic_params': {'T': []},
     }

@@ -15,7 +15,7 @@ class IPanelLike_2[TEdge, TOpening: IOpeningLike_1[Any]](IBHoMObject):
         'clr_name': 'BH.oM.FixtureAlpha.IPanelLike`2',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'interface',
         'generic_params': {'TEdge': [], 'TOpening': ['BH.oM.FixtureAlpha.IOpeningLike<TEdge>']},
     }

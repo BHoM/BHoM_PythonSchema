@@ -144,7 +144,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Span",
@@ -208,7 +208,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Names",
@@ -294,7 +294,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Other",
@@ -317,7 +317,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Other",
@@ -340,7 +340,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Geometry",
@@ -370,7 +370,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Matrix",
@@ -401,7 +401,7 @@
         "BH.oM.FixtureAlpha.IElement1DLike",
         "BH.oM.FixtureAlpha.IGeometryLike"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": []
     },
     {
@@ -416,7 +416,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": []
     },
     {
@@ -431,7 +431,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": []
     },
     {
@@ -446,7 +446,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Label",
@@ -466,7 +466,7 @@
       "bases": [
         "BH.oM.Base.IBHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "genericParams": [
         {
           "name": "T",
@@ -487,7 +487,7 @@
       "bases": [
         "BH.oM.Base.IBHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "genericParams": [
         {
           "name": "TEdge",
@@ -515,7 +515,7 @@
         "BH.oM.Base.BHoMObject",
         "BH.oM.Base.IImmutable"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Id",
@@ -544,7 +544,7 @@
         "BH.oM.FixtureAlpha.ICurveLike",
         "BH.oM.FixtureAlpha.ILabelled"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "description": "A straight segment between two points.",
       "properties": [
         {
@@ -588,7 +588,7 @@
       "assembly": "FixtureAlpha_oM",
       "kind": "enum",
       "bases": [],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "flags": true,
       "properties": [],
       "members": [
@@ -618,7 +618,7 @@
       "bases": [
         "BH.oM.FixtureAlpha.IGeometryLike"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "X",
@@ -655,7 +655,7 @@
       "bases": [
         "BH.oM.FixtureAlpha.ThingIdentity"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "ProjectReference",
@@ -699,7 +699,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Created",
@@ -790,7 +790,7 @@
       "assembly": "FixtureAlpha_oM",
       "kind": "enum",
       "bases": [],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [],
       "members": [
         {
@@ -815,7 +815,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Level",
@@ -837,7 +837,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "Holder",
@@ -857,7 +857,7 @@
       "assembly": "FixtureAlpha_oM",
       "kind": "enum",
       "bases": [],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "description": "Kinds of support.",
       "properties": [],
       "members": [
@@ -888,7 +888,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": []
     },
     {
@@ -903,7 +903,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "genericParams": [
         {
           "name": "T",
@@ -939,7 +939,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureAlpha_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "genericParams": [
         {
           "name": "T",
@@ -970,7 +970,7 @@
       "bases": [
         "BH.oM.Base.BHoMObject"
       ],
-      "repo": "BHoM/FixtureBeta_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "FromAlpha",
@@ -1000,7 +1000,7 @@
       "bases": [
         "BH.oM.Base.IObject"
       ],
-      "repo": "BHoM/FixtureBeta_Toolkit",
+      "repo": "BuroHappoldEngineering/CSharpSchema_Test",
       "properties": [
         {
           "name": "X",

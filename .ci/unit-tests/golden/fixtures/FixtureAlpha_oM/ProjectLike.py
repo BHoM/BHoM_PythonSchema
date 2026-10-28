@@ -16,7 +16,7 @@ class ProjectLike(SchemaModel, ThingIdentity):
         'clr_name': 'BH.oM.FixtureAlpha.ProjectLike',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BHoM/FixtureAlpha_Toolkit',
+        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
         'kind': 'class',
     }
 
