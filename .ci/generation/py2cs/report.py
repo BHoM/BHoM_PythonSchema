@@ -11,12 +11,12 @@ def render_report(plan: Plan, python_pr: str = "") -> str:
         lines.append(f"Depends on {python_pr}")
         lines.append("")
     lines.append("This is a draft generated from the Python classes in BHoM_PythonSchema. It aligns the C# with the Python change, it is not a")
-    lines.append("finished implementation: review every file, and merge by hand where an existing file was replaced.")
+    lines.append("finished implementation: review every file. Existing files are only changed where the Python changed.")
 
     for repo in plan.repos():
         lines += ["", f"## {repo}"]
         for f in [x for x in plan.files if x.repo == repo]:
-            lines += ["", f"### `{f.path}` ({'new file' if f.action == 'new' else 'suggested replacement of an existing file'})", f"Type: `{f.clr_name}`"]
+            lines += ["", f"### `{f.path}` ({'new file' if f.action == 'new' else 'changes to an existing file'})", f"Type: `{f.clr_name}`"]
             if f.rule:
                 lines.append(f"Location: {f.rule}")
             if f.changes:

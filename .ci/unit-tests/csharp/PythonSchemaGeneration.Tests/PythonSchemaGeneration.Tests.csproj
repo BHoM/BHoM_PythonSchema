@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Core\PythonSchemaGeneration.Core.csproj" />
     <ProjectReference Include="..\FixtureAlpha_oM\FixtureAlpha_oM.csproj" />
     <ProjectReference Include="..\FixtureBeta_oM\FixtureBeta_oM.csproj" />
+    <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj" />
   </ItemGroup>
 
 </Project>

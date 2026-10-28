@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (44 tests), pytest (73 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (65 tests), pytest (88 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -121,7 +121,7 @@ Extend `.gitignore`: it currently has no entries for `bin/`, `obj/`, `__pycache_
               │
       py2cs locate   find the existing .cs file by searching the C# repo (never by namespace)
               │
-      py2cs emit     new types → whole new files; modified types → suggested full-file replacement
+      py2cs emit     new types → whole new files; modified types → member-level patch (Roslyn)
               │
       py2cs pr       draft C# PR per repo, linked both ways
 ```
@@ -185,7 +185,7 @@ and under test, never overwritten by the generator.
 | `resolve` | `__bhom__["repo"]` → repository, validated against the GitHub API; falls back to scanning the repos in `Included-repositories.txt` for a folder named after the assembly; compares names case-insensitively |
 | `locate` | Finds the existing `.cs` file inside a checked-out C# repo by searching for the declaration (`class/interface/enum/struct <Name>`), file name first. **Never derives the path from the namespace** (43% of files don't match, gotcha 14) |
 | `place` | Chooses a path for a **new** type: folder of sibling types in the same namespace, else `Enums/` convention, else namespace folder, else assembly root; the choice is stated in the PR |
-| `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **suggested full-file replacement** that reuses the existing file's header, usings and comments where it can (the Action passes the existing file in) |
+| `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **member-level patch**: py2cs writes a change list and the Roslyn patcher (`PythonSchemaGeneration.Patcher`) changes only those members, keeping everything else in the file (audit 1, step 2) |
 | `report` | Structured change report per type (added/removed/changed members) for the PR body |
 | `pr` | Creates or updates the draft C# PR and the links back (section 8); real and fake GitHub clients |
 | `__main__` | `python -m py2cs diff / resolve / locate / emit / pr` |
@@ -193,9 +193,10 @@ and under test, never overwritten by the generator.
 The reader does static parsing instead of importing so it can run on exactly the files a PR changed, on the base
 revision without installing it, and without executing any code.
 
-Decision recorded: for a modified C# type the converter produces a **suggested full-file replacement** (written over the
-existing path, in a **draft** PR, so GitHub's diff shows precisely what changes) plus the change report. A human reviews and
-merges; nothing is auto-merged.
+Decision recorded (revised 2026-10-26, audit 1): for a modified C# type the converter **patches the existing file member by
+member** with Roslyn, so only the changed members differ, in a **draft** PR, plus the change report. A human reviews and merges;
+nothing is auto-merged. The earlier full-file replacement lost attributes such as `[DocumentationURL]` and reformatted
+unrelated code.
 
 ### 4.5 Tooling and conventions
 
@@ -493,7 +494,7 @@ without network access.
 
 | Question | Decision |
 |---|---|
-| Modified C# types | **Suggested full-file replacement** for a human to merge (draft PR, existing header/usings kept, change report in the PR body); no automatic patching. |
+| Modified C# types | **Member-level patch** with Roslyn (revised by audit 1; was a full-file replacement): only changed members are touched, draft PR, change report in the PR body. |
 | CI scope | **Both** the weekly generation / PR-check workflows **and** the linked-PR Action are in scope now. |
 | Repository list, owners, workflow recipe | Start as **copies of the JSON repo's**. |
 | Spike set | `Point` replaced by `ProjectIdentification` as the "simple flat class" slot; `Point` is still generated and checked as `Line`'s dependency. |

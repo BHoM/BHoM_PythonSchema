@@ -50,6 +50,8 @@ class TypeInfo:
     generic_params: list[GenericParam] = field(default_factory=lambda: [])
     properties: list[PropertyInfo] = field(default_factory=lambda: [])
     members: list[MemberInfo] = field(default_factory=lambda: [])
+    # Reviewer notes from reading the file (for example a worked-out marker); not part of the manifest
+    notes: list[str] = field(default_factory=lambda: [], compare=False)
 
     @property
     def simple_name(self) -> str:

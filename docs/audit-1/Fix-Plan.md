@@ -1,6 +1,6 @@
 # Audit 1: plan to fix the review findings
 
-Date: 2026-10-26. Status: **plan only, nothing implemented.**
+Date: 2026-10-26. Status: **Steps 1 and 2 done** (2026-10-26); Steps 3 to 8 not started.
 
 The solution was reviewed against the Option 2 system design: the C# oM is the "source of truth", meaning that when the
 Python and the C# disagree, the C# wins. The review found eight issues (**Issue 1** to **Issue 8**). This plan fixes them in
@@ -58,8 +58,8 @@ What the scope decision changes in the other steps:
 
 | Step | Fixes | In one sentence | Why at this point |
 |---|---|---|---|
-| 1 | Issue 2 | Make py2cs understand Python written by people, not only by the generator | Everything py2cs drafts depends on reading the Python correctly |
-| 2 | Issue 1 | Change only the lines that need changing in an existing C# file | So the drafted C# is something BHoM reviewers will accept |
+| 1 (done) | Issue 2 | Make py2cs understand Python written by people, not only by the generator | Everything py2cs drafts depends on reading the Python correctly |
+| 2 (done) | Issue 1 | Change only the lines that need changing in an existing C# file | So the drafted C# is something BHoM reviewers will accept |
 | 3 | Issue 4 | Agree how the Python PR and the C# PR stay in step, and warn about breaking changes | The rules must exist before they are automated |
 | 4 | Issue 5 | Automate everything on GitHub, using the JSON repository's build | Once the loop is safe, make it run by itself |
 | 5 | Issue 3 | Let objects with interface-typed fields be saved to JSON and loaded back | Makes the package useful to other Python projects (decision needed) |
@@ -189,6 +189,25 @@ whole new file. Anything the tool could not translate is listed in the PR descri
 - An empty change list gives back the file exactly as it was, byte for byte.
 - The `Bar` test above gives a small, clean diff.
 - The build and test gate passes.
+
+---
+
+## What was done in Steps 1 and 2
+
+- **Step 1:** `py2cs/reader.py` accepts the common styles (1.2), works out a missing `__bhom__` marker (1.3) and collects problems
+  per file (1.4). New fields without a default become settable properties (1.5). `python -m py2cs check` is in `py2cs/check.py` (1.6).
+  The rules are in the README, with a class to copy in `docs/templates/NewClass.py` (1.1). Tests: `test_py2cs/test_authoring.py`.
+- **Step 2:** the Roslyn patcher is `.ci/generation/PythonSchemaGeneration.Patcher`, and py2cs builds its change list in
+  `py2cs/patch.py`. `py2cs plan` patches existing files and writes whole files only for new types. CODING-PLAN section 9 records
+  the new decision. Tests: `PatcherTests.cs` (NUnit, on copies of the real `Bar.cs` and `ProjectIdentification.cs` in
+  `golden/patcher`) and `test_py2cs/test_patch_changes.py`.
+- **Differences from the plan:**
+  - The round-trip drafts (`py2cs drafts`) still turn fields without a default into get-only properties set by a constructor,
+    because those come from immutable C# types.
+  - A type that is new in Python but already declared in C# is reported as a problem instead of being patched.
+  - In an enum whose members have no explicit values, new members always go at the end, so the other members keep their numbers.
+- **Result:** the `Bar` example from the review is now a 3-line C# diff. `run-all.ps1` passes: 65 NUnit tests, 88 pytest tests,
+  Pyright 0 errors.
 
 ---
 

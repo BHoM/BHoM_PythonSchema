@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import demo_package, module, package
+from helpers import demo_package, module, package, require_patcher
 from py2cs.__main__ import main
 from py2cs.diff import diff_manifests
 from py2cs.locate import locate, place
@@ -164,6 +164,7 @@ def tree_hash(root: Path) -> str:
 
 
 def test_plan_for_a_modified_new_and_removed_type(tmp_path: Path):
+    require_patcher()
     clones = tmp_path / "clones"
     repo = csharp_tree(clones)
     before = tree_hash(clones)
@@ -178,7 +179,8 @@ def test_plan_for_a_modified_new_and_removed_type(tmp_path: Path):
     assert plan.errors == []
     by_type = {f.clr_name: f for f in plan.files}
     modified = by_type["BH.oM.Demo.ProjectInfo"]
-    assert (modified.action, modified.path) == ("replace", "Demo_oM/AdministrativeInformation/ProjectInfo.cs")
+    assert (modified.action, modified.path) == ("patch", "Demo_oM/AdministrativeInformation/ProjectInfo.cs")
+    assert modified.text == cs("BH.oM.Demo", "public class ProjectInfo : IdentityBase").replace("    {\n    }", "    {\n        public virtual string ProjectNumber { get; set; } = \"\";\n    }")
     assert "public virtual string ProjectNumber { get; set; } = \"\";" in modified.text
     new = by_type["BH.oM.Demo.Fresh"]
     assert (new.action, new.path) == ("new", "Demo_oM/AdministrativeInformation/Fresh.cs")
@@ -201,6 +203,7 @@ def test_plan_reports_problems_instead_of_guessing(tmp_path: Path):
 
 
 def test_command_line_plan_writes_files_into_the_output_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    require_patcher()
     clones = tmp_path / "clones"
     csharp_tree(clones)
     before = tree_hash(clones)
@@ -214,7 +217,7 @@ def test_command_line_plan_writes_files_into_the_output_only(tmp_path: Path, cap
                    "--clones-parent", str(clones), "--listing", str(listing), "--python-pr", "BHoM/BHoM_PythonSchema#7", "--out", str(out)])
     assert status == 0
     assert (out / "BHoM__Demo_Toolkit" / "Demo_oM" / "AdministrativeInformation" / "ProjectInfo.cs").exists()
-    assert json.loads((out / "plan.json").read_text())["files"][0]["action"] == "replace"
+    assert json.loads((out / "plan.json").read_text())["files"][0]["action"] == "patch"
     assert "Depends on BHoM/BHoM_PythonSchema#7" in (out / "report.md").read_text()
     assert tree_hash(clones) == before
     assert "1 files planned" in capsys.readouterr().out
@@ -234,6 +237,7 @@ def test_command_line_diff_resolve_and_manifest(tmp_path: Path, capsys: pytest.C
 @pytest.mark.skipif(not Path("C:/Github/dKoP_Toolkit/dKoP_oM").is_dir(), reason="dKoP_Toolkit is not cloned")
 def test_rehearsal_adding_a_property_to_project_identification(tmp_path: Path):
     """The dry run planned for the real dKoP_Toolkit: a new Python property becomes a one line C# change, clone untouched."""
+    require_patcher()
     def project_identification(root: Path, extra: list[str]) -> Path:
         return package(root, {"dKoP_oM/IdKoPObject.py": module("IdKoPObject", "BH.oM.dKoP.IdKoPObject", "BH.oM.dKoP", "dKoP_oM", repo="BHoM/dKoP_Toolkit", kind="interface", bases="ABC",
                                                                 imports=["from abc import ABC"]),

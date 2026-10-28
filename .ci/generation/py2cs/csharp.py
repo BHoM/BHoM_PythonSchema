@@ -1,9 +1,8 @@
-"""C# source for a type manifest entry: whole new files, and suggested replacements for existing files."""
+"""C# source for a type manifest entry: whole new files. Existing files are changed member by member (see patch.py)."""
 
 from __future__ import annotations
 
 import ast
-import re
 from dataclasses import dataclass, field
 
 from py2cs.model import Manifest, PropertyInfo, TypeInfo
@@ -311,8 +310,12 @@ def ambiguous_names(manifest: Manifest) -> frozenset[str]:
     return frozenset(name for name, full in owners.items() if len(full) > 1)
 
 
-def render_type(info: TypeInfo, manifest: Manifest) -> tuple[str, set[str]]:
-    """The namespace block for one type, and the namespaces it needs."""
+def render_type(info: TypeInfo, manifest: Manifest, notes: list[str] | None = None, read_only_required: bool = False) -> tuple[str, set[str]]:
+    """The namespace block for one type, and the namespaces it needs.
+
+    Fields without a default become settable properties without an initial value, unless read_only_required is set: they then
+    become get-only properties set by a constructor, as in the immutable oM types they were generated from.
+    """
     names = Names(info.namespace, ambiguous_names(manifest))
     defaults = Defaults(names, manifest)
     usings: set[str] = set()
@@ -329,7 +332,7 @@ def render_type(info: TypeInfo, manifest: Manifest) -> tuple[str, set[str]]:
     if info.kind == "enum":
         lines.extend(_enum(info, usings))
     else:
-        lines.extend(_class_like(info, manifest, names, defaults, usings))
+        lines.extend(_class_like(info, manifest, names, defaults, usings, notes, read_only_required))
 
     block = f"namespace {info.namespace}\n{{\n" + "\n".join(lines) + "\n}\n"
     return block, usings | names.usings
@@ -354,7 +357,7 @@ def _enum(info: TypeInfo, usings: set[str]) -> list[str]:
     return lines
 
 
-def _class_like(info: TypeInfo, manifest: Manifest, names: Names, defaults: Defaults, usings: set[str]) -> list[str]:
+def _class_like(info: TypeInfo, manifest: Manifest, names: Names, defaults: Defaults, usings: set[str], notes: list[str] | None, read_only_required: bool) -> list[str]:
     indent = "    "
     lines: list[str] = []
     keyword = {"interface": "interface", "struct": "struct"}.get(info.kind, "class")
@@ -370,14 +373,16 @@ def _class_like(info: TypeInfo, manifest: Manifest, names: Names, defaults: Defa
     lines.append(header)
     lines.append(f"{indent}{{")
 
-    required = [p for p in info.properties if not p.has_default] if info.kind != "interface" else []
+    required = [p for p in info.properties if not p.has_default] if info.kind != "interface" and read_only_required else []
+    if info.kind != "interface" and not read_only_required and notes is not None:
+        notes.extend(f"{p.name} has no default in Python, so it was drafted without an initial value" for p in info.properties if not p.has_default)
     if info.properties:
         lines.append(f"{indent * 2}/***************************************************/")
         lines.append(f"{indent * 2}/**** Properties                                ****/")
         lines.append(f"{indent * 2}/***************************************************/")
         lines.append("")
         for prop in info.properties:
-            lines.extend(_property(info, prop, names, defaults, usings, read_only=prop in required))
+            lines.extend(_property(info, prop, names, defaults, usings, notes, read_only=prop in required))
             lines.append("")
     if required:
         lines.extend(_constructor(info, required, names))
@@ -419,21 +424,32 @@ def _constructor(info: TypeInfo, required: list[PropertyInfo], names: Names) -> 
     return lines
 
 
-def _property(info: TypeInfo, prop: PropertyInfo, names: Names, defaults: Defaults, usings: set[str], read_only: bool = False) -> list[str]:
-    indent = "        "
-    lines: list[str] = []
+def property_attributes(prop: PropertyInfo, usings: set[str]) -> list[str]:
+    """The C# attributes of a property, without the square brackets."""
+    attributes: list[str] = []
     if prop.description:
         usings.add("System.ComponentModel")
-        lines.append(f"{indent}[Description({csharp_string(prop.description)})]")
+        attributes.append(f"Description({csharp_string(prop.description)})")
     if prop.quantity:
         usings.add("BH.oM.Quantities.Attributes")
-        lines.append(f"{indent}[{prop.quantity[0]}]")
+        attributes.append(prop.quantity[0])
     if prop.display_text:
         usings.add("BH.oM.Base.Attributes")
-        lines.append(f"{indent}[DisplayText({csharp_string(prop.display_text)})]")
+        attributes.append(f"DisplayText({csharp_string(prop.display_text)})")
     if prop.dynamic:
         usings.add("BH.oM.Base.Attributes")
-        lines.append(f"{indent}[DynamicProperty]")
+        attributes.append("DynamicProperty")
+    return attributes
+
+def untranslated_default(prop: PropertyInfo, initialiser: str | None) -> str | None:
+    """A reviewer note when a Python default has no C# translation."""
+    if prop.has_default and initialiser is None and prop.default not in (None, "None"):
+        return f"the default {prop.default} of {prop.name} could not be translated to C#; set it by hand"
+    return None
+
+def _property(info: TypeInfo, prop: PropertyInfo, names: Names, defaults: Defaults, usings: set[str], notes: list[str] | None, read_only: bool = False) -> list[str]:
+    indent = "        "
+    lines = [f"{indent}[{a}]" for a in property_attributes(prop, usings)]
 
     type_text = names.render(prop.clr_type)
     if info.kind == "interface":
@@ -444,10 +460,10 @@ def _property(info: TypeInfo, prop: PropertyInfo, names: Names, defaults: Defaul
     init = defaults.initialiser(prop)
     suffix = f" = {init};" if init is not None else ""
     accessors = "{ get; }" if read_only else "{ get; set; }"
-    line = f"{indent}public {modifier}{type_text} {identifier(prop.name)} {accessors}{suffix}"
-    if prop.has_default and init is None and prop.default not in (None, "None"):
-        line += f" // default not translated: {prop.default}"
-    lines.append(line)
+    lines.append(f"{indent}public {modifier}{type_text} {identifier(prop.name)} {accessors}{suffix}")
+    note = untranslated_default(prop, init)
+    if note is not None and notes is not None:
+        notes.append(note)
     return lines
 
 
@@ -457,36 +473,8 @@ def _using_lines(namespaces: set[str]) -> list[str]:
     return [f"using {ns};" for ns in sorted(namespaces, key=lambda n: (n.startswith("System"), n))]
 
 
-def emit_new(info: TypeInfo, manifest: Manifest) -> str:
-    """A whole new C# file for a type that does not exist yet."""
-    block, namespaces = render_type(info, manifest)
+def emit_new(info: TypeInfo, manifest: Manifest, notes: list[str] | None = None, read_only_required: bool = False) -> str:
+    """A whole new C# file for a type that does not exist yet. Reviewer notes are added to notes."""
+    block, namespaces = render_type(info, manifest, notes, read_only_required)
     usings = "\n".join(_using_lines(namespaces))
     return COPYRIGHT + "\n" + (usings + "\n\n" if usings else "") + block
-
-
-def emit_replacement(info: TypeInfo, manifest: Manifest, existing: str) -> tuple[str, list[str]]:
-    """A suggested full-file replacement that keeps the existing file's header, usings and namespace.
-
-    Returns the text and a list of notes for the reviewer.
-    """
-    notes: list[str] = []
-    block, needed = render_type(info, manifest)
-
-    lines = existing.replace("\r\n", "\n").split("\n")
-    first_code = next((i for i, line in enumerate(lines) if line.startswith("using ") or line.startswith("namespace ")), len(lines))
-    header = "\n".join(lines[:first_code]).rstrip("\n")
-    old_usings = [line.strip() for line in lines if re.match(r"^using\s+[\w.]+;\s*$", line)]
-    wanted = [f"using {ns};" for ns in sorted(needed, key=lambda n: (n.startswith("System"), n))]
-    merged = old_usings + [u for u in wanted if u not in old_usings]
-
-    match = re.search(r"^namespace\s+([\w.]+)", existing, re.M)
-    if match and match.group(1) != info.namespace:
-        notes.append(f"the existing file declares namespace {match.group(1)}, the Python class says {info.namespace}; the existing one is kept")
-        block = block.replace(f"namespace {info.namespace}", f"namespace {match.group(1)}", 1)
-
-    declarations = re.findall(r"^\s*(?:public|internal)\s+(?:abstract\s+|sealed\s+|static\s+)*(?:partial\s+)?(?:class|interface|enum|struct)\s+\w+", existing, re.M)
-    if len(declarations) > 1:
-        notes.append(f"the existing file declares {len(declarations)} types; only {info.simple_name} is written, merge the others by hand")
-
-    parts = [header, "\n".join(merged), block]
-    return "\n\n".join(p for p in parts if p).rstrip("\n") + "\n", notes

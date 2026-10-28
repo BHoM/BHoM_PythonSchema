@@ -7,7 +7,21 @@ import textwrap
 from collections.abc import Iterable
 from pathlib import Path
 
+import pytest
+
 GOLDEN = Path(__file__).resolve().parents[2] / "golden" / "py2cs"
+
+
+def require_patcher() -> None:
+    """Tests that plan changes to existing C# files run the built C# patcher. Missing, they fail in CI and skip locally."""
+    from py2cs.patch import BUILD_HINT, default_patcher
+
+    if default_patcher().exists():
+        return
+    message = f"the C# patcher is not built; {BUILD_HINT}"
+    if os.environ.get("CI", "").lower() == "true":
+        pytest.fail(message)
+    pytest.skip(message)
 
 
 def write(root: Path, relative: str, source: str) -> Path:

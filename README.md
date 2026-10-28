@@ -21,3 +21,27 @@ python -m venv .venv
 ```
 
 `run-all.ps1` starts with a preflight that reports missing assemblies. It never builds a repo for you.
+
+## Changing the Python classes
+
+A change to `src/bhom_schema` in a pull request is turned into a draft C# pull request by `py2cs`. It reads the Python
+without running it, so it only understands these rules:
+
+- **One class per file**, in `src/bhom_schema/<Assembly>/<namespace folders>/<ClassName>.py`, inside an assembly folder that
+  already exists (for example `Structure_oM/Elements/Bar.py` for `BH.oM.Structure.Elements.Bar`).
+- **A new class needs no `__bhom__` marker**: its C# name, namespace and repository are worked out from the folder and the
+  generated classes next to it, and the PR report says so.
+- **Every field has a default** where C# would have one: `Name: str = ""`, `Stage: int = Field(0, description="...")`,
+  `Tags: list[str] = Field(default_factory=list)`. A field without a default becomes a C# property without an initial value.
+- **Every class and field has a description**: a docstring on the class, `Field(description="...")` on a field.
+- **Supported types**: `str`, `int`, `float`, `bool`, `Decimal`, `datetime`, `timedelta`, `UUID`, `Any`, `list[...]`,
+  `dict[...]`, `set[...]`, `tuple[...]`, `X | None` (or `Optional[X]`), and other `bhom_schema` classes. Use
+  `Annotated[int, ClrType("long")]` when the C# type is not the usual one, and `Quantity("Length", "m")` for physical quantities.
+- **Existing C# files are changed member by member**: only the properties that changed in Python are touched.
+
+[docs/templates/NewClass.py](docs/templates/NewClass.py) is a class to copy. Check your change before pushing:
+
+```powershell
+$env:PYTHONPATH = ".ci/generation"
+.venv\Scripts\python -m py2cs check --root src/bhom_schema
+```

@@ -7,24 +7,28 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from py2cs.csharp import emit_new, emit_replacement
+from py2cs.check import description_warnings
+from py2cs.csharp import emit_new
 from py2cs.diff import Diff
-from py2cs.locate import locate, place, read
+from py2cs.locate import locate, place
 from py2cs.model import Manifest
+from py2cs.patch import FilePatch, PatcherError, PatchResult, build_patch, run_patcher
 from py2cs.resolve import Listing, ResolveError, resolve_repo
 
+Patcher = Callable[[list[FilePatch]], list[PatchResult]]
 
 @dataclass
 class PlannedFile:
     repo: str
     path: str                 # relative to the repository root
-    action: str               # new | replace
+    action: str               # new | patch
     clr_name: str
     text: str
     rule: str = ""
     notes: list[str] = field(default_factory=lambda: [])
     changes: list[str] = field(default_factory=lambda: [])
-
+    # The existing file starts with a byte order mark, kept when the file is written
+    bom: bool = False
 
 @dataclass
 class Plan:
@@ -42,9 +46,11 @@ class Plan:
             "errors": self.errors,
         }
 
-
-def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[str], Path | None], listing: Listing | None = None) -> Plan:
+def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[str], Path | None], listing: Listing | None = None,
+              patcher: Patcher | None = None) -> Plan:
+    """New types get a whole new file; types that exist in C# are patched member by member with the Roslyn patcher."""
     plan = Plan()
+    pending: list[tuple[PlannedFile, FilePatch]] = []
     for change in diff.changes:
         if change.kind == "removed":
             info = base.get(change.clr_name)
@@ -68,19 +74,43 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
             plan.errors.append(f"{change.clr_name}: no checkout of {repo} is available")
             continue
 
+        notes = list(info.notes) + description_warnings(base.get(change.clr_name), info)
         found = locate(root, info)
         if found.path is not None:
-            text, notes = emit_replacement(info, head, read(found.path))
+            relative = found.path.relative_to(root).as_posix()
+            if change.kind == "added":
+                plan.errors.append(f"{change.clr_name}: the type is new in Python, but {relative} in {repo} already declares {info.simple_name}; compare them by hand")
+                continue
+            patch = build_patch(found.path, base[change.clr_name], info, head)
             if found.note:
                 notes.append(found.note)
-            if change.kind == "added":
-                notes.append("the type is new in Python but a C# declaration already exists; check this is the same type")
-            plan.files.append(PlannedFile(repo, found.path.relative_to(root).as_posix(), "replace", change.clr_name, text,
-                                          "existing file found by searching for the declaration", notes, change.details))
+            if not patch.changes:
+                plan.errors += [f"{change.clr_name}: {n}" for n in patch.notes or ["nothing to change in C#"]]
+                continue
+            planned = PlannedFile(repo, relative, "patch", change.clr_name, "", "existing file found by searching for the declaration",
+                                  notes + patch.notes, change.details)
+            plan.files.append(planned)
+            pending.append((planned, patch))
         else:
             placement = place(root, info)
-            notes = []
             if change.kind == "modified":
                 notes.append("the existing C# declaration was not found, so the type is drafted as a new file")
-            plan.files.append(PlannedFile(repo, placement.path, "new", change.clr_name, emit_new(info, head), placement.rule, notes, change.details))
+            text = emit_new(info, head, notes)
+            plan.files.append(PlannedFile(repo, placement.path, "new", change.clr_name, text, placement.rule, notes, change.details))
+
+    if pending:
+        try:
+            results = (patcher or run_patcher)([p for _, p in pending])
+        except PatcherError as e:
+            plan.errors.append(str(e))
+            plan.files = [f for f in plan.files if f.action != "patch"]
+            return plan
+
+        for (planned, _), result in zip(pending, results):
+            if result.error is not None:
+                plan.errors.append(f"{planned.clr_name}: {result.error}")
+                plan.files.remove(planned)
+                continue
+            planned.text, planned.bom = result.text, result.bom
+            planned.notes += result.notes
     return plan

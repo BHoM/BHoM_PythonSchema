@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from helpers import assert_golden, module, package
-from py2cs.csharp import Names, emit_new, emit_replacement, parse_type
+from py2cs.csharp import Names, emit_new, parse_type
 from py2cs.reader import read_package
 
 
 def draft(tmp_path: Path, files: dict[str, str], clr: str) -> str:
     manifest = read_package(package(tmp_path, files))
-    return emit_new(manifest[clr], manifest)
+    return emit_new(manifest[clr], manifest, read_only_required=True)
 
 
 def test_names_shorten_and_collect_usings():
@@ -81,70 +81,31 @@ def test_new_enum_interface_and_generic(tmp_path: Path):
     assert_golden("Box.cs", emit_new(manifest["BH.oM.Demo.Box`1"], manifest))
 
 
-EXISTING = """/*
- * Existing header, kept as is.
- */
-
-using BH.oM.Base;
-using System;
-using System.Text;
-
-namespace BH.oM.Demo
-{
-    public class ProjectInfo : IdentityBase
-    {
-        /***************************************************/
-        /**** Properties                                ****/
-        /***************************************************/
-
-        public virtual string Reference { get; set; } = "";
-
-        /***************************************************/
-    }
-}
-"""
-
-
-def test_replacement_keeps_header_usings_and_adds_what_is_needed(tmp_path: Path):
-    files = {
-        "Demo_oM/IdentityBase.py": module("IdentityBase", "BH.oM.Demo.IdentityBase", "BH.oM.Demo", "Demo_oM", kind="interface", bases="ABC", imports=["from abc import ABC"]),
-        "Demo_oM/ProjectInfo.py": module(
-            "ProjectInfo", "BH.oM.Demo.ProjectInfo", "BH.oM.Demo", "Demo_oM", bases="SchemaModel, IdentityBase",
-            imports=["from bhom_schema.Demo_oM.IdentityBase import IdentityBase"],
-            body=["Reference: str = ''", "Items: list[str] = Field(default_factory=list)", "Note: str = Field(default='', description='A note.')"]),
-    }
-    manifest = read_package(package(tmp_path, files))
-    text, notes = emit_replacement(manifest["BH.oM.Demo.ProjectInfo"], manifest, EXISTING)
-    assert notes == []
-    assert text.startswith("/*\n * Existing header, kept as is.\n */")
-    assert "using BH.oM.Base;\nusing System;\nusing System.Text;\nusing System.Collections.Generic;\nusing System.ComponentModel;\n" in text
-    assert "public virtual List<string> Items { get; set; } = new List<string>();" in text
-    assert "namespace BH.oM.Demo\n{" in text
-    assert_golden("ProjectInfo_replacement.cs", text)
-
-
-def test_replacement_warns_about_other_declarations_and_namespace(tmp_path: Path):
-    files = {"Demo_oM/ProjectInfo.py": module("ProjectInfo", "BH.oM.Demo.ProjectInfo", "BH.oM.Demo", "Demo_oM", body=["Reference: str = ''"])}
-    manifest = read_package(package(tmp_path, files))
-    existing = EXISTING.replace("namespace BH.oM.Demo", "namespace BH.oM.Elsewhere") + "\nnamespace BH.oM.Elsewhere\n{\n    public class Second\n    {\n    }\n}\n"
-    text, notes = emit_replacement(manifest["BH.oM.Demo.ProjectInfo"], manifest, existing)
-    assert any("namespace BH.oM.Elsewhere" in n for n in notes)
-    assert any("declares 2 types" in n for n in notes)
-    assert "namespace BH.oM.Elsewhere\n{" in text
-
-
-def test_untranslatable_default_is_kept_as_a_comment(tmp_path: Path):
+def test_untranslatable_default_becomes_a_reviewer_note(tmp_path: Path):
     files = {"Demo_oM/Odd.py": module("Odd", "BH.oM.Demo.Odd", "BH.oM.Demo", "Demo_oM", body=["Value: str = some_function()"])}
     manifest = read_package(package(tmp_path, files))
-    text = emit_new(manifest["BH.oM.Demo.Odd"], manifest)
-    assert "public virtual string Value { get; set; } // default not translated: some_function()" in text
+    notes: list[str] = []
+    text = emit_new(manifest["BH.oM.Demo.Odd"], manifest, notes)
+    assert "public virtual string Value { get; set; }\n" in text
+    assert notes == ["the default some_function() of Value could not be translated to C#; set it by hand"]
+
+
+def test_new_fields_without_a_default_stay_settable(tmp_path: Path):
+    files = {"Demo_oM/Loose.py": module("Loose", "BH.oM.Demo.Loose", "BH.oM.Demo", "Demo_oM", body=["Id: str", "Stage: int = Field(0, description='RIBA stage')"])}
+    manifest = read_package(package(tmp_path, files))
+    notes: list[str] = []
+    text = emit_new(manifest["BH.oM.Demo.Loose"], manifest, notes)
+    assert "public virtual string Id { get; set; }\n" in text
+    assert "public virtual int Stage { get; set; } = 0;" in text
+    assert "public Loose(" not in text
+    assert notes == ["Id has no default in Python, so it was drafted without an initial value"]
 
 
 def test_required_fields_become_get_only_properties_set_by_a_constructor(tmp_path: Path):
     files = {"Demo_oM/Fixed.py": module("Fixed", "BH.oM.Demo.Fixed", "BH.oM.Demo", "Demo_oM",
                                         body=["Id: str", "class_: int = Field(alias='class')", "Length: float"])}
     manifest = read_package(package(tmp_path, files))
-    text = emit_new(manifest["BH.oM.Demo.Fixed"], manifest)
+    text = emit_new(manifest["BH.oM.Demo.Fixed"], manifest, read_only_required=True)
     assert "public virtual string Id { get; }" in text
     assert "public Fixed(string id, int @class, double length)" in text
     assert "Id = id;" in text and "@class = @class;" in text and "public virtual int @class { get; }" in text

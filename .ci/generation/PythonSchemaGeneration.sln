@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixtureAlpha_oM", "..\unit-
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixtureBeta_oM", "..\unit-tests\csharp\FixtureBeta_oM\FixtureBeta_oM.csproj", "{517B667A-E6AD-4882-9132-E0DDC1D388A7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PythonSchemaGeneration.Patcher", "PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj", "{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x64.Build.0 = Release|Any CPU
 		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x86.ActiveCfg = Release|Any CPU
 		{517B667A-E6AD-4882-9132-E0DDC1D388A7}.Release|x86.Build.0 = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|x64.Build.0 = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Debug|x86.Build.0 = Debug|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|x64.ActiveCfg = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|x64.Build.0 = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|x86.ActiveCfg = Release|Any CPU
+		{6BB0D6C0-5A6F-4421-AAF2-FCA83D101E3F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

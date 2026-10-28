@@ -1,23 +1,30 @@
-"""Command line: python -m py2cs manifest | diff | plan | resolve"""
+"""Command line: python -m py2cs check | manifest | diff | plan | drafts | resolve"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
-from py2cs.diff import Diff, diff_manifests
-from py2cs.model import dump_manifest, load_manifest
-from py2cs.plan import make_plan
-from py2cs.reader import read_package
+from py2cs.check import check_package
+from py2cs.csharp import emit_new
+from py2cs.diff import diff_manifests
+from py2cs.model import dump_manifest
+from py2cs.patch import FilePatch, PatchResult, run_patcher
+from py2cs.plan import Patcher, make_plan
+from py2cs.reader import ReadErrors, read_package
 from py2cs.report import render_report
 from py2cs.resolve import ResolveError, load_listing, resolve_repo
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="py2cs", description="Python to C# converter for the BHoM schema")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("check", help="read a bhom_schema folder strictly and list every problem; drafts nothing")
+    p.add_argument("--root", required=True, type=Path)
+    p.add_argument("--base-root", type=Path, help="the folder before the change; new classes and fields are then checked for descriptions")
 
     p = sub.add_parser("manifest", help="read a bhom_schema folder into a manifest file")
     p.add_argument("--root", required=True, type=Path)
@@ -34,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--clones-parent", type=Path, help="folder holding one checkout per repository, named after the repository")
     p.add_argument("--listing", type=Path, help="repository listing json; validates the repo of every class")
     p.add_argument("--python-pr", default="", help="reference of the Python pull request, for the report")
+    p.add_argument("--patcher", type=Path, help="PythonSchemaGeneration.Patcher.dll, when not in its build folder")
     p.add_argument("--out", required=True, type=Path)
 
     p = sub.add_parser("drafts", help="draft C# for every class of a bhom_schema folder (used by the round trip tests)")
@@ -45,6 +53,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--listing", type=Path)
 
     args = parser.parse_args(argv)
+    try:
+        return run(args)
+    except ReadErrors as e:
+        for error in e.errors:
+            print(f"error: {error}", file=sys.stderr)
+        print(f"{len(e.errors)} problems in the Python files", file=sys.stderr)
+        return 1
+
+def run(args: argparse.Namespace) -> int:
+    if args.command == "check":
+        result = check_package(args.root, args.base_root)
+        for error in result.errors:
+            print(f"error: {error}")
+        for warning in result.warnings:
+            print(f"warning: {warning}")
+        print(f"{len(result.errors)} errors, {len(result.warnings)} warnings")
+        return 1 if result.errors else 0
 
     if args.command == "manifest":
         dump_manifest(read_package(args.root), args.out)
@@ -70,28 +95,31 @@ def main(argv: list[str] | None = None) -> int:
             matches = [c for c in args.clones_parent.iterdir() if c.name.lower() == repo.split("/")[-1].lower()] if args.clones_parent.is_dir() else []
             return matches[0] if matches else None
 
-        plan = make_plan(diff, head, base, clone_for, listing)
+        def patch_with(patches: list[FilePatch]) -> list[PatchResult]:
+            return run_patcher(patches, args.patcher)
+
+        patcher: Patcher | None = patch_with if args.patcher else None
+        plan = make_plan(diff, head, base, clone_for, listing, patcher)
         args.out.mkdir(parents=True, exist_ok=True)
         for f in plan.files:
             target = args.out / f.repo.replace("/", "__") / f.path
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f.text, encoding="utf-8", newline="\n")
+            # newline="" keeps the line endings of the existing file
+            target.write_text(f.text, encoding="utf-8-sig" if f.bom else "utf-8", newline="")
         (args.out / "plan.json").write_text(json.dumps(plan.summary(), indent=2) + "\n", encoding="utf-8")
         (args.out / "report.md").write_text(render_report(plan, args.python_pr), encoding="utf-8")
         print(f"{len(plan.files)} files planned in {len(plan.repos())} repositories, {len(plan.errors)} problems")
         return 1 if plan.errors else 0
 
     if args.command == "drafts":
-        from py2cs.csharp import emit_new
-
         manifest = read_package(args.root)
         if args.out.exists():
-            import shutil
             shutil.rmtree(args.out)
         for info in manifest.values():
             target = args.out / Path(info.relative_path).with_suffix(".cs")
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(emit_new(info, manifest), encoding="utf-8", newline="\n")
+            # The generated types keep their C# shape: fields without a default come from immutable types
+            target.write_text(emit_new(info, manifest, read_only_required=True), encoding="utf-8", newline="\n")
         print(f"{len(manifest)} drafts written")
         return 0
 
@@ -108,7 +136,6 @@ def main(argv: list[str] | None = None) -> int:
         return status
 
     return 2
-
 
 if __name__ == "__main__":
     sys.exit(main())
