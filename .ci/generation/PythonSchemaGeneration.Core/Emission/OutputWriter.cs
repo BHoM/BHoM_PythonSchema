@@ -12,8 +12,9 @@ namespace PythonSchemaGeneration.Emission
         /***************************************************/
 
         //Writes the rendered modules under <packageRoot>. With cleanRedundant=True, existing files of written assemblies that are no longer generated are removed.
-        //Only folders of assemblies in this run are touched, so the hand-written support package is never affected.
-        public static int Write(string packageRoot, IEnumerable<RenderedType> rendered, bool cleanRedundant, Reporter reporter)
+        //Only folders of assemblies in this run are touched, so the hand-written support package is never affected. When cleanAssemblies is given, only those
+        //assembly folders are cleaned: a run for one repository also writes the base classes it needs from another, and must not delete the rest of that one.
+        public static int Write(string packageRoot, IEnumerable<RenderedType> rendered, bool cleanRedundant, Reporter reporter, ISet<string> cleanAssemblies = null)
         {
             Dictionary<string, string> fileTextByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (RenderedType type in rendered)
@@ -37,7 +38,7 @@ namespace PythonSchemaGeneration.Emission
             }
 
             if (cleanRedundant)
-                CleanRedundantExistingFiles(packageRoot, fileTextByPath);
+                CleanRedundantExistingFiles(packageRoot, fileTextByPath, cleanAssemblies);
 
             int written = 0;
             foreach (KeyValuePair<string, string> file in fileTextByPath.OrderBy(f => f.Key, StringComparer.Ordinal))
@@ -58,10 +59,13 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
-        private static void CleanRedundantExistingFiles(string packageRoot, Dictionary<string, string> fileTextByPath)
+        private static void CleanRedundantExistingFiles(string packageRoot, Dictionary<string, string> fileTextByPath, ISet<string> cleanAssemblies)
         {
             foreach (string assembly in fileTextByPath.Keys.Select(k => k.Split('/')[0]).Distinct())
             {
+                if (cleanAssemblies != null && !cleanAssemblies.Contains(assembly))
+                    continue;
+
                 string folder = Path.Combine(packageRoot, assembly);
                 if (!Directory.Exists(folder))
                     continue;

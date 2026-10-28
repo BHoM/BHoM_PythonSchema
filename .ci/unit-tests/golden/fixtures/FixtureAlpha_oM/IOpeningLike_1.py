@@ -14,7 +14,7 @@ class IOpeningLike_1[T](IBHoMObject):
         'clr_name': 'BH.oM.FixtureAlpha.IOpeningLike`1',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
+        'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'interface',
         'generic_params': {'T': []},
     }

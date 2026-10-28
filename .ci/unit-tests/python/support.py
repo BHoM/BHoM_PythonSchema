@@ -26,12 +26,15 @@ def require_output(name: str) -> Path:
 
 
 def attach(package: Path) -> None:
-    """Make `bhom_schema.<Assembly>...` resolve to the generated folder, next to the hand-written `_support`."""
+    """Make `bhom_schema.<Assembly>...` resolve to the generated folder, which wins over the committed classes in src."""
     import bhom_schema
 
     path = str(package)
-    if path not in bhom_schema.__path__:
-        bhom_schema.__path__.append(path)
+    if path in bhom_schema.__path__:
+        bhom_schema.__path__.remove(path)
+
+    # First, so a test package is not shadowed by a same-named folder of the committed package (for example BHoM)
+    bhom_schema.__path__.insert(0, path)
     importlib.invalidate_caches()
 
 

@@ -57,7 +57,7 @@ def align(base: Manifest, head: Manifest, generated: Manifest) -> AlignResult:
 def default_generator() -> Path:
     return GENERATOR
 
-def generate(types: list[str], assemblies: Path, output: Path, generator: Path | None = None, organisations: str | None = None) -> None:
+def generate(types: list[str], assemblies: Path, output: Path, generator: Path | None = None) -> None:
     """Runs the C# to Python generator for just these classes (and what they refer to) over a folder of built assemblies."""
     dll = generator or default_generator()
     if not dll.exists():
@@ -67,8 +67,6 @@ def generate(types: list[str], assemblies: Path, output: Path, generator: Path |
 
     output.mkdir(parents=True, exist_ok=True)
     command = ["dotnet", str(dll), "--output", str(output), "--assemblies", str(assemblies), "--types", ",".join(types)]
-    if organisations:
-        command += ["--org", organisations]
     completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", timeout=600)
     if completed.returncode != 0:
         raise AlignError(f"the generator failed: {(completed.stderr or completed.stdout).strip()}")

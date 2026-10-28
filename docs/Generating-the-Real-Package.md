@@ -4,6 +4,23 @@
 is the **real run**: the generated classes land in `src/bhom_schema`, the package that Python projects install, and you commit
 them. All commands are PowerShell, run one at a time from the repository root.
 
+## 0. Current state: only the CSharpSchema_Test classes
+
+For now `src/bhom_schema` holds only the classes of the [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) repository,
+plus the five BHoM base classes they import (`BHoMObject`, `IBHoMObject`, `IObject`, `IFragment`, `IImmutable`). Nothing else from
+BHoM/BHoM is converted yet. The `--repos` option does this: it converts the assemblies whose description points at the named
+repositories, and their dependencies. A run with `--repos` only cleans up the assembly folders of those repositories, so the
+rest of a dependency's folder (for example `BHoM/`) is never deleted.
+
+Build CSharpSchema_Test (`dotnet build CSharpSchema_Test.sln -c Release -p:SkipAssemblyCopy=true`), copy its dlls with `BHoM.dll` and
+`Quantities_oM.dll` into an empty folder, then:
+
+```powershell
+dotnet .ci/generation/PythonSchemaGeneration/bin/Release/net8.0/PythonSchemaGeneration.dll --output src/bhom_schema --assemblies <folder> --repos BHoM/CSharpSchema_Test
+```
+
+The rest of this guide describes the full run over every installed assembly.
+
 ## 1. Read this first: what a real run does
 
 - It writes about 2,000 files into `src/bhom_schema` (one `.py` per C# type plus `__init__.py` files). The folder

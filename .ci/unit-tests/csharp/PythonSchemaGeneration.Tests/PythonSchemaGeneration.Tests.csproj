@@ -35,7 +35,7 @@
 
   <!-- The test classes live in the CSharpSchema_Test repository, cloned next to this one (or pass -p:CSharpSchemaTestRoot=<folder>) -->
   <Target Name="CheckCSharpSchemaTest" BeforeTargets="BeforeBuild">
-    <Error Condition="!Exists('$(CSharpSchemaTestRoot)FixtureAlpha_oM\FixtureAlpha_oM.csproj')" Text="CSharpSchema_Test was not found at $(CSharpSchemaTestRoot). Clone https://github.com/BuroHappoldEngineering/CSharpSchema_Test next to this repository, or pass -p:CSharpSchemaTestRoot=&lt;folder&gt;." />
+    <Error Condition="!Exists('$(CSharpSchemaTestRoot)FixtureAlpha_oM\FixtureAlpha_oM.csproj')" Text="CSharpSchema_Test was not found at $(CSharpSchemaTestRoot). Clone https://github.com/BHoM/CSharpSchema_Test next to this repository, or pass -p:CSharpSchemaTestRoot=&lt;folder&gt;." />
   </Target>
 
 </Project>

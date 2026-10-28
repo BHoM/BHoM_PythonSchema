@@ -21,7 +21,7 @@ class LineLike(SchemaModel, ICurveLike, ILabelled):
         'clr_name': 'BH.oM.FixtureAlpha.LineLike',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
+        'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'class',
     }
 

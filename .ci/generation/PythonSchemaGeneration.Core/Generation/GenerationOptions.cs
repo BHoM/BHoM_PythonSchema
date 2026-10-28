@@ -12,6 +12,8 @@ namespace PythonSchemaGeneration
 
         public string OutputFolder;                         //the bhom_schema package folder; null to render only
 
+        public List<string> Repos;                          //Owner/Name of the repositories to convert (from the assembly descriptions); their dependencies are generated too. Null converts every loaded repository.
+
         public List<string> TypeFilter;                     //full names of root types; their dependencies are generated too. Null generates everything.
 
         public string ManifestPath;

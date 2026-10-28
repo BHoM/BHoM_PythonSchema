@@ -294,7 +294,7 @@ Today everything runs by hand on one machine:
   change that needs a generator update is noticed.
 - Complain about misspelt command-line options instead of ignoring them.
 
-4.2 **Add a repository filter** to the generator, `--repos BHoM/BHoM`, which keeps only assemblies whose description points at
+4.2 **Add a repository filter** to the generator, `--repos BHoM/BHoM` (**done 2026-10-28**: implemented as `--repos`, first used with `BHoM/CSharpSchema_Test`; a repo run only cleans its own assembly folders), which keeps only assemblies whose description points at
 that repository. This applies the scope decision while still reading the shared build (see Step 6).
 
 4.3 **Use the BHoM_JSONSchema weekly build** (decision taken):

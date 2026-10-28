@@ -29,6 +29,12 @@ namespace PythonSchemaGeneration
                 registry.Add(type);
 
             List<Type> roots = FilterByRoots(selectedTypes, options.TypeFilter, reporter);
+            HashSet<string> repoAssemblies = null;
+            if (options.Repos != null)
+            {
+                roots = FilterByRepos(roots, options.Repos, reporter, out repoAssemblies);
+            }
+
             TypeExtractor extractor = new TypeExtractor(registry, reporter);
             PythonEmitter emitter = new PythonEmitter(registry, reporter);
 
@@ -84,7 +90,7 @@ namespace PythonSchemaGeneration
                 .Count(t => renderedTypesByModelType[t] != null && renderedTypesByModelType[t].References.Any(rendered => rendered != t && isCycleRef(t, rendered)));
 
             if (options.OutputFolder != null)
-                result.FilesWritten = OutputWriter.Write(options.OutputFolder, result.Types, options.TypeFilter == null, reporter);
+                result.FilesWritten = OutputWriter.Write(options.OutputFolder, result.Types, options.TypeFilter == null, reporter, repoAssemblies);
 
             if (options.ManifestPath != null)
                 File.WriteAllText(options.ManifestPath, ManifestWriter.ToJson(result.Types), new System.Text.UTF8Encoding(false));
@@ -112,6 +118,28 @@ namespace PythonSchemaGeneration
                 roots.AddRange(matches);
             }
             return roots;
+        }
+
+        /***************************************************/
+
+        //Keeps the types of the assemblies that belong to the requested repositories. Their dependencies in other repositories are still generated.
+        private static List<Type> FilterByRepos(List<Type> types, List<string> repos, Reporter reporter, out HashSet<string> assemblies)
+        {
+            HashSet<string> wanted = new HashSet<string>(repos.Select(NormaliseRepo), StringComparer.OrdinalIgnoreCase);
+            List<Type> kept = types.Where(t => wanted.Contains(NormaliseRepo(BHoMAdapter.AssemblyRepo(t.Assembly)))).ToList();
+            assemblies = new HashSet<string>(kept.Select(t => t.Assembly.GetName().Name), StringComparer.OrdinalIgnoreCase);
+
+            foreach (string repo in wanted.Where(r => !types.Any(t => NormaliseRepo(BHoMAdapter.AssemblyRepo(t.Assembly)).Equals(r, StringComparison.OrdinalIgnoreCase))))
+                reporter.Warn($"No loaded oM assembly belongs to the requested repository {repo}");
+
+            return kept;
+        }
+
+        /***************************************************/
+
+        private static string NormaliseRepo(string repo)
+        {
+            return (repo ?? "").Trim().Trim('/');
         }
 
         /***************************************************/

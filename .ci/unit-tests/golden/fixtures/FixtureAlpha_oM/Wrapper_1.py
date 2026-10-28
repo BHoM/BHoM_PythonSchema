@@ -18,7 +18,7 @@ class Wrapper_1[T: IBHoMObject](BHoMObject):
         'clr_name': 'BH.oM.FixtureAlpha.Wrapper`1',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
+        'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'class',
         'generic_params': {'T': ['BH.oM.Base.IBHoMObject']},
     }

@@ -16,7 +16,7 @@ class CycleA(SchemaModel, IObject):
         'clr_name': 'BH.oM.FixtureAlpha.CycleA',
         'assembly': 'FixtureAlpha_oM',
         'namespace': 'BH.oM.FixtureAlpha',
-        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
+        'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'class',
     }
 

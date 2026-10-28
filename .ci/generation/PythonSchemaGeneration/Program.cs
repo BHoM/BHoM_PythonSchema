@@ -1,6 +1,6 @@
 using PythonSchemaGeneration;
 
-//Usage: PythonSchemaGeneration --output <bhom_schema folder> [--assemblies <folder>] [--org BHoM,Other] [--types A,B] [--manifest <file>] [--report <file>]
+//Usage: PythonSchemaGeneration --output <bhom_schema folder> [--assemblies <folder>] [--org BHoM,Other] [--repos BHoM/BHoM,BHoM/Other_Toolkit] [--types A,B] [--manifest <file>] [--report <file>]
 Dictionary<string, string> arguments = new Dictionary<string, string>();
 for (int i = 0; i < args.Length; i++)
 {
@@ -24,6 +24,9 @@ GenerationOptions options = new GenerationOptions
 
 if (arguments.TryGetValue("org", out string orgs))
     options.Organisations = orgs.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+if (arguments.TryGetValue("repos", out string repos))
+    options.Repos = repos.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
 
 if (arguments.TryGetValue("types", out string types))
     options.TypeFilter = types.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();

@@ -32,7 +32,7 @@ So the C# tests are not only checks; they **produce the input** the Python tests
 |---|---|
 | `run-all.ps1` | Runs every stage in the right order. Use this unless you are working on one part. |
 | `csharp/PythonSchemaGeneration.Tests/` | The NUnit tests (44 tests). |
-| (not in this repository) | The fake oM assemblies `FixtureAlpha_oM` and `FixtureBeta_oM` live in the [CSharpSchema_Test](https://github.com/BuroHappoldEngineering/CSharpSchema_Test) repository, which must be cloned next to this one (or set `CSharpSchemaTestRoot`). See section 3. |
+| (not in this repository) | The fake oM assemblies `FixtureAlpha_oM` and `FixtureBeta_oM` live in the [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) repository, which must be cloned next to this one (or set `CSharpSchemaTestRoot`). See section 3. |
 | `python/` | The pytest tests (about 73 test cases) in four folders: `test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`. |
 | `python/support.py` | Shared helpers for the pytest folders. |
 | `golden/` | Committed "expected output" files. See section 6. |

@@ -11,7 +11,7 @@ Python (Pydantic) classes generated from the BHoM C# object model (oM), the Pyth
 
 ## Development setup
 
-Prerequisites: .NET 8 SDK, Python 3.12, a clone of [CSharpSchema_Test](https://github.com/BuroHappoldEngineering/CSharpSchema_Test) next to this repository (the C# classes the tests use), and the BHoM assemblies installed in `%ProgramData%\BHoM\Assemblies`
+Prerequisites: .NET 8 SDK, Python 3.12, a clone of [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) next to this repository (the C# classes the tests use), and the BHoM assemblies installed in `%ProgramData%\BHoM\Assemblies`
 (build the BHoM repos, for example `BHoM`, `BHoM_Engine`, `JSONSchema_Toolkit` and `dKoP_Toolkit`).
 
 ```powershell

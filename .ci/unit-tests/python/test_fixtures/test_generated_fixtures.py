@@ -90,7 +90,7 @@ def test_project_like_lives_at_the_namespace_path_not_the_source_folder():
         "clr_name": "BH.oM.FixtureAlpha.ProjectLike",
         "namespace": "BH.oM.FixtureAlpha",
         "assembly": "FixtureAlpha_oM",
-        "repo": "BuroHappoldEngineering/CSharpSchema_Test",
+        "repo": "BHoM/CSharpSchema_Test",
         "kind": "class",
     }
 

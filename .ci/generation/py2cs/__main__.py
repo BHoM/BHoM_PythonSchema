@@ -44,7 +44,6 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--assemblies", type=Path, help="folder with the built oM dlls of the merged C#; the generator is run for the changed classes")
     source.add_argument("--generated-root", type=Path, help="a bhom_schema folder that was already generated from the merged C#")
     p.add_argument("--generator", type=Path, help="PythonSchemaGeneration.dll, when not in its build folder")
-    p.add_argument("--org", help="organisations whose assemblies are read, for example BHoM,BuroHappoldEngineering (default: BHoM)")
     p.add_argument("--work", type=Path, help="folder for the generated Python (default: a temporary one)")
 
     p = sub.add_parser("plan", help="draft the C# files for a diff; never writes into the C# checkouts")
@@ -110,7 +109,7 @@ def run(args: argparse.Namespace) -> int:
                 output = (args.work or Path(scratch)) / "bhom_schema"
                 if output.exists():
                     shutil.rmtree(output)
-                generate(changed + removed, args.assemblies, output, args.generator, args.org)
+                generate(changed + removed, args.assemblies, output, args.generator)
                 generated = read_package(output)
 
         result = align(base, head, generated)

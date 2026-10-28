@@ -58,9 +58,9 @@ namespace PythonSchemaGeneration.Tests
         [Test]
         public void RepoComesFromTheAssemblyDescription()
         {
-            Assert.That(R(typeof(ProjectLike)).Model.Repo, Is.EqualTo("BuroHappoldEngineering/CSharpSchema_Test"));
-            Assert.That(FixtureOutput.Rendered(typeof(BH.oM.FixtureBeta.PointLike).FullName).Model.Repo, Is.EqualTo("BuroHappoldEngineering/CSharpSchema_Test"));
-            Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'repo': 'BuroHappoldEngineering/CSharpSchema_Test'"));
+            Assert.That(R(typeof(ProjectLike)).Model.Repo, Is.EqualTo("BHoM/CSharpSchema_Test"));
+            Assert.That(FixtureOutput.Rendered(typeof(BH.oM.FixtureBeta.PointLike).FullName).Model.Repo, Is.EqualTo("BHoM/CSharpSchema_Test"));
+            Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'repo': 'BHoM/CSharpSchema_Test'"));
             Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'namespace': 'BH.oM.FixtureAlpha'"));
             Assert.That(R(typeof(ProjectLike)).Text, Does.Contain("'assembly': 'FixtureAlpha_oM'"));
         }

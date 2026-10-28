@@ -17,7 +17,7 @@ class UsesBoth(BHoMObject):
         'clr_name': 'BH.oM.FixtureBeta.Elements.UsesBoth',
         'assembly': 'FixtureBeta_oM',
         'namespace': 'BH.oM.FixtureBeta.Elements',
-        'repo': 'BuroHappoldEngineering/CSharpSchema_Test',
+        'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'class',
     }
 

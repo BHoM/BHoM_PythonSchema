@@ -36,7 +36,7 @@ if ($missing) {
 }
 $testClasses = if ($env:CSharpSchemaTestRoot) { $env:CSharpSchemaTestRoot } else { Join-Path (Split-Path $root -Parent) "CSharpSchema_Test" }
 if (-not (Test-Path (Join-Path $testClasses "FixtureAlpha_oM\FixtureAlpha_oM.csproj"))) {
-    throw "The test classes were not found at $testClasses. Clone https://github.com/BuroHappoldEngineering/CSharpSchema_Test next to this repository, or set the CSharpSchemaTestRoot environment variable."
+    throw "The test classes were not found at $testClasses. Clone https://github.com/BHoM/CSharpSchema_Test next to this repository, or set the CSharpSchemaTestRoot environment variable."
 }
 if (-not (Test-Path $python)) { throw "No virtual environment: run  python -m venv .venv ; .venv\Scripts\python -m pip install -e '.[dev]'" }
 $env:PYTHONPATH = Join-Path $root ".ci\generation"
