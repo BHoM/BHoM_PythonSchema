@@ -1,0 +1,302 @@
+name: Linked C# pull request
+
+# A pull request that changes the Python classes raises a linked DRAFT pull request in the repository that owns the C# classes.
+# It never raises anything for a push, so the weekly generation (a push to develop) cannot start it.
+#
+# It also sets a commit status on the Python PR, "linked C# pull request": pending while the C# draft is open, success once it is
+# merged, failure if it was closed without merging. Nothing tells this repository when a C# PR is merged, so an hourly run looks at
+# every open Python PR and updates the status. Make the status a required check on develop to stop a Python PR being merged first.
+#
+# Where C# pull requests may be raised is listed in Converted-repositories.txt. The GitHub App token is made for one repository at a
+# time, and only that repository is written to.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+    paths:
+      - 'src/bhom_schema/**'
+  schedule:
+    - cron: '17 * * * *'  # hourly: refresh the status of open Python PRs
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Number of the Python pull request
+        required: true
+        type: string
+      dry_run:
+        description: List what would be done, change nothing (the App token is still made, which proves the installation)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# A newer push cancels the older run for the same pull request
+concurrency:
+  group: linked-csharp-pr-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      eligible: ${{ steps.pr.outputs.eligible }}
+      number: ${{ steps.pr.outputs.number }}
+      url: ${{ steps.pr.outputs.url }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      closed: ${{ steps.pr.outputs.closed }}
+      merged: ${{ steps.pr.outputs.merged }}
+      dry_run: ${{ steps.pr.outputs.dry_run }}
+    steps:
+      - name: Find out about the pull request
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          INPUT_NUMBER: ${{ inputs.pr_number }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            data=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$INPUT_NUMBER")
+            dry_run=$INPUT_DRY_RUN
+          else
+            data=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}")
+            dry_run=false
+          fi
+
+          # Forks never receive the App secrets, so a pull request from a fork gets no linked C# pull request
+          if [ "$(echo "$data" | jq -r '.head.repo.full_name')" != "$GITHUB_REPOSITORY" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "The pull request is from a fork: no linked C# pull request."
+            exit 0
+          fi
+
+          {
+            echo "eligible=true"
+            echo "number=$(echo "$data" | jq -r '.number')"
+            echo "url=$(echo "$data" | jq -r '.html_url')"
+            echo "base_sha=$(echo "$data" | jq -r '.base.sha')"
+            echo "head_sha=$(echo "$data" | jq -r '.head.sha')"
+            echo "closed=$([ "$(echo "$data" | jq -r '.state')" = closed ] && echo true || echo false)"
+            echo "merged=$(echo "$data" | jq -r '.merged')"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+
+  repos:
+    needs: prepare
+    if: needs.prepare.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.repos.outputs.matrix }}
+      any: ${{ steps.repos.outputs.any }}
+    steps:
+      # The tooling comes from the base branch, so a pull request cannot change the code that holds the App token
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: head
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Which repositories does the change touch?
+        id: repos
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+        run: |
+          repos=$(python -m py2cs repos --base-root base/src/bhom_schema --head-root head/src/bhom_schema --allowed-repos base/Converted-repositories.txt)
+          echo "Repositories: $repos"
+          echo "matrix=$(echo "$repos" | jq -c '{include: map({repo: ., name: (split("/")[1])})}')" >> "$GITHUB_OUTPUT"
+          echo "any=$([ "$repos" != "[]" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  raise:
+    needs: [prepare, repos]
+    if: needs.prepare.outputs.closed == 'false' && needs.repos.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.repos.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: head
+
+      # A token for this one repository, valid for about an hour. It is made on a dry run too, which proves the App is installed.
+      - name: Make a token for ${{ matrix.repo }} only
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.BHOM_APP_ID }}
+          private-key: ${{ secrets.BHOM_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.name }}
+
+      - name: Checkout the C# repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          token: ${{ steps.token.outputs.token }}
+          path: csharp/${{ matrix.name }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the C# patcher
+        run: dotnet build base/.ci/generation/PythonSchemaGeneration.Patcher/PythonSchemaGeneration.Patcher.csproj -c Release --nologo
+
+      - name: Plan the C# changes
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+          PY2CS_PATCHER: base/.ci/generation/PythonSchemaGeneration.Patcher/bin/Release/net8.0/PythonSchemaGeneration.Patcher.dll
+        run: |
+          python -m py2cs plan \
+            --base-root base/src/bhom_schema --head-root head/src/bhom_schema \
+            --clones-parent csharp --allowed-repos base/Converted-repositories.txt \
+            --only-repo "${{ matrix.repo }}" \
+            --python-pr "${{ github.repository }}#${{ needs.prepare.outputs.number }}" \
+            --out plan
+
+      # The tokens are passed to this step only, through the environment, and are never printed
+      - name: Push the branch and open or update the draft pull request
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+          PY2CS_CSHARP_TOKEN: ${{ steps.token.outputs.token }}
+          PY2CS_PYTHON_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+        run: |
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="--dry-run"; fi
+          python -m py2cs pr --plan-dir plan --repo "${{ matrix.repo }}" \
+            --python-repo "${{ github.repository }}" --python-pr "${{ needs.prepare.outputs.number }}" \
+            --python-url "${{ needs.prepare.outputs.url }}" $flags
+
+  close:
+    needs: [prepare, repos]
+    if: needs.prepare.outputs.closed == 'true' && needs.repos.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.repos.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Make a token for ${{ matrix.repo }} only
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.BHOM_APP_ID }}
+          private-key: ${{ secrets.BHOM_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.name }}
+
+      # Unmerged: the linked draft is closed with a comment. Merged: only a comment.
+      - name: Close or comment on the linked pull request
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+          PY2CS_CSHARP_TOKEN: ${{ steps.token.outputs.token }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+          MERGED: ${{ needs.prepare.outputs.merged }}
+        run: |
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="$flags --dry-run"; fi
+          if [ "$MERGED" = "true" ]; then flags="$flags --merged"; fi
+          python -m py2cs close --repo "${{ matrix.repo }}" --python-repo "${{ github.repository }}" \
+            --python-pr "${{ needs.prepare.outputs.number }}" $flags
+
+  # After the draft is raised or updated: the status of the Python PR is pending until the C# pull request is merged
+  status:
+    needs: [prepare, repos, raise]
+    # After a raise, or when the change needs no C# change at all
+    if: needs.raise.result == 'success' || (needs.repos.result == 'success' && needs.repos.outputs.any == 'false' && needs.prepare.outputs.closed == 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set the commit status
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+          PY2CS_PYTHON_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+        run: |
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="--dry-run"; fi
+          if [ "${{ needs.repos.outputs.any }}" = "false" ]; then flags="$flags --no-csharp-change"; fi
+          python -m py2cs status --python-repo "${{ github.repository }}" --python-pr "${{ needs.prepare.outputs.number }}" \
+            --sha "${{ needs.prepare.outputs.head_sha }}" --repos-file base/Converted-repositories.txt $flags
+
+  # Every hour: has the C# pull request of an open Python PR been merged (or closed) since?
+  # This only reads the C# repositories, which must be public, and writes statuses on this repository.
+  sweep:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      # The default branch, so the tooling is the trusted one
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Update the status of every open Python PR that changes the classes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: .ci/generation
+          PY2CS_PYTHON_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list --state open --limit 100 --json number,headRefOid,headRepositoryOwner,files \
+            --jq '.[] | select(.headRepositoryOwner.login == "${{ github.repository_owner }}") | select(any(.files[]; .path | startswith("src/bhom_schema/"))) | "\(.number) \(.headRefOid)"' |
+          while read -r number sha; do
+            echo "Python PR #$number"
+            python -m py2cs status --python-repo "${{ github.repository }}" --python-pr "$number" --sha "$sha" --repos-file Converted-repositories.txt
+          done

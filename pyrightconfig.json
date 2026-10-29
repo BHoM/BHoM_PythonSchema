@@ -1,0 +1,7 @@
+{
+  "include": ["src", ".ci/generation/py2cs", ".ci/unit-tests/python"],
+  "exclude": ["**/__pycache__", ".ci/unit-tests/_output"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "strict",
+  "extraPaths": ["src", ".ci/generation"]
+}

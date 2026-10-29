@@ -1,0 +1,12 @@
+<Project>
+  <!-- BHoM assemblies installed by building the BHoM repos (post-build copies them to ProgramData). -->
+  <PropertyGroup>
+    <BHoMAssemblies>$(ProgramData)\BHoM\Assemblies</BHoMAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BHoM">
+      <HintPath>$(BHoMAssemblies)\BHoM.dll</HintPath>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+  </ItemGroup>
+</Project>

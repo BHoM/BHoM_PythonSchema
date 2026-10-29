@@ -1,0 +1,531 @@
+# Coding plan: BHoM_PythonSchema converters
+
+Status: **plan only, no code written yet.** Background and evidence are in
+[CSharp-to-Python-Gotchas.md](CSharp-to-Python-Gotchas.md); gotcha numbers below refer to that document.
+
+Revision 3: adds `ProjectIdentification` to the spike set, brings the CI work and the linked-PR Action into scope with the
+existing GitHub App, uses the `BHoM/CSharpSchema_Test` repository for the rehearsal (the BHoM repositories are never written to), and records the decisions
+taken so far (section 9).
+
+## Implementation status (phases 0 to 6 done, 7 and 8 not started)
+
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (93 tests), pytest (195 tests) and Pyright.
+
+Where the implementation differs from the plan above:
+
+- **Golden files are reviewed generator snapshots**, not hand-written specifications. The behaviour of the spike types is pinned by the pytest suites
+  (`test_fixtures`, `test_spike`); only a small, stable real type (`GradientCenteringOptions`) has a committed golden file, so a change in the
+  moving BHoM develop branch does not break the golden tests. The dKoP types (`ProjectIdentification`, `IdKoPObject`) were dropped from the
+  real-type tests when dKoP_Toolkit left the scope; the fixture classes `ProjectLike` and `ThingIdentity` cover the same cases.
+- **Pytest suites are separate sessions** (`test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`) because the fixture and spike packages share assembly folder names such as `BHoM`.
+- **Imports:** a type outside any reference cycle is imported at the top of the module; only cyclic references use bottom-of-module imports plus `model_rebuild()`. The spike set has no cycle; the fixtures
+  contain one on purpose.
+- **Generated model files start with** `# pyright: reportUnknownVariableType=false, reportIncompatibleVariableOverride=false`: Pyright cannot infer `Field(default_factory=list)` with a
+  `description`, and some C# classes redeclare a base property with another type.
+- **Interface members** (names, types, descriptions) are kept in the `__bhom__` marker, because annotations on a plain base class would be collected by Pydantic as fields. Types they mention are generated too.
+- **Required fields** (no default found because the C# type has no parameterless constructor) are drafted back as get-only properties plus a constructor.
+- Same simple type names used by several types are written in full in the drafted C#, because an unqualified name can bind to a type in an enclosing namespace instead of the `using`.
+- Drafts compile against `BHoM.dll` and `Quantities_oM.dll`; types the generator maps specially (for example `FragmentSet`) resolve from there.
+
+## 1. End goal
+
+1. **C# → Python converter** ready: reads the compiled BHoM oM assemblies and writes one Pydantic class per C# type.
+2. **Python → C# converter** ready: reads the Python classes and drafts the aligned C# for the linked PR.
+3. Both converters have their **entry points and core logic in `.ci/generation`**. They may reference C# logic from
+   other repos (BHoM, BHoM_Engine, JSONSchema_Toolkit), but nothing of the business logic lives elsewhere.
+4. **Tests** that verify the spike set (research doc section 11: ten slots, eleven types) plus the tests the workflow in
+   the system-design diagram needs (section 6 below).
+5. Generated `.py` files land in a **new Python project** in this repo (`bhom_schema`).
+6. The repo's **template leftovers are removed**.
+7. **CI is wired**: weekly schema generation, PR checks, and the automatic linked C# PR using the existing GitHub App.
+8. Everything ends with a clean **build and full test run** (repo policy).
+
+BHoM JSON is in scope since audit 1 (step 5): the classes read and write the JSON that `BHoM_JSONSchema` describes (`_t`, interface fields,
+enums by name). The weekly JSON export itself stays untouched and independent; its published schemas are only used as a test oracle.
+
+---
+
+## 2. Target repository layout
+
+```
+BHoM_PythonSchema/
+├─ .github/
+│  ├─ ISSUE_TEMPLATE/ (kept, identical to the JSON repo's)
+│  ├─ PULL_REQUEST_TEMPLATE.md (kept)
+│  ├─ CODEOWNERS (new, copied from the JSON repo)
+│  └─ workflows/
+│     ├─ build.ps1 (copied from the JSON repo)
+│     ├─ python-schema-generation.yml   weekly + manual: C# → Python, commits straight to develop (no PR)
+│     ├─ pr-checks.yml                  build, NUnit, pytest, Pyright on every PR
+│     └─ linked-csharp-pr.yml           Python PR → draft C# PR(s), uses the GitHub App
+├─ .ci/
+│  ├─ generation/
+│  │  ├─ PythonSchemaGeneration.sln
+│  │  ├─ PythonSchemaGeneration/        C# console app, the C# → Python entry point
+│  │  ├─ PythonSchemaGeneration.Core/   C# class library: all the real logic (testable)
+│  │  └─ py2cs/                         Python package, the Python → C# converter (python -m py2cs)
+│  │     ├─ reader / diff / locate / place / emitter / report / resolve
+│  │     └─ pr.py                       GitHub client interface + PR raiser (real client and mock client)
+│  └─ unit-tests/
+│     ├─ csharp/
+│     │  ├─ PythonSchemaGeneration.Tests/     NUnit tests
+│     │  └─ (FixtureAlpha_oM, FixtureBeta_oM: moved to the CSharpSchema_Test repository, cloned next to this one)
+│     ├─ python/                              pytest tests (converters, PR raiser, generated package)
+│     ├─ golden/                              hand-written expected .py / .cs / report outputs
+│     ├─ github-fixtures/                     recorded repository listings and API replies for offline tests
+│     └─ run-all.ps1                          one script that runs every stage end to end
+├─ src/
+│  └─ bhom_schema/                    the new Python project (generated output lands here)
+│     ├─ _support/                    small hand-written helpers (section 4.3)
+│     └─ <Assembly>/<Namespace…>/<Type>.py   e.g. dKoP_oM/ProjectIdentification.py   (generated)
+├─ pyproject.toml                     package metadata, pytest and pyright config, dev extras
+├─ pyrightconfig.json                 strict type-checking rules shared by editor and CI
+├─ Included-repositories.txt          copied from the JSON repo: repos to clone and build before generating
+├─ dependencies.txt                   kept, trimmed to what the converter really references
+├─ README.md                          rewritten
+└─ CSharp-to-Python-Gotchas.md, CODING-PLAN.md
+```
+
+Folder names follow the `.ci/generation` spelling you gave (the JSON repo uses `.ci/Generation`; git is case-sensitive so
+we stay consistent from the start).
+
+### Template files to remove (phase 0)
+
+Everything is a BHoM *toolkit* template and unrelated to this repo:
+`SoftwareName_Adapter/`, `SoftwareName_Engine/`, `SoftwareName_oM/`, `SoftwareName_Toolkit.sln`,
+`PowershellScript.ps1`, `RenameToolkitFiles.bat`. Rewrite `README.md`. Trim `dependencies.txt` (currently lists
+`BHoM_Adapter`, which we don't use). Keep `LICENSE`, `.github/ISSUE_TEMPLATE`, `.github/PULL_REQUEST_TEMPLATE.md`.
+Extend `.gitignore`: it currently has no entries for `bin/`, `obj/`, `__pycache__/`, `.venv/`, `.pytest_cache/`,
+`.pyright/`, or generated test output, so these must be added before the first build.
+
+---
+
+## 3. How the pieces fit (data flow)
+
+```
+                                 BHoM assemblies (ProgramData\BHoM\Assemblies, or built in CI)
+                                                │
+                       PythonSchemaGeneration (C#, reflection)
+                                                │
+              ┌─────────────────────────────────┴───────────────────────────┐
+     Type model (in memory)                                              report + type manifest
+              │  (map types, order bases, add metadata + provenance)         (warnings, counts; test input)
+              ▼
+     src/bhom_schema/**/*.py  ──────────────►  Pydantic classes used by Python projects
+
+ Python PR in this repo  (not from the weekly job)
+              │
+      py2cs check    strict read of the changed Python: every problem listed per file and line, descriptions
+              │      checked; drafts nothing (a failing check stops the flow)
+              │
+      py2cs diff     reader (static, ast) → manifest at PR base and head → what changed.
+              │      A class without a __bhom__ marker is not skipped: its marker is worked out from the folder
+              │      and the generated classes next to it (the PR report says so)
+              │
+      py2cs resolve  repo(s) from each class's __bhom__["repo"]  (validated through the GitHub App)
+              │
+      py2cs locate   find the existing .cs file by searching the C# repo (never by namespace)
+              │
+              ├── type not in C# yet ──► emit_new: whole new file, placed by the `place` rules
+              │
+              └── type exists in C#  ──► change list (py2cs/patch.py)
+                                              │
+                                         Roslyn patcher (PythonSchemaGeneration.Patcher)
+                                         changes only the listed members, rest of the file untouched
+              │
+      py2cs plan     files + change report (reviewer notes, breaking changes) written to a scratch folder,
+              │      never into the C# checkout (`plan` runs locate, emit and patch in one command)
+              │
+      py2cs pr       draft C# PR per repo, linked both ways   [phase 8, not built yet]
+
+ C# PR reviewed and merged, then built
+              │
+      py2cs align    generator runs for the changed classes over the built C#; its Python must equal the PR's
+                     Python (the Python PR is a proposal and is only merged when this passes)
+```
+
+Both converters share one **language-neutral type manifest** (name, namespace, assembly, repo, kind, bases, generic
+parameters, properties with C# type and metadata). C# → Python writes it next to the Python it generates; Python → C#
+rebuilds it from Python. Structural tests compare two manifests, so each converter is testable without the other.
+
+Two parts of the flow are separate programs: py2cs is Python and only reads Python, and the Roslyn patcher is C# and
+only reads C#. They talk through a JSON job file (type, namespace, usings, list of member changes), so the patcher needs
+no knowledge of Python and py2cs needs no knowledge of Roslyn.
+
+---
+
+## 4. Design
+
+### 4.1 C# → Python (`PythonSchemaGeneration.Core`)
+
+| Stage | Responsibility | Notes |
+|---|---|---|
+| `AssemblyLoader` | Find and load `*oM.dll` from the BHoM folder, organisation-filtered | Same pattern as the existing generator; reports loaded and skipped assemblies (gotcha 13) |
+| `TypeSelector` | Choose oM types: enums, `IObject` implementers, not static, oM namespace | Same rules as `Generate.GenerateAssembly`, so the two repos cover the same types |
+| `TypeExtractor` | Reflection → type model (declared properties only, ordered bases, generic info, metadata) | Classifies interface vs class by reflection, **never by name** (`IdKoPObject` has no `I`). Reads defaults by instantiating where a parameterless constructor exists (gotcha 3). Reduces and orders interface bases (gotcha 6) |
+| `ProvenanceReader` | Reads `AssemblyDescription` for the repo, plus namespace and assembly | Normalises `https://github.com/BHoM/dKoP_Toolkit` → `BHoM/dKoP_Toolkit` (gotcha 12) |
+| `TypeMapper` | C# type → Python type expression + required imports | One table (research doc, section 5). Unknowns become `Any` plus a warning (gotcha 11) |
+| `NameSanitiser` | Python-safe names | ``Output`1`` → `Output_1`; enum `None` → `None_`; keyword/builtin shadow checks (gotchas 5, 7) |
+| `PythonEmitter` | Type model → `.py` text | Deterministic: sorted members, LF line endings, fixed header, generated-file banner |
+| `OutputWriter` | Paths, `__init__.py`, clean-up | Path layout from the same helper the JSON generator uses, so folders match the JSON repo. Only deletes folders it owns; never touches `_support/` |
+| `Reporter` | Warnings list, counts, manifest file | Feeds tests and PR descriptions |
+
+Entry point `PythonSchemaGeneration` (console): arguments for output folder, organisation list, optional type filter
+(for tests and quick local runs), and a switch to write the manifest.
+
+Shared C# logic is **referenced, not copied**: `BHoM_Engine` (`IsOmNamespace`, `IsOmAssembly`), `Reflection_Engine`
+(`Subtypes`), `Quantities_oM` (quantity attributes) and `JsonSchema_Engine` (`RelativeSchemaId`, `IsInOrg`), with
+`HintPath`s into `ProgramData\BHoM\Assemblies` like the existing projects. All of these go through one small internal
+adapter file, so replacing a reference later is a one-file change.
+
+### 4.2 Shape of the generated Python (per type)
+
+- File per type: `bhom_schema/<Assembly>/<namespace path>/<Type>.py`, class names unchanged except where unavoidable
+  (`Output_1`).
+- Concrete classes: Pydantic models inheriting from the support base class and from their interfaces.
+- Interfaces: plain `ABC` marker classes. Abstract classes: model + `ABC`. Their `__bhom__` marker lists the generated classes that implement them
+  (`implementers`: C# name to module path), which are the `_t` values a field of that type accepts.
+- Fields typed with an interface or abstract class are written `Polymorphic[X]`; base classes stay plain.
+- Enums: `BHoMEnum` subclasses (`BHoMFlags` for [Flags] enums), written and read by member name; `None` member emitted as `None_` with the real name kept
+  in the metadata. Delegate fields are left out of the JSON Schema (`SkipJsonSchema`).
+- Fields: PascalCase exactly as in C#; required unless a default was found; `Field(default_factory=…)` for mutable
+  defaults; typed `Annotated[...]` with `ClrType`, `Quantity`, `DisplayText` markers where applicable.
+- Docstrings and `Field(description=…)` from `[Description]`.
+- Class-level `__bhom__` marker: C# full name, namespace, assembly, **repo**, plus generic and obsolete info.
+- Cross-module references: bottom-of-module import plus `model_rebuild()` (gotcha 9); `from __future__ import annotations`.
+- Sets/dictionaries keyed or filled by BHoM objects fall back to lists (gotcha 11).
+
+### 4.3 Hand-written support package `bhom_schema/_support/`
+
+Small and stable, imported by every generated file: `SchemaModel` base class (shared `model_config`; writes `_t`, reads and checks it, and carries
+`_bhomVersion`), `Polymorphic` (interface fields), `BHoMEnum` and `BHoMFlags` (enums by name), the `ClrType`, `Quantity` and `DisplayText` markers, and a
+`Color` model. Written by hand and under test (`test_support/`), never overwritten by the generator.
+
+### 4.4 Python → C# (`.ci/generation/py2cs`)
+
+| Stage | Responsibility |
+|---|---|
+| `check` | Strict read of a package: collects every problem (file, line, message) and warns about missing descriptions; drafts nothing |
+| `reader` | Parse a `.py` file with `ast` (no import side effects, works per file) into the same type manifest. Accepts the common hand-written styles (`Optional`, `List`, positional `Field` default), works out a missing `__bhom__` marker, and collects problems instead of stopping at the first |
+| `diff` | Compare the manifest at the PR base and head: added, removed, modified types and members. Also lists the **breaking** changes (property removed or renamed, type changed, enum member removed or renumbered, class or base removed) |
+| `align` | Alignment check: runs the generator over the built merged C# for the changed classes and compares the result with the PR (`compare.py`). A Python PR may only be merged when it passes |
+| `resolve` | `__bhom__["repo"]` → repository, validated against the GitHub API; falls back to scanning the repos in `Included-repositories.txt` for a folder named after the assembly; compares names case-insensitively |
+| `locate` | Finds the existing `.cs` file inside a checked-out C# repo by searching for the declaration (`class/interface/enum/struct <Name>`), file name first. **Never derives the path from the namespace** (43% of files don't match, gotcha 14) |
+| `place` | Chooses a path for a **new** type: folder of sibling types in the same namespace, else `Enums/` convention, else namespace folder, else assembly root; the choice is stated in the PR |
+| `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **member-level patch**: py2cs writes a change list and the Roslyn patcher (`PythonSchemaGeneration.Patcher`) changes only those members, keeping everything else in the file (audit 1, step 2) |
+| `report` | Structured change report per type (added/removed/changed members) for the PR body, with a "Breaking changes" section and the `breaking-change` label (`plan.json` carries `labels`) |
+| `pr` | Creates or updates the draft C# PR and the links back (section 8); real and mock GitHub clients |
+| `__main__` | `python -m py2cs check / manifest / diff / align / plan / drafts / resolve` (`pr` comes with phase 8) |
+
+The reader does static parsing instead of importing so it can run on exactly the files a PR changed, on the base
+revision without installing it, and without executing any code.
+
+Decision recorded (revised 2026-10-26, audit 1): for a modified C# type the converter **patches the existing file member by
+member** with Roslyn, so only the changed members differ, in a **draft** PR, plus the change report. A human reviews and merges;
+nothing is auto-merged. The earlier full-file replacement lost attributes such as `[DocumentationURL]` and reformatted
+unrelated code.
+
+### 4.5 Tooling and conventions
+
+Python 3.12, Pydantic `>=2.13,<3`, pytest, Pyright pinned (strict) in CI with Pylance in the editor. C# targets net8.0 like
+the current generator (net8 SDK and runtime are installed here). Tests use NUnit, as in the JSON repo. The BHoM copyright
+header and the repo's comment style apply to C# files; comment length stays in line with existing files.
+
+---
+
+## 5. Phases
+
+Sizes are relative: S = hours, M = a day or two, L = several days. Every phase ends with its own build and test run.
+
+### Phase 0: Clean up and scaffold (S)
+
+- Remove the template files listed in section 2; rewrite `README.md`; trim `dependencies.txt`; extend `.gitignore`;
+  copy `Included-repositories.txt`, `CODEOWNERS`, `build.ps1`.
+- Add `pyproject.toml`, `pyrightconfig.json`, empty `src/bhom_schema/` with `_support/`, and the folder skeleton.
+- Create `PythonSchemaGeneration.sln` with the exe, core, test and fixture projects (empty but building), referencing the
+  BHoM assemblies via `HintPath`.
+- **Assembly preflight:** `run-all.ps1` first checks that every assembly the spike set needs is present in
+  `ProgramData\BHoM\Assemblies` (`BHoM`, `Geometry_oM`, `Structure_oM`, `Graphics_oM`, `Acoustic_oM`, `Architecture_oM`,
+  `Quantities_oM`, `dKoP_oM`, and the engine dlls the generator references). `dKoP_oM.dll` is already installed on this
+  machine (built 2026-10-07), so nothing needs building now. The preflight **reports** what is missing and never builds a
+  repo itself; **build a repo only when its dll is actually missing**. In CI the real-type tests for the spike set must
+  **fail**, not skip, when an assembly is missing; locally they skip with a clear message.
+- A first `run-all.ps1` that builds and runs the empty test projects, `pytest` and `pyright`.
+- **Done when:** `dotnet build` of the solution succeeds; `pytest` and `pyright` run (zero tests, zero errors).
+
+### Phase 1: Executable specification for the spike set (M)
+
+Hand-write the expected Python for the spike set as **golden files**, plus the support package. This turns the design into
+something Pyright and pytest can already check.
+
+- `ProjectIdentification` (and its interface `IdKoPObject`), `Line` (+ `Point`), `ICurve` chain, `BHoMObject`, `Bar`,
+  `GradientCenteringOptions`, ``BHoMGroup`1``, the two `Room`s, `Gradient`, `ComparisonConfig`.
+- Tests: all golden files import; `model_rebuild()` succeeds; Pyright strict clean; behaviour tests per gotcha (MRO order,
+  `None_` enum, bounded generic, interface acceptance and rejection, same-name classes importable together, mutable defaults
+  not shared, `__bhom__` present).
+- `ProjectIdentification`-specific: four string fields default to `""` (constructing with no arguments works); it is an
+  instance of `IdKoPObject` and **not** of `BHoMObject`; an `IdKoPObject`-typed field accepts it and rejects an unrelated
+  object; `__bhom__["repo"] == "BHoM/dKoP_Toolkit"`, assembly `dKoP_oM`, namespace `BH.oM.dKoP`; file lives at
+  `dKoP_oM/ProjectIdentification.py` (not under `AdministrativeInformation/`).
+- Add the hand-written cyclic fixture pair for the cycle pattern.
+- **Done when:** the golden set passes pytest and Pyright. Design flaws found here are cheap to fix.
+
+### Phase 2: Type model and extraction (M)
+
+- Build `Fixtures.Alpha_oM` and `Fixtures.Beta_oM`: small fake oM assemblies that mimic every spike case (enum with `None`,
+  generic with constraint, interface chain with two parents, defaulted base plus required subclass, same-named types in the
+  two assemblies, a set and dictionary of objects, `DateTime`, `Color`, quantity and description attributes). Specific
+  `ProjectIdentification` twins: an interface **without** an `I` prefix, a flat class of defaulted `string` properties
+  implementing it, source files placed in a folder that deliberately differs from the namespace, and an assembly
+  `Description` pointing at a different repo URL than the other fixture assembly.
+- Implement `AssemblyLoader`, `TypeSelector`, `TypeExtractor`, `ProvenanceReader`, the manifest writer.
+- NUnit tests: extraction result per fixture type equals an expected manifest; selection rules; base reduction and
+  ordering; default discovery (string defaults); generic handling; interface detected without name heuristics; repo
+  normalisation.
+- Tier-2 tests (installed or CI-built BHoM assemblies): the real spike types extract with the expected bases, properties
+  and defaults; for `ProjectIdentification`: four declared properties, defaults `""`, base chain `IdKoPObject → IObject`,
+  repo `BHoM/dKoP_Toolkit`.
+- **Done when:** manifests for fixtures and real spike types match expectations.
+
+### Phase 3: Mapping, emission and writing (L)
+
+- Implement `TypeMapper`, `NameSanitiser`, `PythonEmitter`, `OutputWriter`, `Reporter`.
+- Golden-file tests: emitted text for each fixture type equals the committed expected output (and the phase 1 golden files
+  for the real-type equivalents, including `ProjectIdentification`).
+- Path test: `BH.oM.dKoP.ProjectIdentification` is written to `dKoP_oM/ProjectIdentification.py` using the same rule as the
+  JSON repo (assembly folder, namespace minus its first segment).
+- Determinism test: two runs are byte-identical. Clean-up test: a type removed from the input removes only its file and
+  empty folders, never `_support/`. Warning test: unsupported types become `Any` with a warning.
+- Run the generator over the real spike types into a scratch folder and push it through the phase 1 pytest and Pyright
+  checks.
+- **Done when:** generated output for fixtures and real spike types passes pytest and Pyright strict.
+
+### Phase 4: Metadata and provenance (M)
+
+- Descriptions, quantity markers, display text, dynamic-property marker, CLR type annotations, full `__bhom__` content.
+- Tests: `__bhom__` complete for every generated class (CLR name, namespace, assembly, repo); quantity unit and category on
+  the right properties (for example `Bar.OrientationAngle`); descriptions appear as docstrings and field descriptions; CLR
+  types preserved (`long` stays recoverable); `ProjectIdentification` carries no description and that does not break
+  emission (no empty docstring noise).
+- **Done when:** the metadata assertions pass on fixtures and real types.
+
+### Phase 5: Python → C# reader, diff, locate, place and emitter (L)
+
+- Implement `py2cs` reader, `diff`, `resolve`, `locate`, `place`, `emitter`, `report`.
+- Unit tests with before/after Python fixture pairs: new type, new/removed/changed property, renamed enum member, new
+  interface, removed type, and a change to `ProjectIdentification` (add `ProjectNumber`). Expected diff, C# and report are
+  committed golden files.
+- `locate` tests on a recorded mini C# tree: `ProjectIdentification.cs` is found under `AdministrativeInformation/` although
+  the namespace is `BH.oM.dKoP`; `Line.cs` is found under `Curve/`; a missing type gives a clear "not found, treat as new"
+  result; two files with the same name resolve by declaration.
+- `place` tests: sibling-folder rule, `Enums/` rule, namespace-folder rule, assembly-root fallback.
+- `emitter` tests: whole-file output for new types; suggested replacement for a modified type keeps the existing header,
+  usings and comments.
+- `resolve` tests against recorded repo listings: `dKoP_oM → BHoM/dKoP_Toolkit`, `Geometry_oM → BHoM/BHoM`,
+  `CodeCompliance_oM → BHoM/Test_Toolkit`, case differences (`dKop_Toolkit`), a missing `repo` (scan fallback), an unknown
+  assembly (clear error, no guess).
+- **Done when:** the golden diff, locate, place and emission tests pass and the CLI works end to end on fixtures.
+
+### Phase 6: Alignment round trip (M)
+
+For each spike type: generated Python → `py2cs` draft C# → compile with Roslyn inside an NUnit test → reflect → compare the
+resulting manifest with the original (loose comparison per research doc section 8: names, namespaces, assemblies, bases,
+interfaces, property names and types, enum members, carried attributes).
+- `run-all.ps1` orchestrates: generate Python, run `py2cs`, then `dotnet test` with the draft folder passed in.
+- `ProjectIdentification` round trip: the draft compiles, keeps `: IdKoPObject`, four `virtual string` properties with `= ""`
+  defaults, namespace `BH.oM.dKoP`.
+- **Done when:** all spike round trips compile and match within the agreed tolerance; differences are listed and
+  intentional.
+
+### Phase 7: Full-corpus run and hardening (M)
+
+- Run the generator over every available oM assembly. Import every module, rebuild every model, Pyright strict over the whole
+  package; record import time and Pyright time.
+- Re-measure the cycle count from the DLLs (including abstract classes); decide on lazy loading if import time or memory is
+  poor.
+- Fix mapping gaps surfaced by the warnings list; confirm counts: manifest, files written and modules imported are equal.
+- **Done when:** the whole corpus imports and type-checks, the warnings list is reviewed, timings are recorded.
+
+### Phase 8: CI wiring (L)
+
+Both parts are in scope.
+
+- **8a `python-schema-generation.yml`** (the diagram's "Create/Update schema"): weekly and manual. Same recipe as the JSON
+  repo's weekly job (clone the repos in `Included-repositories.txt`, build in dependency order with `build.ps1`, build and
+  run the generator and the checks), then commit the result straight to `develop`. The C# is the source of truth, so the weekly
+  run just rewrites the Python from it; it is not a pull request. If a check fails, nothing is committed.
+- **8b `pr-checks.yml`:** on every PR run `dotnet build`, NUnit, pytest and Pyright.
+- **8c `linked-csharp-pr.yml`:** the two linked PRs. Full design and wiring in section 8.
+- **8d Rehearsal on `BHoM/CSharpSchema_Test`**, a repository made for this, so no BHoM repository is written to. The test subject is a new
+  property on `Beam` (and a new class) in `src/bhom_schema/FixtureAlpha_oM`:
+  1. **Local dry run.** In a scratch copy of `src/bhom_schema`, add the property, then run `py2cs check`, `repos`, `plan` and
+     `pr --dry-run` against the clone `C:\Github\CSharpSchema_Test`. The dry run **never writes into that clone** and, without a token,
+     never calls GitHub: it prints the files, the branch, the PR title and the body. (Done once: `Objects.cs` gets the three lines
+     of the property, and `Panel.cs` is new.)
+  2. **Workflow dry run.** Open the Python PR and run `linked-csharp-pr.yml` with `dry_run=true`: it makes the App token for
+     `CSharpSchema_Test` only (proving the installation and permissions work) and prints what it would do.
+  3. **Live run (needs your explicit go-ahead at that moment).** Re-run with `dry_run=false`. It pushes branch
+     `python-schema/pr-<N>` to `BHoM/CSharpSchema_Test` and opens a **draft** PR. Check the cross-links, run it again to confirm it
+     updates the same branch and PR, then **close the Python PR without merging**: the workflow closes the C# draft with a comment.
+     Delete the branch by hand.
+- **Done when:** the three workflows run green on a branch of this repo, the dry runs match the expected golden output, and the
+  rehearsal produced a correctly linked draft PR in `BHoM/CSharpSchema_Test` that has then been cleaned up.
+
+### Final step (every phase, and last): full build and test
+
+`run-all.ps1` runs, in order: `dotnet build` of the solution (Release), `dotnet test`, generator over fixtures, `pytest`,
+`pyright`, `py2cs` over fixtures, the round-trip tests and the PR-raiser dry run; then, where the BHoM assemblies are
+installed, the real-type tests and the full-corpus run. A phase is only finished when this script passes.
+
+---
+
+## 6. Test matrix (mapped to the workflow in the diagram)
+
+| Workflow step / requirement | Test | Layer |
+|---|---|---|
+| C# → Python produces valid Python | Every generated module imports, every model rebuilds, Pyright strict clean | pytest + Pyright |
+| Output is stable, so scheduled runs create small diffs | Two runs byte-identical; output sorted; fixed header | NUnit |
+| "Create/Update schema" PR contains only real changes | Remove or rename a fixture type: only its file changes or disappears; `_support/` untouched | NUnit |
+| Same types as the JSON export | Selector gives the same type set as the JSON generator rules for the fixtures; folder paths use the same helper (`ProjectIdentification` → `dKoP_oM/ProjectIdentification.py`) | NUnit |
+| Independent of the weekly JSON job | Generator has no read or write dependency on `BHoM_JSONSchema` (project and path guard test) | NUnit |
+| Re-use of schema by Python projects | Public import paths match the layout; importing a type does not import unrelated assemblies | pytest |
+| PR → Python → C# converter | Before/after fixture pairs give the exact expected diff, C# draft and report | pytest |
+| Existing C# file found although folders ≠ namespaces | `locate` finds `ProjectIdentification.cs` in `AdministrativeInformation/` and `Line.cs` in `Curve/` | pytest |
+| New C# file placed sensibly | `place` rules (siblings, `Enums/`, namespace, root) | pytest |
+| Modified type → suggested full-file replacement | Replacement keeps existing header/usings/comments; PR is a draft; body carries the report | pytest |
+| Alignment of Python and C# changes | Round trip of the spike set compiles and matches the original manifest | NUnit + pytest (orchestrated) |
+| Locating the C# repository for the linked PR | `__bhom__["repo"]` used first; scan fallback; case-insensitive; unknown assembly gives a clear error | pytest |
+| Class carries what the Action needs | `__bhom__` has CLR name, namespace, assembly and repo on every generated class | pytest |
+| The weekly generation never raises C# PRs | It commits directly and `linked-csharp-pr.yml` only triggers on `pull_request`, never on `push` | workflow review + dry run |
+| Idempotent re-run | Pushing again to the same Python PR updates the same C# branch and PR, no duplicates | pytest with mock GitHub client |
+| Closing the Python PR | Closed unmerged → linked C# PRs closed with a comment; merged → comment only | pytest with mock GitHub client |
+| App token is least-privilege | One token per target repository, minted for that repository only; token never printed | workflow review + dry run |
+| Fork PRs | Workflow does not run with the App secrets on fork PRs | workflow condition check |
+| The spike set | Phase 1 golden, phase 2 extraction, phase 3 emission, phase 4 metadata, phase 5 locate/diff, phase 6 round trips | all layers |
+| Scale | Full-corpus import, rebuild, Pyright, timings, count equality | CI / local with BHoM installed |
+
+Two input tiers keep tests reliable: **fixtures** (tiny fake assemblies built in the repo; need only `BHoM.dll`) run anywhere,
+and **real-type tests** (the actual oM) run when the BHoM assemblies are installed or built in CI.
+
+### Where `ProjectIdentification` is checked
+
+| Phase | Check |
+|---|---|
+| 1 | Golden file, defaults, interface-only base, `__bhom__`, path |
+| 2 | Fixture twin and real-type extraction (interface without `I`, defaults `""`, repo) |
+| 3 | Emission golden and output path |
+| 4 | Provenance (`repo`, assembly, namespace); no description handled cleanly |
+| 5 | `locate` (folder ≠ namespace), `resolve` (toolkit repo), diff/emit for an added property |
+| 6 | Round trip compiles and matches |
+| 7 | Part of the full-corpus import and type-check (needs `dKoP_oM.dll`, already installed) |
+| 8 | Subject of the rehearsal: a new property on `FixtureAlpha_oM/Beam` in Python, dry-run against `C:\Github\CSharpSchema_Test`, then a live draft PR in `BHoM/CSharpSchema_Test` |
+
+---
+
+## 7. Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Hidden dependencies on a locally installed BHoM make results differ on CI | Fixtures for logic tests; real-type tests fail in CI and skip locally with a message; CI builds the BHoM repos itself, as the JSON job does |
+| A needed assembly is missing from `ProgramData\BHoM\Assemblies` (`dKoP_oM.dll` is present now) | Phase 0 preflight reports it; build that repo only if its dll is really missing; fixture twins cover the logic meanwhile |
+| The live rehearsal leaves a stray PR or branch in `BHoM/CSharpSchema_Test`, or the test property gets merged | Draft PR clearly labelled as a rehearsal, explicit go-ahead before the live step, mandatory clean-up step, Python PR is closed unmerged |
+| `IsInOrg` and other helpers come from JSONSchema_Toolkit, which must be built before our generator in CI | `JSONSchema_Toolkit` is already in `Included-repositories.txt`; one adapter file isolates the reference |
+| Reflection can't see default values (gotcha 3) | Instantiate-and-read where possible; required otherwise; golden tests pin the behaviour |
+| Cycle or import-time problems only appear on the full corpus | Phase 1 cycle fixture, phase 7 full-corpus gate, lazy loading as the fallback |
+| Pyright strict is noisy on generated code | Emit typed default factories; agree a short, explicit list of rule exceptions in `pyrightconfig.json` |
+| Round-trip comparison is too strict or too loose | Define the loose comparison once and keep it in one test helper; review differences in phase 6 |
+| Suggested replacement files create noisy C# diffs | Reuse the existing header, usings and comments; always a draft PR; report in the PR body |
+| New-file placement guesses wrong | State the rule used in the PR; reviewer moves the file |
+| Weekly generation commit triggers C# PRs | It is a push, not a PR, and the linked-PR workflow has no `push` trigger |
+| `develop` is protected, so the weekly job cannot push to it | Allow the GitHub App (or a deploy key) to bypass the pull request rule for this one commit; the generation checks run before the commit |
+| App token over-privileged or leaked | One token per target repo, short-lived, `permissions` minimised, masked in logs, no fork access |
+| Target repo not covered by the App installation | `resolve` checks reachability first and comments on the Python PR with the missing repo instead of failing silently |
+
+---
+
+## 8. Linked C# PR workflow and GitHub App wiring
+
+You already have a GitHub App with the needed access, so no new credential type is required. This is how to connect it to
+this repository.
+
+### 8.1 One-time setup (done by someone with org owner/admin rights)
+
+1. **Confirm the App's permissions** (App settings → *Permissions & events*): *Contents: read and write* (push a branch to a
+   C# repo), *Pull requests: read and write* (open, update and close the C# PR and comment), *Metadata: read* (automatic).
+   Nothing else is needed. Add *Workflows* only if a C# PR would ever change `.github/workflows` (it won't).
+2. **Confirm the installation covers every target repo.** App settings → *Install App* → the organisation → *Repository access*.
+   It must include `BHoM_PythonSchema` (so the workflow can use its secrets) and every repository that owns oM assemblies
+   (the repos in `Included-repositories.txt`). A repo outside the installation cannot get a token.
+3. **Store the credentials.** Note the App ID (or Client ID) and generate a private key (`.pem`). Add them where the workflow can
+   read them: either an organisation secret/variable shared with `BHoM_PythonSchema`, or repository-level ones. Suggested
+   names (reuse the names your other workflows already use if the secret exists):
+   - variable `BHOM_APP_ID`
+   - secret `BHOM_APP_PRIVATE_KEY` (the full PEM text including the BEGIN/END lines)
+4. **Protect the secrets.** Optionally attach them to a GitHub **Environment** (for example `linked-csharp-pr`) so only the
+   linked-PR job can read them, with a required reviewer if you want a human gate before anything is raised.
+5. **The rehearsal repository is `BHoM/CSharpSchema_Test`** (phase 8d), so that repo must be within the installation (step 2). The
+   installation should cover only `BHoM_PythonSchema` and `CSharpSchema_Test` for now, so the App cannot write to any other repository.
+
+### 8.2 How the workflow uses it
+
+`linked-csharp-pr.yml`:
+- **Triggers:** `pull_request` (opened, synchronize, reopened, ready_for_review, closed) with a path filter on
+  `src/bhom_schema/**`, plus `workflow_dispatch` with `pr_number` and `dry_run` inputs. `concurrency` is per PR number so a
+  newer push cancels an older run.
+- **Guard (job `if`):** head repository is this repo (not a fork, because forks never receive secrets). There is no `push`
+  trigger, so the weekly generation commit never starts this workflow.
+- **Job `plan`:** check out with full history, set up Python, `pip install`, run `py2cs diff` between the PR base and head, and
+  `py2cs resolve` to list the affected repositories. Exit cleanly if there are no changes. Output the repo list as a matrix.
+- **Job `raise` (one matrix leg per affected repo):**
+  1. mint a token scoped to just that repo:
+     `actions/create-github-app-token` (pin a major version or commit SHA; check the current release when implementing) with
+     `app-id`, `private-key`, `owner: BHoM` and `repositories: <that repo only>`; the token lasts about an hour and is revoked
+     when the job ends;
+  2. check out that C# repo's `develop` branch with the token;
+  3. `py2cs locate` + `py2cs emit` write the new files and suggested replacements into the checkout;
+  4. commit on branch `python-schema/pr-<N>` as the App's bot identity and push;
+  5. `py2cs pr` creates or updates a **draft** PR to `develop` whose body follows the C# repo's PR template (with
+     "Depends on BHoM/BHoM_PythonSchema#N"), embeds the change report, and states the file-placement choices;
+  6. comment on the Python PR with the link (using the workflow's own `GITHUB_TOKEN`: `pull-requests: write`, `contents: read`).
+- **On `closed`:** unmerged → close the linked C# PRs with a comment; merged → comment on them that the Python PR merged.
+- **`dry_run`:** does everything except pushing and creating PRs, and prints what it would do; used for the rehearsal and for
+  debugging. It still mints the real App token, so a dry run proves the installation and permissions. Run locally, the same
+  mode takes `--repo-root <existing clone>` and works on a temporary copy, so a developer's clone is never modified.
+- **Safety details:** the token is only passed to steps that need it, via environment variables, never echoed; the default
+  `GITHUB_TOKEN` permissions are set to read-only at workflow level and raised per job.
+
+### 8.3 In code
+
+`py2cs.pr` talks to GitHub only through a small `GitHubClient` interface (get repo, list tree, create or update branch and
+file, create or update PR, comment, close). The real client wraps the REST API directly (the `gh` CLI is not installed on
+this machine, so local dry runs must not depend on it; GitHub-hosted runners have it, but we don't rely on it). Tests use a
+mock client with recorded responses, so branch naming, idempotence and the close behaviour are unit-tested
+without network access.
+
+### 8.4 What I need from you before phase 8c
+
+1. The App's name/slug and its **App ID or Client ID**, and the names of the secret and variable that already hold them (so
+   the workflow reuses them rather than creating duplicates).
+2. Confirmation that the installation covers `BHoM_PythonSchema` and **all repos in `Included-repositories.txt`**.
+3. Your go-ahead, at the time, for the **live rehearsal** that opens a draft PR in `BHoM/CSharpSchema_Test` (the dry runs need no
+   approval).
+4. Whether the linked PR should run for every Python PR automatically (current plan) or only when a label such as
+   `csharp-sync` is present, or after approval of an Environment.
+5. Whether the weekly generation job should also use the App token to clone any private BHoM-organisation toolkits (public
+   repos don't need it).
+
+---
+
+## 9. Decisions recorded
+
+| Question | Decision |
+|---|---|
+| Modified C# types | **Member-level patch** with Roslyn (revised by audit 1; was a full-file replacement): only changed members are touched, draft PR, change report in the PR body. |
+| CI scope | **Both** the weekly generation / PR-check workflows **and** the linked-PR Action are in scope now. |
+| Repository list, owners, workflow recipe | `Included-repositories.txt` (BHoM, BHoM_Engine, JSONSchema_Toolkit, CSharpSchema_Test) is cloned and built on GitHub by our own workflows, with the JSON repo's `build.ps1`. BHoM_JSONSchema is not changed for now, and the two DLL sets may stay separate for good. `Converted-repositories.txt` lists what is converted and where C# PRs may be raised: CSharpSchema_Test only. |
+| Spike set | `Point` replaced by `ProjectIdentification` as the "simple flat class" slot; `Point` is still generated and checked as `Line`'s dependency. |
+| Cross-repo credential | Existing **GitHub App**, one short-lived token per target repository. |
+| `dKoP_oM.dll` | Already installed locally; preflight reports missing dlls and builds a repo only if its dll is missing. |
+| Rehearsal target | **`BHoM/CSharpSchema_Test`** (local clone `C:\Github\CSharpSchema_Test` for dry runs); no BHoM repository is written to. Live step needs explicit go-ahead and is cleaned up afterwards. |
+| Repo discovery | `__bhom__["repo"]` from the assembly's `Description` first; folder scan only as fallback. |
+| Existing C# file lookup | Search by declaration; never by namespace path. |

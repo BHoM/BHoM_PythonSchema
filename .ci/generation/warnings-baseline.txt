@@ -1,0 +1,4 @@
+# Known warning kinds of the generator. A kind that is not listed fails the run.
+# Update with --write-baseline after reviewing a new kind.
+default instance of <type> cannot be created in Python, field is required
+default value <n> is not a member of enum <type>, field is required

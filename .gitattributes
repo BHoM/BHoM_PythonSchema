@@ -1,0 +1,2 @@
+# Generated files are written with LF line endings and must stay that way
+src/bhom_schema/**/*.py text eol=lf
