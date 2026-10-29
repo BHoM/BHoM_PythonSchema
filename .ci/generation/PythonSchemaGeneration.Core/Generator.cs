@@ -4,6 +4,7 @@ using PythonSchemaGeneration.Loading;
 using PythonSchemaGeneration.Mapping;
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
+using System.ComponentModel;
 using System.Reflection;
 
 namespace PythonSchemaGeneration
@@ -12,6 +13,10 @@ namespace PythonSchemaGeneration
     {
         /***************************************************/
 
+        [Description("Runs the whole C# to Python conversion: loads the oM assemblies, selects and registers the types, applies the --types and --repos filters, renders the " +
+            "roots and every oM type they reference, finds reference cycles and renders again, then writes the Python files, the manifest and the report that the " +
+            "options ask for. Returns the rendered types, counts and warnings; Program calls it, as do the tests, and it is the orchestrator of the generator " +
+            "pipeline.")]
         public static GenerationResult Run(GenerationOptions options)
         {
             GenerationResult result = new GenerationResult();
@@ -104,6 +109,8 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Keeps the selected types whose full name, base name or formatted name matches one of the requested names (the --types option) and warns about a name " +
+            "that matches nothing. Returns all types when no filter is given; Run uses it to choose the root types.")]
         private static List<Type> FilterByRoots(List<Type> selectedTypes, List<string> filter, Reporter reporter)
         {
             if (filter == null)
@@ -123,7 +130,9 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
-        //Keeps the types of the assemblies that belong to the requested repositories. Their dependencies in other repositories are still generated.
+        [Description("Keeps the types of the assemblies that belong to the requested repositories (the --repos option), returns the names of those assemblies for the output " +
+            "writer, and warns about a repository with no loaded assembly. Dependencies in other repositories are still generated; Run uses it so a weekly or " +
+            "on-demand run can convert chosen repositories.")]
         private static List<Type> FilterByRepos(List<Type> types, List<string> repos, Reporter reporter, out HashSet<string> assemblies)
         {
             HashSet<string> wanted = new HashSet<string>(repos.Select(NormaliseRepo), StringComparer.OrdinalIgnoreCase);
@@ -138,6 +147,7 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Trims whitespace and slashes from an Owner/Name repository text and turns null into an empty string, so repository names compare equal. Used by FilterByRepos.")]
         private static string NormaliseRepo(string repo)
         {
             return (repo ?? "").Trim().Trim('/');
@@ -145,6 +155,8 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Builds the text of the report file: counts of available types, generated types, types in cycles, files written and warnings, followed by the info " +
+            "messages and the sorted warnings. Written by Run when a report path is given.")]
         private static string Report(GenerationResult result)
         {
             List<string> lines = new List<string>

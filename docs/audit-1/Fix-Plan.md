@@ -293,7 +293,7 @@ Everything is written and tested here. It has **not been run on GitHub yet**: th
 - **4.5 PR checks:** `pr-checks.yml` runs `run-all.ps1`, and `py2cs check` and `py2cs align` for a PR that changes `src/bhom_schema`.
   The test project finds the CSharpSchema_Test clone through the `CSharpSchemaTestRoot` environment variable.
 - **4.6 linked C# PR:** `linked-csharp-pr.yml`, `py2cs/pr.py` (raise, update, close), `py2cs/github.py` (a REST client and an
-  in-memory fake) and the commands `repos`, `plan --only-repo --allowed-repos`, `pr` and `close`. C# pull requests can only be raised in
+  in-memory mock) and the commands `repos`, `plan --only-repo --allowed-repos`, `pr` and `close`. C# pull requests can only be raised in
   the repositories of `Converted-repositories.txt`.
 - **4.7 first generation:** `src/bhom_schema` holds the 27 CSharpSchema_Test classes and 5 BHoM base classes, generated on a laptop
   last week. The first weekly run on GitHub should change nothing; if it does, it commits the difference.
@@ -355,7 +355,7 @@ fails, nothing is committed. If `develop` is protected, the GitHub App must be a
 a Python PR changes, work out which C# repository owns each changed class, get a short-lived access token for that
 repository only (from the existing GitHub App), push a branch `python-schema/pr-<N>`, open a **draft** C# PR, and add links
 both ways. Running it again updates the same PR rather than opening a new one. `pr.py` talks to GitHub through a small
-interface, so tests can use a fake GitHub that never touches the network.
+interface, so tests can use a mock GitHub that never touches the network.
 
 4.7 **First real generation**: run the weekly workflow once and commit its result to `src/bhom_schema`, rather than generating
 on a laptop.
@@ -367,7 +367,7 @@ scope. **Decided: `BHoM/CSharpSchema_Test`**, a repository made for this. No BHo
 ### How we'll know it works
 
 - Tests: exit codes; a new warning kind fails; the repository filter keeps only BHoM/BHoM.
-- Tests with the fake GitHub: branch names, re-running updates the same PR, closing behaviour.
+- Tests with the mock GitHub: branch names, re-running updates the same PR, closing behaviour.
 - The three workflows run green on a test branch of this repository.
 - The build and test gate passes.
 

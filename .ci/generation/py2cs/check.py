@@ -14,7 +14,10 @@ class CheckResult:
     warnings: list[str] = field(default_factory=lambda: [])
 
 def description_warnings(before: TypeInfo | None, after: TypeInfo) -> list[str]:
-    """BHoM requires a description on every oM class and property: warn about new ones without one."""
+    """Warns about a new class, or a new property of a class, that has no description, because BHoM requires one on every oM class and property.
+
+    `check_package` calls it for the classes a Python change adds or modifies, so `py2cs check` reports them before a C# draft is made.
+    """
     warnings: list[str] = []
     if before is None and not after.description:
         warnings.append(f"{after.simple_name} has no description; add a docstring (BHoM requires one on every oM class)")
@@ -25,8 +28,11 @@ def description_warnings(before: TypeInfo | None, after: TypeInfo) -> list[str]:
     return warnings
 
 def check_package(root: Path, base_root: Path | None = None) -> CheckResult:
-    """Reads root strictly. With base_root (the package before the change), new classes and fields are checked for descriptions;
-    without it, only classes without a written __bhom__ marker are, since those are hand-written."""
+    """Reads a bhom_schema folder strictly and collects every problem of the hand-written Python (errors) and every missing description or worked-out marker (warnings), without drafting any C#.
+
+    The `check` command and the PR checks workflow run it first. With base_root (the package before the change) the new classes and properties are checked
+    for descriptions; without it, only classes that have no written __bhom__ marker are, since those were written by hand.
+    """
     result = CheckResult()
     head = read_package(root, result.errors)
     base = read_package(base_root, []) if base_root is not None else None

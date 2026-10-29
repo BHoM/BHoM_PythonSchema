@@ -14,6 +14,10 @@ IGNORED = frozenset({"assembly", "repo", "path"})
 
 @pytest.mark.parametrize("name", ["fixtures", "spike"])
 def test_drafted_csharp_reflects_back_to_the_original_types(name: str):
+    """Checks that the C# drafted from the generated Python, once compiled and reflected, gives a manifest equal in shape to the original, ignoring assembly, repo and path.
+
+    Protects the Python to C# direction (`csharp` stage) from losing information; it skips if the NUnit round-trip output is missing.
+    """
     require_output(name)
     draft = OUTPUT / "roundtrip" / name / "draft-manifest.json"
     if not draft.exists():

@@ -84,6 +84,8 @@ def build_patch(path: Path, before: TypeInfo, after: TypeInfo, head: Manifest) -
     patch = FilePatch(path, after.simple_name, after.namespace)
 
     def literal(text: str | None) -> str | None:
+        """Turns description text into a C# string literal and records that System.ComponentModel must be imported; returns None for empty text. Used for the description changes of types, properties and enum members.
+        """
         if not text:
             return None
         usings.add("System.ComponentModel")
@@ -133,6 +135,10 @@ def build_patch(path: Path, before: TypeInfo, after: TypeInfo, head: Manifest) -
     return patch
 
 def _added_property(info: TypeInfo, prop: PropertyInfo, anchor: str | None, names: Names, defaults: Defaults, usings: set[str], notes: list[str]) -> dict[str, Any]:
+    """Builds the patcher change that adds a property after the anchor property, with its initialiser and attributes.
+
+    It notes defaults that cannot be written in C# and properties without a Python default. Used by `build_patch` for properties new in Python.
+    """
     initialiser = defaults.initialiser(prop) if info.kind != "interface" else None
     note = untranslated_default(prop, initialiser) if info.kind != "interface" else None
     if note is not None:
@@ -143,6 +149,10 @@ def _added_property(info: TypeInfo, prop: PropertyInfo, anchor: str | None, name
             "add": property_attributes(prop, usings), "after": anchor}
 
 def _changed_property(a: PropertyInfo, b: PropertyInfo, names: Names, defaults: Defaults, usings: set[str], notes: list[str], literal: Callable[[str | None], str | None]) -> list[dict[str, Any]]:
+    """Builds the patcher changes for one property that exists in both versions: type, initialiser, description and the attribute changes (quantity, display text, dynamic).
+
+    Used by `build_patch` for properties that changed in Python.
+    """
     changes: list[dict[str, Any]] = []
     if a.clr_type != b.clr_type:
         changes.append({"kind": "setPropertyType", "name": b.name, "type": names.render(b.clr_type)})

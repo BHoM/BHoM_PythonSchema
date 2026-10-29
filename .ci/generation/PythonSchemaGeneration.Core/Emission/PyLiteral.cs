@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 
@@ -8,6 +9,8 @@ namespace PythonSchemaGeneration.Emission
     {
         /***************************************************/
 
+        [Description("Returns the Python string literal for a text, choosing the quote character and escaping backslashes, control characters and surrogates the "
+            + "way repr would. Used wherever the emitter writes text into generated Python.")]
         public static string Str(string text)
         {
             char quote = text.Contains('\'') && !text.Contains('"') ? '"' : '\'';
@@ -32,6 +35,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Returns the Python float literal for a double, using float('nan') and float('inf') for the special values and keeping a decimal point. Used for default values.")]
         public static string Float(double value)
         {
             if (double.IsNaN(value)) return "float('nan')";
@@ -47,6 +51,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Returns True or False, the Python spelling of a boolean. Used for default values.")]
         public static string Bool(bool value)
         {
             return value ? "True" : "False";

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Collections;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -25,6 +26,8 @@ namespace PythonSchemaGeneration.Emission
         private readonly string m_Context;
         private readonly HashSet<string> m_TypeParams;
 
+        [Description("Creates a formatter that writes property default values as Python source, using the registry, reporter, import tracker, owning type name and "
+            + "its generic parameter names. PythonEmitter builds one per type.")]
         public DefaultFormatter(TypeRegistry registry, Reporter reporter, NameTracker scope, string context, IEnumerable<string> typeParams)
         {
             m_Registry = registry;
@@ -36,6 +39,9 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Converts the default value read from a fresh C# instance into Python source: a literal, a factory (for fresh objects, collections, dates, "
+            + "GUIDs) or nothing when the field must be required, warning when the value cannot be written. PythonEmitter calls it for every property while "
+            + "writing the fields.")]
         public DefaultText Format(PropertyModel property, MappedType mapped)
         {
             if (property.Default == null)
@@ -113,11 +119,13 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Wraps Python source text as a literal default. Used by Format and its helpers.")]
         private static DefaultText Literal(string text)
         {
             return new DefaultText { Kind = DefaultKind.Literal, Text = text };
         }
 
+        [Description("Wraps Python source text as a default_factory default. Used by Format and its helpers.")]
         private static DefaultText Factory(string text)
         {
             return new DefaultText { Kind = DefaultKind.Factory, Text = text };
@@ -125,6 +133,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Writes an enum default as a reference to the generated enum member, or as the enum called with the raw number for an undefined flags value; "
+            + "warns and leaves the field required for an undefined value of a plain enum. Called by Format.")]
         private DefaultText Enum(Type type, object value, string member)
         {
             if (!m_Registry.Contains(type))
@@ -145,6 +155,7 @@ namespace PythonSchemaGeneration.Emission
             return Literal($"{local}({Convert.ToString(raw, CultureInfo.InvariantCulture)})");
         }
 
+        [Description("Writes a System.Drawing.Color default as a factory for the support package Color class, read from its A, R, G, B values. Called by Format.")]
         private DefaultText ColorDefault(object value)
         {
             Type t = value.GetType();
@@ -160,6 +171,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Writes a list, set, dict or array default as an empty or literal-filled factory, falling back to an empty collection with a warning when the "
+            + "items are complex or the container is not supported. Called by Format.")]
         private DefaultText Collection(IEnumerable enumerable, MappedType mapped, string member)
         {
             string expr = mapped.Expression.Replace(" | None", "");
@@ -203,6 +216,8 @@ namespace PythonSchemaGeneration.Emission
             return Factory(head == "set" ? $"lambda: {{{body}}}" : $"lambda: [{body}]");
         }
 
+        [Description("Checks whether a default object, or an object nested up to a few levels inside it, holds an enum value that the generated Python enum cannot "
+            + "represent. Format uses it to decide the Python class cannot be created without arguments.")]
         private bool HasUnwritableEnum(object value, int depth)
         {
             if (value == null || depth > 4)
@@ -234,6 +249,7 @@ namespace PythonSchemaGeneration.Emission
             return false;
         }
 
+        [Description("Writes a two-dimensional array default as a factory returning a list of row lists, or an empty factory with a warning when a cell is complex. Called by Collection.")]
         private DefaultText Matrix(Array array, string emptyFactory, string member)
         {
             List<string> rows = new List<string>();
@@ -261,6 +277,8 @@ namespace PythonSchemaGeneration.Emission
             return Factory("lambda: [" + string.Join(", ", rows) + "]");
         }
 
+        [Description("Returns Python source for a null, bool, string or number item, or null when the item is a complex object. Collection and Matrix use it to "
+            + "decide whether a collection default can be written out.")]
         private static string SimpleLiteral(object item)
         {
             switch (item)

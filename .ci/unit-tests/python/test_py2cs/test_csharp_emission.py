@@ -8,11 +8,19 @@ from py2cs.reader import read_package
 
 
 def draft(tmp_path: Path, files: dict[str, str], clr: str) -> str:
+    """Reads a package built from the given files and returns the C# that emit_new drafts for one class, with required fields as read-only properties.
+
+    Used by test_new_class_with_every_property_kind.
+    """
     manifest = read_package(package(tmp_path, files))
     return emit_new(manifest[clr], manifest, read_only_required=True)
 
 
 def test_names_shorten_and_collect_usings():
+    """Checks that Names shortens type names to their simple names, collects the needed usings and keeps a second type with the same simple name fully qualified.
+
+    Protects the type names and usings of the C# files that csharp.emit_new writes.
+    """
     names = Names("BH.oM.Demo")
     assert names.render("System.Collections.Generic.Dictionary<string, BH.oM.Geometry.Point>") == "Dictionary<string, Point>"
     assert names.render("BH.oM.Demo.Local[]") == "Local[]"
@@ -22,11 +30,19 @@ def test_names_shorten_and_collect_usings():
 
 
 def test_parse_type_shapes():
+    """Checks that parse_type splits a C# type text into its name, generic arguments and nullable or array suffixes.
+
+    Protects the type handling underneath csharp.emit_new.
+    """
     node = parse_type("System.Tuple<int, System.Collections.Generic.List<string[,]>>?")
     assert node.name == "System.Tuple" and node.suffix == "?" and node.args[1].args[0].suffix == "[,]"
 
 
 def test_new_class_with_every_property_kind(tmp_path: Path):
+    """Checks that emit_new drafts a class with every kind of property (required, each default type, enum defaults, collections, UUID, decimal, datetime, quantity, display text, description) exactly as the committed Everything.cs.
+
+    Protects the whole-file C# drafting of new classes.
+    """
     files = {
         "Demo_oM/Mode.py": module("Mode", "BH.oM.Demo.Mode", "BH.oM.Demo", "Demo_oM", kind="enum", bases="Enum", imports=["from enum import Enum"],
                                   marker_extra=["'renamed_members': {'None_': 'None'}"], body=["None_ = 0", "Fast = 1"]),
@@ -62,6 +78,10 @@ def test_new_class_with_every_property_kind(tmp_path: Path):
 
 
 def test_new_enum_interface_and_generic(tmp_path: Path):
+    """Checks that emit_new drafts a new enum, flags enum, interface and generic class exactly as the committed golden files.
+
+    Protects the whole-file C# drafting of the kinds other than plain classes.
+    """
     files = {
         "Demo_oM/Mode.py": module("Mode", "BH.oM.Demo.Mode", "BH.oM.Demo", "Demo_oM", kind="enum", bases="Enum", imports=["from enum import Enum"],
                                   marker_extra=["'renamed_members': {'None_': 'None'}"], body=["None_ = 0", "# Quick.", "Fast = 1"], doc="Speeds."),
@@ -82,6 +102,10 @@ def test_new_enum_interface_and_generic(tmp_path: Path):
 
 
 def test_untranslatable_default_becomes_a_reviewer_note(tmp_path: Path):
+    """Checks that a default which cannot be translated to C# gives a property without an initialiser and a note for the reviewer.
+
+    Protects the pull request text, which tells the reviewer what to set by hand.
+    """
     files = {"Demo_oM/Odd.py": module("Odd", "BH.oM.Demo.Odd", "BH.oM.Demo", "Demo_oM", body=["Value: str = some_function()"])}
     manifest = read_package(package(tmp_path, files))
     notes: list[str] = []
@@ -91,6 +115,10 @@ def test_untranslatable_default_becomes_a_reviewer_note(tmp_path: Path):
 
 
 def test_new_fields_without_a_default_stay_settable(tmp_path: Path):
+    """Checks that, without read-only required fields, a field with no default is drafted as a settable property with a note, and a positional Field default keeps its initialiser and gets no constructor.
+
+    Protects the drafting of hand-written classes.
+    """
     files = {"Demo_oM/Loose.py": module("Loose", "BH.oM.Demo.Loose", "BH.oM.Demo", "Demo_oM", body=["Id: str", "Stage: int = Field(0, description='RIBA stage')"])}
     manifest = read_package(package(tmp_path, files))
     notes: list[str] = []
@@ -102,6 +130,10 @@ def test_new_fields_without_a_default_stay_settable(tmp_path: Path):
 
 
 def test_required_fields_become_get_only_properties_set_by_a_constructor(tmp_path: Path):
+    """Checks that, with read-only required fields, required fields become get-only properties set by a constructor, with reserved words escaped (@class), and match the committed Fixed.cs.
+
+    Protects the C# drafted from generated Python with required fields.
+    """
     files = {"Demo_oM/Fixed.py": module("Fixed", "BH.oM.Demo.Fixed", "BH.oM.Demo", "Demo_oM",
                                         body=["Id: str", "class_: int = Field(alias='class')", "Length: float"])}
     manifest = read_package(package(tmp_path, files))
@@ -113,6 +145,10 @@ def test_required_fields_become_get_only_properties_set_by_a_constructor(tmp_pat
 
 
 def test_same_simple_name_in_two_namespaces_is_written_in_full(tmp_path: Path):
+    """Checks that two types with the same simple name in different namespaces are written fully qualified in the drafted C#.
+
+    Protects the drafted file from ambiguous or wrong type names.
+    """
     files = {
         "A_oM/Point.py": module("Point", "BH.oM.A.Point", "BH.oM.A", "A_oM"),
         "B_oM/Point.py": module("Point", "BH.oM.B.Point", "BH.oM.B", "B_oM"),

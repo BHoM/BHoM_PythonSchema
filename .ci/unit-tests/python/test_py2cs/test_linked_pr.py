@@ -13,7 +13,7 @@ from helpers import csharp_tree, demo_package, module, package, require_patcher
 from py2cs.__main__ import main
 from py2cs.ci import affected_repos, load_allowed, make_client
 from py2cs.diff import diff_manifests
-from py2cs.github import FakeGitHub, FakeRepository, GitHubError, RestClient
+from py2cs.github import MockGitHub, MockRepository, GitHubError, RestClient
 from py2cs.plan import make_plan
 from py2cs.pr import MARKER, PythonPr, branch_name, close_linked, raise_pr
 from py2cs.reader import read_package
@@ -24,7 +24,10 @@ PYTHON_REPO = "BHoM/BHoM_PythonSchema"
 PR = PythonPr(PYTHON_REPO, 7, "https://github.com/BHoM/BHoM_PythonSchema/pull/7")
 
 def written_plan(tmp_path: Path, extra: list[str] | None = None, new_class: bool = False, remove_enum: bool = False) -> Path:
-    """Runs make_plan on the demo package and writes it the way `py2cs plan` does; returns the plan folder."""
+    """Runs make_plan on the demo package (with the extra fields, a new class or a removed enum as asked), writes the plan folder the way py2cs plan does and returns that folder.
+
+    The raise, close and offline command line tests use it as the input of py2cs pr.
+    """
     require_patcher()
     repo_root = csharp_tree(tmp_path / "clones")
     base = read_package(demo_package(tmp_path / "base"))
@@ -47,15 +50,27 @@ def written_plan(tmp_path: Path, extra: list[str] | None = None, new_class: bool
     (out / "reports" / (REPO.replace("/", "__") + ".md")).write_text(render_report(plan, PR.reference, REPO), encoding="utf-8")
     return out
 
-def github() -> FakeGitHub:
-    return FakeGitHub({REPO: FakeRepository(), PYTHON_REPO: FakeRepository()})
+def github() -> MockGitHub:
+    """Returns an in-memory MockGitHub with empty repositories for the demo C# repository and the Python repository.
+
+    The raise and close tests use it in place of the real GitHub.
+    """
+    return MockGitHub({REPO: MockRepository(), PYTHON_REPO: MockRepository()})
 
 # ---------------------------------------------------------------- raising
 
 def test_branch_is_named_after_the_python_pr():
+    """Checks that the linked branch is named python-schema/pr-<number> after the Python PR.
+
+    Protects the link that the status, close and sweep jobs use to find the C# PR.
+    """
     assert branch_name(7) == "python-schema/pr-7"
 
 def test_first_run_creates_branch_files_draft_pr_label_and_comment(tmp_path: Path):
+    """Checks that the first raise_pr run creates the branch, writes the planned file, opens a draft PR with the right title and Depends on text, and comments on the Python PR.
+
+    Protects the linked-PR workflow's raise job.
+    """
     plan = written_plan(tmp_path, ["Count: int = 0"])
     remote = github()
     # Make the planned change breaking, as if the type changed: here a plain addition has no label
@@ -72,6 +87,10 @@ def test_first_run_creates_branch_files_draft_pr_label_and_comment(tmp_path: Pat
     assert b"public virtual int Count" in remote.repositories[REPO].files[("python-schema/pr-7", "Demo_oM/AdministrativeInformation/ProjectInfo.cs")]
 
 def test_running_again_changes_nothing(tmp_path: Path):
+    """Checks that running raise_pr again with the same plan writes only the Python PR comment (updated in place) and opens no second PR.
+
+    Protects the raise job from noise when the workflow re-runs.
+    """
     plan = written_plan(tmp_path)
     remote = github()
     raise_pr(remote, plan, REPO, PR, python_client=remote)
@@ -84,6 +103,10 @@ def test_running_again_changes_nothing(tmp_path: Path):
     assert any(a.kind == "unchanged" for a in again.actions)
 
 def test_a_changed_python_pr_updates_the_same_branch_and_pr(tmp_path: Path):
+    """Checks that a changed plan updates the same branch and the same draft PR instead of opening another.
+
+    Protects the raise job when a developer pushes more commits to the Python PR.
+    """
     remote = github()
     raise_pr(remote, written_plan(tmp_path / "one", ["A: int = 0"]), REPO, PR, python_client=remote)
     remote.calls.clear()
@@ -94,6 +117,10 @@ def test_a_changed_python_pr_updates_the_same_branch_and_pr(tmp_path: Path):
     assert "public virtual string B" in remote.repositories[REPO].files[("python-schema/pr-7", "Demo_oM/AdministrativeInformation/ProjectInfo.cs")].decode()
 
 def test_two_python_prs_get_two_branches(tmp_path: Path):
+    """Checks that two Python PRs get two separate branches and draft PRs in the C# repository.
+
+    Protects the link between each Python PR and its C# PR.
+    """
     plan = written_plan(tmp_path)
     remote = github()
     raise_pr(remote, plan, REPO, PythonPr(PYTHON_REPO, 7))
@@ -101,6 +128,10 @@ def test_two_python_prs_get_two_branches(tmp_path: Path):
     assert sorted(p.head for p in remote.repositories[REPO].pull_requests) == ["python-schema/pr-7", "python-schema/pr-8"]
 
 def test_breaking_changes_label_the_pull_request(tmp_path: Path):
+    """Checks that a plan with a breaking change puts the breaking-change label on the draft C# PR.
+
+    Protects the label that tells reviewers a change may break users.
+    """
     plan = written_plan(tmp_path, remove_enum=True)
     remote = github()
     raise_pr(remote, plan, REPO, PR)
@@ -108,6 +139,10 @@ def test_breaking_changes_label_the_pull_request(tmp_path: Path):
     assert remote.repositories[REPO].labels[pull.number] == ["breaking-change"]
 
 def test_a_dry_run_writes_nothing_and_lists_what_it_would_do(tmp_path: Path):
+    """Checks that a dry run of raise_pr makes no GitHub calls and lists the actions it would do.
+
+    Protects the preview of the raise job.
+    """
     plan = written_plan(tmp_path, new_class=True)
     remote = github()
     result = raise_pr(remote, plan, REPO, PR, dry_run=True, python_client=remote)
@@ -118,19 +153,31 @@ def test_a_dry_run_writes_nothing_and_lists_what_it_would_do(tmp_path: Path):
     assert result.pull_request is None
 
 def test_nothing_is_done_for_a_repository_with_no_planned_files(tmp_path: Path):
+    """Checks that raise_pr skips a repository the plan has no files for and makes no GitHub calls.
+
+    Protects the raise job's matrix, which runs once per affected repository.
+    """
     plan = written_plan(tmp_path)
-    remote = FakeGitHub({"BHoM/Other": FakeRepository()})
+    remote = MockGitHub({"BHoM/Other": MockRepository()})
     result = raise_pr(remote, plan, "BHoM/Other", PR)
     assert remote.calls == [] and result.actions[0].kind == "skip"
 
 def test_a_repository_the_app_cannot_reach_is_an_error(tmp_path: Path):
+    """Checks that raise_pr raises a GitHubError when the repository is not reachable with the token.
+
+    Protects the raise job from silently dropping a C# change.
+    """
     plan = written_plan(tmp_path)
     with pytest.raises(GitHubError, match="not found"):
-        raise_pr(FakeGitHub({}), plan, REPO, PR)
+        raise_pr(MockGitHub({}), plan, REPO, PR)
 
 # ---------------------------------------------------------------- closing
 
 def test_closing_an_unmerged_python_pr_closes_the_linked_draft_with_a_comment(tmp_path: Path):
+    """Checks that close_linked closes the linked draft PR and comments that the Python PR was closed without merging when it was not merged.
+
+    Protects the close job of the linked-PR workflow.
+    """
     remote = github()
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     remote.calls.clear()
@@ -141,6 +188,10 @@ def test_closing_an_unmerged_python_pr_closes_the_linked_draft_with_a_comment(tm
     assert "closed without merging" in remote.repositories[REPO].comments[pull.number][0]
 
 def test_a_merged_python_pr_only_comments(tmp_path: Path):
+    """Checks that close_linked leaves the linked C# PR open and only comments that the Python PR was merged.
+
+    Protects the close job, since a person merges the C# PR.
+    """
     remote = github()
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     close_linked(remote, REPO, PR, merged=True)
@@ -148,11 +199,19 @@ def test_a_merged_python_pr_only_comments(tmp_path: Path):
     assert pull.state == "open" and "was merged" in remote.repositories[REPO].comments[pull.number][0]
 
 def test_closing_with_no_linked_pr_does_nothing():
+    """Checks that close_linked makes no changes and returns a skip action when no linked PR exists.
+
+    Protects the close job for Python PRs that needed no C# change.
+    """
     remote = github()
     result = close_linked(remote, REPO, PR, merged=False)
     assert remote.calls == [] and result.actions[0].kind == "skip"
 
 def test_closing_dry_run_writes_nothing(tmp_path: Path):
+    """Checks that a dry run of close_linked leaves the linked PR open and makes no GitHub calls.
+
+    Protects the preview of the close job.
+    """
     remote = github()
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     remote.calls.clear()
@@ -162,6 +221,10 @@ def test_closing_dry_run_writes_nothing(tmp_path: Path):
 # ---------------------------------------------------------------- allowed repositories
 
 def test_only_listed_repositories_may_get_pull_requests(tmp_path: Path):
+    """Checks that affected_repos accepts only repositories in the allowed listing (ignoring comments and blank lines), returns a problem for others, and uses the listing's spelling of the name.
+
+    Protects the repos job, which decides where draft PRs may be raised.
+    """
     allowed = tmp_path / "allowed.txt"
     allowed.write_text("# comment\n\nBHoM/Other_Toolkit\n", encoding="utf-8")
     base = read_package(demo_package(tmp_path / "base"))
@@ -175,6 +238,10 @@ def test_only_listed_repositories_may_get_pull_requests(tmp_path: Path):
     assert affected_repos(base, head, load_allowed(allowed)) == (["bhom/demo_toolkit"], [])
 
 def test_command_line_repos_prints_json_and_fails_for_a_repository_that_is_not_allowed(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Checks that py2cs repos prints the affected repositories as JSON and exits 1 with a message when one is not in the allowed listing.
+
+    Protects the repos job, which feeds the matrix of the raise job.
+    """
     demo_package(tmp_path / "base")
     demo_package(tmp_path / "head", ["ProjectNumber: str = ''"])
     allowed = tmp_path / "allowed.txt"
@@ -189,6 +256,10 @@ def test_command_line_repos_prints_json_and_fails_for_a_repository_that_is_not_a
     assert "not in the repository listing" in capsys.readouterr().err
 
 def test_plan_only_repo_leaves_the_other_repositories_out(tmp_path: Path):
+    """Checks that make_plan restricted to one repository (matching case-insensitively) leaves the files of other repositories out.
+
+    Protects the raise job, whose matrix plans one repository at a time.
+    """
     require_patcher()
     repo_root = csharp_tree(tmp_path / "clones")
     base = read_package(demo_package(tmp_path / "base"))
@@ -200,6 +271,10 @@ def test_plan_only_repo_leaves_the_other_repositories_out(tmp_path: Path):
 # ---------------------------------------------------------------- the command line, offline
 
 def test_command_line_dry_run_without_a_token_is_offline(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
+    """Checks that py2cs pr --dry-run with no token runs offline and prints what it would do (create the branch, open a draft PR) with exit code 0.
+
+    Lets people preview the linked PR without GitHub access.
+    """
     plan = written_plan(tmp_path)
     monkeypatch.delenv("PY2CS_CSHARP_TOKEN", raising=False)
     status = main(["pr", "--plan-dir", str(plan), "--repo", REPO, "--python-repo", PYTHON_REPO, "--python-pr", "7", "--dry-run"])
@@ -209,12 +284,20 @@ def test_command_line_dry_run_without_a_token_is_offline(tmp_path: Path, capsys:
     assert "would open draft pull request" in out
 
 def test_command_line_without_a_token_and_not_a_dry_run_is_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
+    """Checks that py2cs pr without a token and without --dry-run exits with 2 and says no token is held.
+
+    Protects the raise job from a silent pass when the app token is missing.
+    """
     plan = written_plan(tmp_path)
     monkeypatch.delenv("PY2CS_CSHARP_TOKEN", raising=False)
     assert main(["pr", "--plan-dir", str(plan), "--repo", REPO, "--python-repo", PYTHON_REPO, "--python-pr", "7"]) == 2
     assert "holds no token" in capsys.readouterr().err
 
 def test_make_client_reads_the_token_from_the_environment(monkeypatch: pytest.MonkeyPatch):
+    """Checks that make_client builds a RestClient from the token in the named environment variable and keeps the token out of the client's repr.
+
+    Protects the token handling of the pr, close and status commands.
+    """
     monkeypatch.setenv("SOME_TOKEN", "ghs_secret")
     client, offline = make_client("SOME_TOKEN")
     assert isinstance(client, RestClient) and not offline
@@ -226,16 +309,22 @@ class Recorder:
     """A transport that answers from a table and records every request."""
 
     def __init__(self, answers: dict[tuple[str, str], tuple[int, Any]]):
+        """Stores the canned answers keyed by (method, path) and starts an empty request log."""
         self.answers = answers
         self.requests: list[tuple[str, str, dict[str, str], Any]] = []
 
     def __call__(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> tuple[int, bytes]:
+        """Acts as the RestClient transport: records the request (method, path, headers, parsed body) and returns the canned status and JSON, or 404 Not Found."""
         path = url.removeprefix("https://api.github.com")
         self.requests.append((method, path, headers, json.loads(body) if body else None))
         status, data = self.answers.get((method, path), (404, {"message": "Not Found"}))
         return status, json.dumps(data).encode()
 
 def test_rest_client_calls_the_right_endpoints():
+    """Checks that each RestClient method calls the right GitHub REST endpoint with the right body and the bearer token.
+
+    Protects the GitHubClient that the pr, close and status commands use against the real GitHub.
+    """
     pull: dict[str, Any] = {"number": 3, "html_url": "https://github.com/o/r/pull/3", "head": {"ref": "python-schema/pr-7"}, "base": {"ref": "develop"}, "title": "t", "body": "b", "draft": True, "state": "open"}
     content = base64.b64encode(b"hello").decode()
     transport = Recorder({
@@ -278,11 +367,19 @@ def test_rest_client_calls_the_right_endpoints():
     assert all(h["Authorization"] == "Bearer tok" for _, _, h, _ in transport.requests)
 
 def test_rest_client_posts_a_new_comment_when_there_is_no_marker():
+    """Checks that upsert_comment posts a new comment when no existing comment has the marker.
+
+    Protects the Python PR comment that links to the draft C# PR.
+    """
     transport = Recorder({("GET", "/repos/o/r/issues/3/comments?per_page=100"): (200, [{"id": 1, "body": "someone else"}]), ("POST", "/repos/o/r/issues/3/comments"): (201, {})})
     RestClient("tok", transport=transport).upsert_comment("o/r", 3, MARKER, "text")
     assert transport.requests[-1][:2] == ("POST", "/repos/o/r/issues/3/comments")
 
 def test_rest_errors_name_the_call_but_never_the_token():
+    """Checks that a failed REST call raises a GitHubError that names the call and status and does not contain the token.
+
+    Protects the workflow logs from leaking the app token.
+    """
     transport = Recorder({("GET", "/repos/o/r"): (403, {"message": "Resource not accessible by integration"})})
     with pytest.raises(GitHubError) as error:
         RestClient("secret-token", transport=transport).default_branch("o/r")
@@ -290,5 +387,9 @@ def test_rest_errors_name_the_call_but_never_the_token():
     assert "secret-token" not in str(error.value)
 
 def test_a_client_without_a_token_is_refused():
+    """Checks that RestClient raises a GitHubError when given an empty token.
+
+    Protects the workflows from running unauthenticated.
+    """
     with pytest.raises(GitHubError):
         RestClient("")

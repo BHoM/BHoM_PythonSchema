@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
@@ -7,7 +8,8 @@ namespace PythonSchemaGeneration.Loading
     {
         /***************************************************/
 
-        //Loads every oM assembly of the given organisations from the BHoM folder
+        [Description("Loads every oM assembly of the requested organisations from the BHoM folder, in file name order, and reports each one loaded, skipped or failed. The " +
+            "generator's first stage: only these assemblies are searched for types to convert.")]
         public static List<Assembly> LoadOmAssemblies(string folder, IEnumerable<string> organisations, Reporting.Reporter reporter)
         {
             List<Assembly> result = new List<Assembly>();
@@ -41,6 +43,7 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Returns the types of an assembly, or only the types that loaded when some of them fail to load. The TypeSelector uses it so one broken dependency does not stop the run.")]
         public static Type[] SafeGetTypes(Assembly assembly)
         {
             try

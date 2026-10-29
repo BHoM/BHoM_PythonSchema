@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace PythonSchemaGeneration
 {
     //Finds groups of types that reference each other (strongly connected components)
@@ -5,7 +7,9 @@ namespace PythonSchemaGeneration
     {
         /***************************************************/
 
-        //Returns a predicate telling whether two types are part of the same reference cycle
+        [Description("Finds the groups of types that reference each other (strongly connected components, Tarjan's algorithm) in the given reference graph and returns a " +
+            "predicate telling whether two types are in the same cycle of more than one type. The Generator uses it after the first rendering pass so that only " +
+            "imports inside a cycle are written after the class.")]
         public static Func<Type, Type, bool> DetectFunction(Dictionary<Type, IEnumerable<Type>> references)
         {
             int counter = 0;
@@ -28,6 +32,8 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Visits one node of the depth-first search of Tarjan's algorithm: follows its references, updates the low-link numbers and assigns the node's strongly " +
+            "connected component number once the component is complete. Called by DetectFunction.")]
         private static void Visit(Type node, Dictionary<Type, IEnumerable<Type>> references, ref int counter, ref int components, Stack<Type> stack, HashSet<Type> onStack, Dictionary<Type, int> low, Dictionary<Type, int> index, Dictionary<Type, int> component)
         {
             index[node] = low[node] = counter++;

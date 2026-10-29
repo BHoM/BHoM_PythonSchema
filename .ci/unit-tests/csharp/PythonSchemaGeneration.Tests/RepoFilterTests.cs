@@ -9,6 +9,8 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Description("Builds generator options for the fixture and BHoM assemblies limited to one repository, with an optional output folder. Used by every test " +
+            "in this class.")]
         private static GenerationOptions Options(string repo, string output = null)
         {
             return new GenerationOptions
@@ -22,6 +24,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a repository run converts that repository's types plus only the base classes it depends on in other repositories. Protects the " +
+            "--repos filter of the generator.")]
         public void OnlyTheRequestedRepositoryIsConvertedPlusItsDependencies()
         {
             GenerationResult result = Generator.Run(Options(FixtureRepo));
@@ -36,6 +40,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that the repository filter matches names regardless of case. Protects the --repos option against capitalisation differences.")]
         public void RepositoryNamesAreMatchedWithoutRegardToCase()
         {
             Assert.That(Generator.Run(Options("bhom/csharpschema_test")).Types.Any(t => t.Model.ClrName == "BH.oM.FixtureAlpha.Beam"), Is.True);
@@ -44,6 +49,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a repository with no assembly produces a warning and converts no types. Protects the --repos option from silently doing nothing.")]
         public void ARepositoryWithNoAssemblyIsReportedAndConvertsNothing()
         {
             GenerationResult result = Generator.Run(Options("BHoM/Nowhere"));
@@ -54,6 +60,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that stale files are removed only for the requested repository's assemblies, files of other repositories stay and needed base classes " +
+            "are written. Protects OutputWriter in per-repository runs.")]
         public void CleanUpOnlyTouchesTheAssembliesOfTheRequestedRepository()
         {
             string folder = Path.Combine(Path.GetTempPath(), "pysg-repos-" + Guid.NewGuid().ToString("N"));

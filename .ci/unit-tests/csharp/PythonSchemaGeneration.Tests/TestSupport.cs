@@ -20,8 +20,14 @@ namespace PythonSchemaGeneration.Tests
             }
         }
 
+        [Description("Returns the path of a file or folder inside .ci/unit-tests/_output, where the NUnit tests write the generated Python and manifests that the " +
+            "pytest suites read.")]
         public static string Output(string name) { return Path.Combine(Root, ".ci", "unit-tests", "_output", name); }
+
+        [Description("Returns the path of a file inside .ci/unit-tests/golden, which holds the expected generator output and the patcher input files used by " +
+            "GoldenAssert and PatcherTests.")]
         public static string Golden(string name) { return Path.Combine(Root, ".ci", "unit-tests", "golden", name); }
+
         public static string SupportPackage { get { return Path.Combine(Root, "src", "bhom_schema"); } }
     }
 
@@ -50,6 +56,9 @@ namespace PythonSchemaGeneration.Tests
             }
         }
 
+        [Description("Recreates the folder, copies the hand-written support package into it and runs the generator over the fixture assemblies, optionally writing " +
+            "the manifest and report. FixtureOutput.Result uses it for the output the pytest suites read, and the determinism test uses it for two " +
+            "throw-away runs.")]
         public static GenerationResult Generate(string folder, bool withManifest)
         {
             if (Directory.Exists(folder))
@@ -69,7 +78,8 @@ namespace PythonSchemaGeneration.Tests
             return Generator.Run(options);
         }
 
-        //The generated modules import the hand-written support package, so the output folder needs a copy of it
+        [Description("Copies the hand-written bhom_schema __init__ and _support modules into the given package folder, because the generated modules import them. " +
+            "Every test that generates Python into a folder calls it first.")]
         public static void CopySupport(string package)
         {
             Directory.CreateDirectory(package);
@@ -80,6 +90,8 @@ namespace PythonSchemaGeneration.Tests
                 File.Copy(file, Path.Combine(support, Path.GetFileName(file)), true);
         }
 
+        [Description("Returns the generated type with the given CLR name from the shared fixture run. The fixture extraction tests use it to inspect the Python " +
+            "text and properties of one type.")]
         public static RenderedType Rendered(string clrName)
         {
             return Result.Types.Single(t => t.Model.ClrName == clrName);
@@ -95,12 +107,16 @@ namespace PythonSchemaGeneration.Tests
             "BHoM_Engine", "Reflection_Engine", "JsonSchema_Engine", "JsonSchema_oM"
         };
 
+        [Description("Lists the required real BHoM assemblies that are not in the default BHoM assembly folder. RequireOrSkip uses it to decide whether the " +
+            "real-type tests can run.")]
         public static List<string> Missing()
         {
             string folder = BHoMAdapter.DefaultAssemblyFolder();
             return Required.Where(a => !File.Exists(Path.Combine(folder, a + ".dll"))).ToList();
         }
 
+        [Description("Returns when all required real BHoM assemblies are installed; otherwise fails the test when the CI environment variable is true and ignores " +
+            "it locally, with a message naming the missing assemblies. The real-type and spike round-trip tests call it so CI never skips them silently.")]
         public static void RequireOrSkip()
         {
             List<string> missing = Missing();
@@ -121,7 +137,8 @@ namespace PythonSchemaGeneration.Tests
 
         private static GenerationResult m_Spike;
 
-        //Generates the spike set from the installed assemblies into _output/spike (including the support package)
+        [Description("Generates the Python (with support package, manifest and report) for the fixed set of real BHoM spike types from the installed assemblies " +
+            "into _output/spike, once, and returns the cached result. RealTypeTests and the pytest spike suite read it.")]
         public static GenerationResult Spike()
         {
             if (m_Spike != null)

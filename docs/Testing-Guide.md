@@ -61,6 +61,9 @@ You know this style already. Where to look:
 - `GoldenAndWorkflowTests.cs`: golden-file comparisons, deterministic output, clean-up of stale files, and a guard that the
   generator does not depend on the JSON schema repo.
 - `RoundTripTests.cs`: compiles the drafted C# with Roslyn and writes `draft-manifest.json`. Marked `[Category("RoundTrip")]`.
+- `DocumentationTests.cs`: every C# method and constructor under `.ci` has a `[Description]` saying what it does and where it fits in the
+  workflow. The Python counterpart is `test_py2cs/test_documentation.py`, which checks every function for a docstring. Golden expected-output
+  files are skipped. A new method fails these tests until it is described.
 
 Run only some of them with a filter:
 

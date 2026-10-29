@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using PythonSchemaGeneration.Mapping;
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
@@ -17,6 +18,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Creates an emitter that writes Python modules using the given type registry to resolve names and the reporter to collect warnings. The "
+            + "generator builds one and reuses it for every type in both render passes.")]
         public PythonEmitter(TypeRegistry registry, Reporter reporter)
         {
             m_TypeRegistry = registry;
@@ -25,6 +28,9 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Renders one language-neutral type model to the text of its Python module (header, imports, class with the __bhom__ marker and fields) and "
+            + "returns it with its properties and the types it references. The generator calls it for every selected type, then again with an early-import "
+            + "test from the CycleDetector so imports that would form a cycle move below the class.")]
         public RenderedType Render(TypeModel model, Func<Type, bool> isSafeForEarlyImport = null)
         {
             PyRef pyRef = m_TypeRegistry.Ref(model.Type);
@@ -55,6 +61,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Builds the Python class line for a type: its base classes (enum, SchemaModel, parent class, interfaces, ABC) and PEP 695 generic parameters "
+            + "with their bounds. Also returns notes for generic constraints that cannot be represented; Render puts them in the marker.")]
         private string ClassHeader(TypeModel model, NameTracker tracker, PyRef pyRef, out List<string> notes)
         {
             notes = new List<string>();
@@ -117,6 +125,9 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Builds the indented __bhom__ dictionary that records the C# name, assembly, namespace, repo, kind, generic parameters, interface members and "
+            + "renamed enum members. Interface members are also added to the rendered properties; Render places the result at the top of every generated "
+            + "class.")]
         private string Marker(TypeModel model, NameTracker tracker, List<string> notes, RenderedType rendered)
         {
             string any = tracker.AddStandardName("typing", "Any");
@@ -197,7 +208,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
-        //Interface members are only listed in the marker, but the types they use still need a Python class
+        [Description("Records the registered types used by an interface member type (looking inside arrays and generic arguments) so they are generated too, "
+            + "without importing them. Marker calls it for interface properties, because their types still need a Python class.")]
         private void Mention(Type type, NameTracker tracker)
         {
             if (type.FullName == "BH.oM.Base.FragmentSet")     //written as a list of fragments, see TypeMapper
@@ -224,6 +236,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Returns the marker text for a type kind (abstract, interface, enum, struct or class). Used by the emitter for the __bhom__ marker and by the "
+            + "ManifestWriter so both state the same kind.")]
         public static string KindText(TypeKind kind)
         {
             switch (kind)
@@ -238,6 +252,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Appends the member lines of an enum class (name = value, with the member description as a comment) to the class body, or a pass line when "
+            + "there are none. Render calls it for enum types.")]
         private void AddEnumMembers(TypeModel model, StringBuilder body, RenderedType rendered)
         {
             body.Append('\n');
@@ -258,6 +274,9 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Appends one annotated field line per property to the class body: maps the type, adds | None for null defaults, wraps the annotation with "
+            + "ClrType, Quantity, DisplayText and DynamicProperty markers, and writes the default, description and alias through Field. Also fills the "
+            + "rendered property list that the manifest uses; Render calls it for classes and structs.")]
         private void AddFields(TypeModel model, StringBuilder body, NameTracker tracker, RenderedType rendered)
         {
             bool first = true;
@@ -346,6 +365,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Joins the header comment, grouped imports, class line and body into the final module text, with imports of types in a cycle placed after the "
+            + "class followed by model_rebuild. The last step of Render.")]
         private string Assemble(TypeModel model, string classLine, string body, NameTracker tracker, PyRef pyRef)
         {
             StringBuilder sb = new StringBuilder();
@@ -406,6 +427,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Tells whether a module name is one of the Python standard library modules the generator imports from. Assemble uses it to put those imports "
+            + "in the first import group.")]
         private static bool IsStandardLib(string module)
         {
             return module == "abc" || module == "collections.abc" || module == "datetime" || module == "decimal" ||
@@ -414,6 +437,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Appends from-import lines for the given import entries, grouped by module and sorted so the output is deterministic. Assemble calls it for each import group.")]
         private static void AppendFromImports(StringBuilder sb, IEnumerable<ImportEntry> imports)
         {
             foreach (IGrouping<string, ImportEntry> group in imports.GroupBy(i => i.Module).OrderBy(g => g.Key, StringComparer.Ordinal))
@@ -427,6 +451,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Turns a C# description into an indented Python triple-quoted docstring, escaping backslashes and quotes. Render uses it for the class description.")]
         private static string Docstring(string text)
         {
             string escaped = text.Replace("\\", "\\\\").Replace("\"\"\"", "\\\"\\\"\\\"");

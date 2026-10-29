@@ -6,7 +6,8 @@ namespace PythonSchemaGeneration.Tests
 {
     public static class GoldenAssert
     {
-        //Set UPDATE_GOLDEN=1 to rewrite the expected files after an intended change, then review the diff
+        [Description("Compares generated text with the golden file of the same name, or rewrites the golden file when UPDATE_GOLDEN is 1, normalising line " +
+            "endings. Used by the golden tests to pin the exact generator output.")]
         public static void Matches(string goldenFolder, string relativePath, string actual)
         {
             string path = Path.Combine(TestPaths.Golden(goldenFolder), relativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -25,6 +26,8 @@ namespace PythonSchemaGeneration.Tests
     public class GoldenTests
     {
         [Test]
+        [Description("Checks that the Python generated for every fixture type is identical to its committed golden file. Protects the exact output of the " +
+            "generator against unintended changes.")]
         public void FixtureOutputMatchesGoldenFiles()
         {
             foreach (RenderedType type in FixtureOutput.Result.Types.Where(t => t.Ref.RelativePath.StartsWith("Fixture")))
@@ -32,6 +35,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that the manifest written for the fixture run is identical to the committed golden manifest. Protects the language-neutral manifest " +
+            "that py2cs and alignment read.")]
         public void FixtureManifestMatchesGolden()
         {
             GoldenAssert.Matches("fixtures", "manifest.json", File.ReadAllText(Path.Combine(FixtureOutput.Folder, "manifest.json")));
@@ -41,6 +46,7 @@ namespace PythonSchemaGeneration.Tests
     public class WorkflowTests
     {
         [Test]
+        [Description("Checks that two generator runs produce identical files with LF line endings. Protects the weekly generation workflow from committing noise.")]
         public void OutputIsDeterministic()
         {
             string a = Path.Combine(Path.GetTempPath(), "pysg-a-" + Guid.NewGuid().ToString("N"));
@@ -64,6 +70,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that a whole-assembly run deletes stale generated files and empty folders but keeps the hand-written support package. Protects " +
+            "OutputWriter's clean-up in the weekly generation.")]
         public void RegenerationRemovesStaleFilesButNeverTheSupportPackage()
         {
             string folder = Path.Combine(Path.GetTempPath(), "pysg-clean-" + Guid.NewGuid().ToString("N"));
@@ -97,6 +105,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that a run limited by a type filter does not delete existing files. Protects OutputWriter so partial runs cannot remove other " +
+            "generated modules.")]
         public void FilteredRunDoesNotDeleteAnything()
         {
             string folder = Path.Combine(Path.GetTempPath(), "pysg-partial-" + Guid.NewGuid().ToString("N"));
@@ -120,6 +130,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that an unknown name in the type filter is reported as a warning while the other requested types are still generated. Protects " +
+            "Generator's handling of the --types option.")]
         public void UnknownRequestedTypeIsReportedNotFatal()
         {
             GenerationResult result = Generator.Run(new GenerationOptions
@@ -132,6 +144,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that no file of the generator mentions the BHoM_JSONSchema repository. Protects the generator's independence from that repository.")]
         public void GeneratorHasNoDependencyOnTheJsonSchemaRepo()
         {
             string generation = Path.Combine(TestPaths.Root, ".ci", "generation");
@@ -143,6 +156,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that no generated type is placed in the hand-written support package. Protects TypeRegistry from overwriting support modules.")]
         public void HandWrittenSupportPackageIsNotGenerated()
         {
             Assert.That(FixtureOutput.Result.Types.Any(t => t.Ref.Module.StartsWith("bhom_schema._support")), Is.False);

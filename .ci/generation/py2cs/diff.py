@@ -23,20 +23,40 @@ class Diff:
     changes: list[TypeChange] = field(default_factory=lambda: [])
 
     def __bool__(self) -> bool:
+        """Returns True when there is at least one change.
+
+        Lets the workflow ask whether a pull request changes the schema.
+        """
         return bool(self.changes)
 
     def of_kind(self, kind: str) -> list[TypeChange]:
+        """Returns the changes of one kind (added, removed or modified).
+
+        Used when planning and reporting to treat new, removed and modified types separately.
+        """
         return [c for c in self.changes if c.kind == kind]
 
     def to_json(self) -> dict[str, Any]:
+        """Converts the diff to a JSON-ready dictionary of changes with their details and breaking items.
+
+        The `diff` command writes it so later workflow jobs can read it.
+        """
         return {"changes": [{"clrName": c.clr_name, "kind": c.kind, "details": c.details, "breaking": c.breaking} for c in self.changes]}
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "Diff":
+        """Rebuilds a Diff from the dictionary that `to_json` wrote.
+
+        Lets later steps of the linked-PR workflow read a saved diff.
+        """
         return Diff([TypeChange(c["clrName"], c["kind"], list(c["details"]), list(c.get("breaking", []))) for c in data["changes"]])
 
 
 def diff_manifests(base: Manifest, head: Manifest) -> Diff:
+    """Compares the Python manifest at the pull request base with the one at its head and returns a Diff of added, removed and modified types with details and breaking changes.
+
+    The start of the Python to C# flow: `plan`, `report`, `align` and the repos job all work from this result.
+    """
     changes: list[TypeChange] = []
     for key in sorted(set(base) | set(head)):
         before, after = base.get(key), head.get(key)
@@ -52,10 +72,18 @@ def diff_manifests(base: Manifest, head: Manifest) -> Diff:
 
 
 def describe(p: PropertyInfo) -> str:
+    """Returns a property as `<C# type> <name>` for use in change messages.
+
+    Used by `type_details` and `breaking_changes`.
+    """
     return f"{p.clr_type} {p.name}"
 
 
 def type_details(before: TypeInfo, after: TypeInfo) -> list[str]:
+    """Lists every change between two versions of a type: kind, bases, generics, description, properties added, removed or changed, and enum members.
+
+    Called by `diff_manifests`; the text goes into the pull request description.
+    """
     details: list[str] = []
     if before.kind != after.kind:
         details.append(f"kind changed from {before.kind} to {after.kind}")
@@ -100,10 +128,9 @@ def type_details(before: TypeInfo, after: TypeInfo) -> list[str]:
 
 
 def breaking_changes(before: TypeInfo, after: TypeInfo) -> list[str]:
-    """The changes of a modified type that can break existing C# code or saved data.
+    """Lists the changes of a modified type that can break existing C# code or saved data.
 
-    A removed property that has an added property of the same type to take its place is reported as a rename. That is a guess
-    from the types, so a person confirms it; it is breaking either way.
+    A removed property that has an added property of the same type to take its place is reported as a rename. That is a guess from the types, so a person confirms it; it is breaking either way.
     """
     breaking: list[str] = []
     if before.kind != after.kind:

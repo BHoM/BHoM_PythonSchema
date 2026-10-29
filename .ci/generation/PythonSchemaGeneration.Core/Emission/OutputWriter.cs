@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using PythonSchemaGeneration.Reporting;
 using System.Text;
 
@@ -11,9 +12,9 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
-        //Writes the rendered modules under <packageRoot>. With cleanRedundant=True, existing files of written assemblies that are no longer generated are removed.
-        //Only folders of assemblies in this run are touched, so the hand-written support package is never affected. When cleanAssemblies is given, only those
-        //assembly folders are cleaned: a run for one repository also writes the base classes it needs from another, and must not delete the rest of that one.
+        [Description("Writes the rendered modules (and empty __init__.py files for their folders) under the package root, skipping files whose text is unchanged, "
+            + "and returns the number of files written. With cleanRedundant it first deletes stale .py files in the folders of the written assemblies (only "
+            + "those in cleanAssemblies when given), so the hand-written support package is never touched. The generator's last file-writing stage.")]
         public static int Write(string packageRoot, IEnumerable<RenderedType> rendered, bool cleanRedundant, Reporter reporter, ISet<string> cleanAssemblies = null)
         {
             Dictionary<string, string> fileTextByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -59,6 +60,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Deletes .py files in the folders of the written assemblies that are no longer generated, then removes the empty folders. Write calls it when "
+            + "stale output must be cleaned; cleanAssemblies limits it to the assemblies of the requested repositories.")]
         private static void CleanRedundantExistingFiles(string packageRoot, Dictionary<string, string> fileTextByPath, ISet<string> cleanAssemblies)
         {
             foreach (string assembly in fileTextByPath.Keys.Select(k => k.Split('/')[0]).Distinct())
@@ -83,6 +86,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Recursively deletes the empty folders under a folder. CleanRedundantExistingFiles calls it after removing stale files.")]
         private static void RemoveEmptyDirectories(string folder)
         {
             foreach (string dir in Directory.GetDirectories(folder))

@@ -15,7 +15,10 @@ OUTPUT = REPO / ".ci" / "unit-tests" / "_output"
 
 
 def require_output(name: str) -> Path:
-    """The generated package folder, made by the NUnit run (dotnet test). Missing output fails in CI and skips locally."""
+    """Returns the folder of the generated `bhom_schema` package that the NUnit run wrote for a named set ('fixtures' or 'spike'), or fails the test in CI and skips it locally when it is missing.
+
+    The pytest suites for the generated package and the alignment checks call it first, since they all depend on the generator's output.
+    """
     package = OUTPUT / name / "bhom_schema"
     if (package / "__init__.py").exists():
         return package
@@ -26,7 +29,10 @@ def require_output(name: str) -> Path:
 
 
 def attach(package: Path) -> None:
-    """Make `bhom_schema.<Assembly>...` resolve to the generated folder, which wins over the committed classes in src."""
+    """Makes `bhom_schema.<Assembly>...` imports resolve to a generated package folder, ahead of the committed classes in `src`.
+
+    The conftest fixtures of `test_fixtures` and `test_spike` call it so the tests import what the generator just wrote, not the committed package.
+    """
     import bhom_schema
 
     path = str(package)
@@ -39,6 +45,10 @@ def attach(package: Path) -> None:
 
 
 def module_names(package: Path) -> list[str]:
+    """Lists the dotted module names of every generated class file in a package, skipping `__init__` files and the `_support` folder.
+
+    The fixture and spike suites use it to import every generated module and rebuild its model.
+    """
     names: list[str] = []
     for file in sorted(package.rglob("*.py")):
         relative = file.relative_to(package.parent).with_suffix("")
@@ -49,7 +59,10 @@ def module_names(package: Path) -> list[str]:
 
 
 def run_pyright(root: Path, include: str = "bhom_schema") -> subprocess.CompletedProcess[str]:
-    """Pyright strict over a generated package folder."""
+    """Writes a strict `pyrightconfig.json` in a generated package's root and runs pyright over it, returning the completed process.
+
+    The fixture and spike suites use it to check that the generator's output type-checks cleanly.
+    """
     config = root / "pyrightconfig.json"
     config.write_text('{ "include": ["%s"], "typeCheckingMode": "strict", "pythonVersion": "3.12", "extraPaths": ["."] }' % include, encoding="utf-8")
     return subprocess.run(

@@ -1,4 +1,5 @@
 using PythonSchemaGeneration.Loading;
+using System.ComponentModel;
 
 namespace PythonSchemaGeneration.Mapping
 {
@@ -17,6 +18,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Returns the generic type definition of a constructed generic type, or the type itself. Used wherever a generic type must be treated as one generated class.")]
         public static Type Definition(Type type)
         {
             return type.IsGenericType ? type.GetGenericTypeDefinition() : type;
@@ -24,14 +26,18 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Adds the definition of a type to the set of types that get a Python class. The Generator fills the registry with the selected types before extraction starts.")]
         public void Add(Type type) { m_Types.Add(Definition(type)); }
 
         /***************************************************/
 
+        [Description("Tells whether the type, or its generic definition, gets a Python class. The extractor and type mapper use it to decide whether a type is a generated oM type.")]
         public bool Contains(Type type) { return m_Types.Contains(Definition(type)); }
 
         /***************************************************/
 
+        [Description("Returns the Python name, relative path and module of the class generated for a type, built from the same path layout as the JSON schema and cached per " +
+            "type. Used by the mapper to write imports and by the output writer to place files.")]
         public PyRef Ref(Type type)
         {
             Type def = Definition(type);

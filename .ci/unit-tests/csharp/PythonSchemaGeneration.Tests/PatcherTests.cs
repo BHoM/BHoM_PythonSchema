@@ -49,6 +49,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that patching with no changes returns a real BHoM file and a demo file unchanged. Protects the Roslyn patcher's promise to touch only " +
+            "what a change names.")]
         public void NoChangesKeepTheFileByteForByte()
         {
             string bar = File.ReadAllText(TestPaths.Golden("patcher/Bar.cs"));
@@ -59,6 +61,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that adding a property to the real Bar class inserts only its attribute and property lines after the named neighbour and adds no " +
+            "notes. Protects the add-property change that py2cs sends to the patcher.")]
         public void AddedPropertyOnTheRealBarChangesOnlyItsLines()
         {
             string bar = File.ReadAllText(TestPaths.Golden("patcher/Bar.cs"));
@@ -77,6 +81,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that removing a property from the real Bar class also removes its attributes and comment but leaves the class attribute and other " +
+            "members. Protects the remove-property change.")]
         public void RemovedPropertyOnTheRealBarTakesItsAttributesAndKeepsTheOthers()
         {
             string bar = File.ReadAllText(TestPaths.Golden("patcher/Bar.cs"));
@@ -92,6 +98,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a property is added after the last member of a real dKoP class without disturbing anything else. Protects patching of files with " +
+            "a different layout.")]
         public void ARealDkopPropertyIsAddedAtTheEnd()
         {
             string source = File.ReadAllText(TestPaths.Golden("patcher/ProjectIdentification.cs"));
@@ -106,6 +114,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a property with an anchor is added after it and one without an anchor is added first, with the requested attributes. Protects " +
+            "property placement.")]
         public void PropertiesAreAddedAfterTheirNeighbourOrFirst()
         {
             PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null,
@@ -122,6 +132,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that removing a property also removes its leading comment and one blank line. Protects the formatting left behind by the " +
+            "remove-property change.")]
         public void RemovedPropertyTakesItsCommentAndOneBlankLine()
         {
             string text = Patch(Demo, "Demo", "BH.oM.Demo", null, new Change { Kind = "removeProperty", Name = "Name" }).Text;
@@ -131,6 +143,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that property types and initialisers are changed in place and that equal defaults such as 0 and 0.0 are left alone. Protects the " +
+            "set-type and set-initialiser changes.")]
         public void TypesAndDefaultsChangeInPlace()
         {
             PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null,
@@ -148,6 +162,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that descriptions on properties and the class are replaced, added or removed without touching other attributes. Protects the " +
+            "set-description change.")]
         public void DescriptionsAreReplacedAddedOrRemovedWithoutTouchingOtherAttributes()
         {
             PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null,
@@ -166,6 +182,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that attributes are removed and added by name and that removing an absent attribute produces a note. Protects the set-attributes " +
+            "change for quantities and display text.")]
         public void AttributesAreSwappedByName()
         {
             PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null,
@@ -183,6 +201,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that base types are added and removed by name and that a missing base produces a note. Protects the set-bases change.")]
         public void BasesAreAddedAndRemovedByName()
         {
             PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null, new Change { Kind = "setBases", Remove = { "IThing", "IMissing" }, Add = { "IOther", "BH.oM.Base.BHoMObject" } });
@@ -193,6 +212,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a member added to an enum without explicit values goes at the end with a note, so existing values do not shift. Protects the " +
+            "add-enum-member change.")]
         public void EnumMembersWithoutValuesOnlyGrowAtTheEnd()
         {
             PatchResult result = Patch(Demo, "Mode", "BH.oM.Demo", null, new Change { Kind = "addEnumMember", Name = "Medium", Value = "2", After = "Slow" });
@@ -203,6 +224,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that enum members with explicit values are added, removed and renumbered in place, with descriptions. Protects the enum member changes.")]
         public void EnumMembersWithValuesAreAddedRemovedAndRenumbered()
         {
             PatchResult result = Patch(Demo, "Coded", "BH.oM.Demo", new List<string> { "System.ComponentModel" },
@@ -217,6 +239,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that missing using directives are added once and existing ones are not duplicated. Protects the usings that the changes require.")]
         public void MissingUsingsAreAddedOnce()
         {
             string text = Patch(Demo, "Demo", "BH.oM.Demo", new List<string> { "System.ComponentModel", "BH.oM.Quantities.Attributes" },
@@ -227,6 +250,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a property added to an immutable class is get-only and produces a note about the constructor. Protects patching of immutable types.")]
         public void GetOnlyClassesGetGetOnlyPropertiesAndANote()
         {
             string source = Lf("""
@@ -252,6 +276,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that properties are added to interfaces without a modifier and inside regions in the right place. Protects patching of interfaces and " +
+            "region-structured files.")]
         public void InterfacesAndRegionsKeepTheirShape()
         {
             string source = Lf("""
@@ -283,6 +309,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that patching a CRLF file adds only CRLF line endings. Protects files that use Windows line endings from mixed endings.")]
         public void WindowsLineEndingsAreKept()
         {
             string source = Demo.Replace("\n", "\r\n");
@@ -294,6 +321,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a missing type throws and a missing member leaves the file unchanged with a note. Protects the patcher from guessing when the C# " +
+            "differs from what py2cs expected.")]
         public void AMissingTypeOrMemberIsReportedNotGuessed()
         {
             Assert.Throws<InvalidOperationException>(() => Patch(Demo, "Nowhere"));
@@ -304,6 +333,8 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Description("Builds a file job for the given type, namespace, usings and changes and runs the patcher on the source, returning the patched text and " +
+            "notes. Used by every test in this class.")]
         private static PatchResult Patch(string source, string type, string ns = "BH.oM.Demo", List<string> usings = null, params Change[] changes)
         {
             FileJob job = new FileJob { Type = type, Namespace = ns, Usings = usings ?? new List<string>(), Changes = changes.ToList() };
@@ -312,6 +343,7 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Description("Converts line endings of the text to LF so raw-string sources are the same on every platform. Used for the demo sources in this class.")]
         private static string Lf(string text)
         {
             return text.Replace("\r\n", "\n");
@@ -319,6 +351,7 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Description("Counts how many times a part occurs in a text. Used to check how many DocumentationURL attributes remain after a removal.")]
         private static int Count(string text, string part)
         {
             return (text.Length - text.Replace(part, "").Length) / part.Length;

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text;
 
 namespace PythonSchemaGeneration.Mapping
@@ -15,11 +16,13 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Tells whether a name is a Python keyword. Identifier uses it to decide whether a trailing underscore is needed.")]
         public static bool IsKeyword(string name) { return m_Keywords.Contains(name); }
 
         /***************************************************/
 
-        //Makes any name a valid Python identifier. Keywords get a trailing underscore.
+        [Description("Turns any text into a valid Python identifier: invalid characters become underscores, a leading digit gets an underscore in front, and a Python " +
+            "keyword gets a trailing underscore. Used for field, enum member, folder and module names throughout the emission stage.")]
         public static string Identifier(string name)
         {
             StringBuilder sb = new StringBuilder();
@@ -35,7 +38,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
-        //Python class name for a C# type: the generic arity marker becomes an underscore (Output`1 -> Output_1)
+        [Description("Returns the Python class name of a C# type, turning the generic arity marker into an underscore (Output`1 becomes Output_1) and making the result a " +
+            "valid identifier. The TypeRegistry uses it to build the module reference of each type.")]
         public static string TypeName(Type definition)
         {
             return Identifier(definition.Name.Replace('`', '_'));

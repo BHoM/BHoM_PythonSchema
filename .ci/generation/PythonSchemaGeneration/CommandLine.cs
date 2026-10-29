@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace PythonSchemaGeneration
 {
     //The command line of the generator. Options that are not known are an error, so a misspelt one is not silently ignored.
@@ -22,6 +24,8 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Parses the generator's command-line arguments into the generation options and the warning-baseline paths, or sets an error for an unknown option, a "
+            + "missing value or a missing --output. The first stage of the generator's Program, which exits with code 2 on an error.")]
         public static CommandLine Parse(string[] args)
         {
             CommandLine result = new CommandLine();
@@ -68,6 +72,7 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Stores an error message and returns the command line so Parse can report a failure in one statement.")]
         private CommandLine Fail(string message)
         {
             Error = message;
@@ -76,6 +81,7 @@ namespace PythonSchemaGeneration
 
         /***************************************************/
 
+        [Description("Splits a comma-separated option value into trimmed, non-empty items. Used for --org, --repos and --types.")]
         private static List<string> Split(string text)
         {
             return text.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();

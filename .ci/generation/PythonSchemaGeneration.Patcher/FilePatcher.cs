@@ -23,6 +23,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Parses the C# source of one file with Roslyn and remembers its text and line-break style. Created only by Patch, so every edit of a file works on one "
+            + "parsed copy of the original.")]
         private FilePatcher(string source)
         {
             m_Source = source;
@@ -33,7 +35,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("Applies the changes of a job to the source of one file. Changes that cannot be made are listed in the notes.")]
+        [Description("Applies the member-level changes of one file job to the source of an existing C# file and returns the new text with notes for changes that could not "
+            + "be made. The patcher's entry point: Program calls it once per file of the job that py2cs writes, and only the changed members are touched.")]
         public static PatchResult Patch(string source, FileJob job)
         {
             return new FilePatcher(source).Apply(job);
@@ -41,6 +44,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Finds the type named in the job and applies each change to it as an edit on the original text, then adds new properties or enum members and any "
+            + "missing usings. Throws when the file does not declare the type; unknown change kinds are noted and skipped.")]
         private PatchResult Apply(FileJob job)
         {
             BaseTypeDeclarationSyntax type = FindType(job.Type, job.Namespace);
@@ -97,6 +102,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Finding things                            ****/
         /***************************************************/
 
+        [Description("Finds the class, struct, interface or enum with the given name in the parsed file, preferring the one in the given namespace and noting when it falls "
+            + "back to another namespace. Locates the type that the patch changes.")]
         private BaseTypeDeclarationSyntax FindType(string name, string ns)
         {
             List<BaseTypeDeclarationSyntax> candidates = m_Root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Where(t => t.Identifier.ValueText == name).ToList();
@@ -112,6 +119,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the dotted namespace that encloses a syntax node, from the outermost namespace to the innermost. Used by FindType to match the Python class's namespace.")]
         private static string NamespaceOf(SyntaxNode node)
         {
             return string.Join(".", node.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(n => n.Name.ToString()));
@@ -119,6 +127,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Lists the property declarations of a class, struct or interface, or an empty list for an enum. Used to look up, anchor and add properties.")]
         private static List<PropertyDeclarationSyntax> Properties(BaseTypeDeclarationSyntax type)
         {
             if (type is TypeDeclarationSyntax declaration)
@@ -129,7 +138,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("The property or enum member with that name, or the type itself for an empty name. A missing member is noted.")]
+        [Description("Finds the property or enum member with the given name in a type, returning the type itself for an empty name (a change to the type). Notes that the "
+            + "member was not found, so that change is left for the developer to make by hand.")]
         private MemberDeclarationSyntax FindMember(BaseTypeDeclarationSyntax type, string name, string purpose)
         {
             if (string.IsNullOrEmpty(name))
@@ -147,6 +157,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Lists the attributes with a given name on a member, ignoring the Attribute suffix. Used by the description and attribute changes to find what to replace or remove.")]
         private static IEnumerable<AttributeSyntax> FindAttributes(SyntaxList<AttributeListSyntax> lists, string name)
         {
             string wanted = StripAttributeSuffix(name);
@@ -155,6 +166,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the plain name of an attribute without namespace qualifier or Attribute suffix. Lets FindAttributes match names however the existing file writes them.")]
         private static string AttributeName(AttributeSyntax attribute)
         {
             NameSyntax name = attribute.Name;
@@ -169,6 +181,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Removes a trailing Attribute from an attribute name so Description and DescriptionAttribute compare equal.")]
         private static string StripAttributeSuffix(string name)
         {
             return name.EndsWith("Attribute") && name.Length > "Attribute".Length ? name.Substring(0, name.Length - "Attribute".Length) : name;
@@ -178,6 +191,9 @@ namespace PythonSchemaGeneration.Patcher
         /**** Properties                                ****/
         /***************************************************/
 
+        [Description("Inserts the properties of the addProperty changes into a type as new lines, after the property named in the change or first when none is named, using "
+            + "the type's indentation and line breaks. Notes properties that already exist, types that cannot hold properties and get-only types, so only the new "
+            + "lines are added to the file.")]
         private void AddProperties(BaseTypeDeclarationSyntax type, List<Change> changes)
         {
             if (changes.Count == 0)
@@ -229,6 +245,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Builds the C# text of one new property (accessors, virtual modifier and initialiser) for a class, struct or interface. Used by AddProperties.")]
         private static string PropertyLine(TypeDeclarationSyntax declaration, Change change, bool readOnly)
         {
             string name = Identifier(change.Name);
@@ -243,6 +260,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Tells whether a property has accessors but no setter or init accessor. AddProperties uses it to add new properties as get-only when all existing ones are.")]
         private static bool IsGetOnly(PropertyDeclarationSyntax property)
         {
             return property.AccessorList != null && !property.AccessorList.Accessors.Any(a => a.IsKind(SyntaxKind.SetAccessorDeclaration) || a.IsKind(SyntaxKind.InitAccessorDeclaration));
@@ -250,6 +268,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Removes the property named in a removeProperty change together with its attributes and comments. Applies a property deletion of the Python class to the existing C# file.")]
         private void RemoveProperty(BaseTypeDeclarationSyntax type, Change change)
         {
             MemberDeclarationSyntax property = FindMember(type, change.Name, "removal");
@@ -259,6 +278,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Replaces the type of the named property with the type of a setPropertyType change, unless it is already the same ignoring spaces. Applies a changed "
+            + "property type of the Python class and leaves the rest of the declaration untouched.")]
         private void SetPropertyType(BaseTypeDeclarationSyntax type, Change change)
         {
             if (FindMember(type, change.Name, "type") is not PropertyDeclarationSyntax property)
@@ -270,6 +291,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Replaces, adds or removes the initialiser (default value) of the named property for a setPropertyInitialiser change, doing nothing when the value is "
+            + "already equivalent. Properties with an expression body are noted and left for the developer to change.")]
         private void SetPropertyInitialiser(BaseTypeDeclarationSyntax type, Change change)
         {
             if (FindMember(type, change.Name, "default") is not PropertyDeclarationSyntax property)
@@ -296,6 +319,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Attributes                                ****/
         /***************************************************/
 
+        [Description("Replaces, adds or removes the Description attribute of the named member (or of the type) for a setDescription change. Applies a changed docstring of "
+            + "the Python class while leaving other attributes in place.")]
         private void SetDescription(BaseTypeDeclarationSyntax type, Change change)
         {
             MemberDeclarationSyntax member = FindMember(type, change.Name, "description");
@@ -314,6 +339,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Removes the attributes listed in a setAttributes change from a member and inserts the new ones on lines above it. Applies attribute changes such as "
+            + "quantity or unit attributes from the Python class.")]
         private void SetAttributes(BaseTypeDeclarationSyntax type, Change change)
         {
             MemberDeclarationSyntax member = FindMember(type, change.Name, "attributes");
@@ -347,7 +374,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("Removes one attribute, and its whole list or line when nothing else is in it.")]
+        [Description("Removes one attribute from a member, together with its whole list or line when nothing else is in it. Used by the description and attribute changes.")]
         private void RemoveAttribute(AttributeSyntax attribute)
         {
             AttributeListSyntax list = (AttributeListSyntax)attribute.Parent;
@@ -384,6 +411,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Bases                                     ****/
         /***************************************************/
 
+        [Description("Removes and adds base types and interfaces in the base list of a class or struct for a setBases change, keeping the bases that stay. Notes bases that "
+            + "were not written in the file, and writes nothing when the list is unchanged.")]
         private void SetBases(BaseTypeDeclarationSyntax type, Change change)
         {
             if (type is not TypeDeclarationSyntax declaration)
@@ -428,6 +457,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Enum members                              ****/
         /***************************************************/
 
+        [Description("Inserts the members of the addEnumMember changes into an enum as new lines, with explicit values and descriptions where needed. Without explicit "
+            + "values new members only go at the end so the existing values do not shift, and each decision that differs from the request is noted.")]
         private void AddEnumMembers(BaseTypeDeclarationSyntax type, List<Change> changes)
         {
             if (changes.Count == 0)
@@ -518,6 +549,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Removes the named enum member together with its comments for a removeEnumMember change. Refuses members that share a line with others and notes when "
+            + "the values of later members shift.")]
         private void RemoveEnumMember(BaseTypeDeclarationSyntax type, Change change)
         {
             if (FindMember(type, change.Name, "removal") is not EnumMemberDeclarationSyntax member)
@@ -542,6 +575,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Replaces or adds the explicit value of the named enum member for a setEnumValue change. Applies a changed enum value of the Python class.")]
         private void SetEnumValue(BaseTypeDeclarationSyntax type, Change change)
         {
             if (FindMember(type, change.Name, "value") is not EnumMemberDeclarationSyntax member)
@@ -555,6 +589,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the position of the enum member with the given name, or -1. Used by AddEnumMembers to place new members after a named member.")]
         private static int IndexOf(SeparatedSyntaxList<EnumMemberDeclarationSyntax> members, string name)
         {
             for (int i = 0; i < members.Count; i++)
@@ -570,6 +605,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Usings                                    ****/
         /***************************************************/
 
+        [Description("Adds the using directives the job needs that the file does not already have, after the last existing using or above the first member. Apply calls it "
+            + "only when some edit was made, so untouched files stay as they are.")]
         private void AddUsings(List<string> usings)
         {
             HashSet<string> existing = m_Root.Usings
@@ -594,7 +631,8 @@ namespace PythonSchemaGeneration.Patcher
         /**** Text helpers                              ****/
         /***************************************************/
 
-        [Description("Removes the lines of a member and its comments, with one blank line next to it so the spacing between the others stays the same.")]
+        [Description("Removes the lines of a member with the comments directly above it, plus one neighbouring blank line so the spacing of the other members stays the "
+            + "same. Used when a property is removed.")]
         private void RemoveMemberLines(SyntaxNode node)
         {
             int start = LineStart(StartWithComments(node));
@@ -613,7 +651,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("Where a member starts, including the comments written directly above it (with no blank line between).")]
+        [Description("Returns the position where a member's directly preceding comments start, so edits that remove or insert before a member keep its comments with it.")]
         private static int StartWithComments(SyntaxNode node)
         {
             int start = node.SpanStart;
@@ -644,6 +682,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the indentation used by the existing members of a type, or one level deeper than the type when it is empty. New properties and enum members are written with it.")]
         private string MemberIndent(BaseTypeDeclarationSyntax type)
         {
             SyntaxNode first = null;
@@ -657,6 +696,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Joins lines of text into a block that is indented and ends each line with the file's own line break. Builds the text of inserted members.")]
         private string Lines(string indent, IEnumerable<string> lines)
         {
             return string.Concat(lines.Select(l => indent + l + m_NewLine));
@@ -664,6 +704,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the line number of a position in the original text. Used to tell whether two nodes share a line.")]
         private int LineNumber(int position)
         {
             return m_Text.Lines.GetLineFromPosition(position).LineNumber;
@@ -671,6 +712,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the position where the line of a given position starts in the original text. Used to insert whole lines.")]
         private int LineStart(int position)
         {
             return m_Text.Lines.GetLineFromPosition(position).Start;
@@ -678,6 +720,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the position just after the line break of the line holding a given position. Used to insert or remove after a whole line.")]
         private int NextLineStart(int position)
         {
             return m_Text.Lines.GetLineFromPosition(position).EndIncludingLineBreak;
@@ -685,6 +728,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns the leading whitespace of the line at a position. Used to indent inserted attribute lines like the member they belong to.")]
         private string IndentAt(int position)
         {
             string line = m_Text.Lines.GetLineFromPosition(position).ToString();
@@ -693,6 +737,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Tells whether a line of the original text exists and is empty or whitespace. RemoveMemberLines uses it to decide which blank line goes with a removed member.")]
         private bool IsBlank(int lineNumber)
         {
             return lineNumber < m_Text.Lines.Count && string.IsNullOrWhiteSpace(m_Text.Lines[lineNumber].ToString());
@@ -700,6 +745,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns a name as a valid C# identifier, adding @ when it is a keyword. Applied to names of new properties and enum members.")]
         private static string Identifier(string name)
         {
             return SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
@@ -707,6 +753,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Removes all whitespace from a text so that C# types and values can be compared regardless of formatting.")]
         private static string Normalise(string text)
         {
             return new string((text ?? "").Where(c => !char.IsWhiteSpace(c)).ToArray());
@@ -714,7 +761,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("True when two initialisers mean the same value, for example 0 and 0.0, or null and no initialiser.")]
+        [Description("Tells whether two initialisers mean the same value, for example 0 and 0.0, or null and no initialiser. SetPropertyInitialiser uses it to avoid "
+            + "rewriting a default that has not really changed.")]
         private static bool SameValue(string current, string wanted)
         {
             current = current == "null" ? null : current;
@@ -732,7 +780,8 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
-        [Description("True when two base types are the same, comparing the simple name when one of them is written with its namespace.")]
+        [Description("Tells whether two base types are the same, comparing the simple name when one is written with its namespace. SetBases uses it to match bases from "
+            + "Python with those in the file.")]
         private static bool SameType(string a, string b)
         {
             return Normalise(a) == Normalise(b) || SimpleName(a) == SimpleName(b);
@@ -740,6 +789,7 @@ namespace PythonSchemaGeneration.Patcher
 
         /***************************************************/
 
+        [Description("Returns a type name without its namespace but keeping generic arguments. Used by SameType.")]
         private static string SimpleName(string text)
         {
             string name = Normalise(text);

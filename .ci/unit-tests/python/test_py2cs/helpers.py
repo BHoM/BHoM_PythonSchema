@@ -13,7 +13,10 @@ GOLDEN = Path(__file__).resolve().parents[2] / "golden" / "py2cs"
 
 
 def require_patcher() -> None:
-    """Tests that plan changes to existing C# files run the built C# patcher. Missing, they fail in CI and skip locally."""
+    """Skips the calling test when the built C# patcher is missing, or fails it when the CI environment variable is true.
+
+    Every test that plans changes to an existing C# file calls it first, because those plans run the Roslyn patcher.
+    """
     from py2cs.patch import BUILD_HINT, default_patcher
 
     if default_patcher().exists():
@@ -25,6 +28,10 @@ def require_patcher() -> None:
 
 
 def write(root: Path, relative: str, source: str) -> Path:
+    """Writes dedented source text to a file under root (creating folders) and returns its path.
+
+    Used by the py2cs tests that need one hand-made source file on disk.
+    """
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(source).lstrip("\n"), encoding="utf-8", newline="\n")
@@ -32,7 +39,10 @@ def write(root: Path, relative: str, source: str) -> Path:
 
 
 def assert_golden(name: str, actual: str) -> None:
-    """Compare with a committed file; UPDATE_GOLDEN=1 rewrites it (then review the diff)."""
+    """Asserts that the text equals the committed golden file under golden/py2cs, ignoring line endings, or rewrites that file when UPDATE_GOLDEN=1.
+
+    Protects the whole-file C# that csharp.emit_new drafts for new types from unintended changes.
+    """
     path = GOLDEN / name
     actual = actual.replace("\r\n", "\n")
     if os.environ.get("UPDATE_GOLDEN") == "1":
@@ -57,7 +67,10 @@ def module(
     type_params: str = "",
     doc: str | None = None,
 ) -> str:
-    """Source text in the exact style the C# generator writes."""
+    """Builds the source text of one generated-style Python module (a class, enum or interface with its __bhom__ marker, imports and body) in the exact style the C# generator writes.
+
+    The base of every hand-built package in the py2cs tests.
+    """
     lines = ["from __future__ import annotations", ""]
     lines += ["from typing import Annotated, Any, ClassVar", "from pydantic import Field", "from bhom_schema._support import ClrType, DisplayText, Quantity, SchemaModel"]
     lines += list(imports) + ["", "", f"class {cls}{type_params}({bases}):"]
@@ -78,7 +91,10 @@ def module(
 
 
 def package(root: Path, files: dict[str, str]) -> Path:
-    """Writes modules under <root>/bhom_schema and returns that folder."""
+    """Writes the given modules under <root>/bhom_schema and returns that folder, which py2cs reads as the Python package (base or head of a change).
+
+    Used by nearly every py2cs test to set up input.
+    """
     pkg = root / "bhom_schema"
     pkg.mkdir(parents=True, exist_ok=True)
     for relative, source in files.items():
@@ -89,7 +105,10 @@ def package(root: Path, files: dict[str, str]) -> Path:
 
 
 def demo_package(root: Path, extra_fields: Iterable[str] = ()) -> Path:
-    """Interface + a ProjectIdentification-like class + an enum + a generic, all in Demo_oM."""
+    """Builds the standard demo package in Demo_oM: an interface IdentityBase, a class ProjectInfo that derives from it (plus any extra fields) and an enum Mode.
+
+    The default input of the diff, plan, align, PR and status tests.
+    """
     return package(root, {
         "Demo_oM/IdentityBase.py": module("IdentityBase", "BH.oM.Demo.IdentityBase", "BH.oM.Demo", "Demo_oM", kind="interface", bases="ABC",
                                           imports=["from abc import ABC"]),
@@ -104,11 +123,18 @@ def demo_package(root: Path, extra_fields: Iterable[str] = ()) -> Path:
 
 
 def cs(namespace: str, declaration: str) -> str:
+    """Returns the text of a minimal C# file that declares one type in the given namespace.
+
+    csharp_tree uses it to fake the existing .cs files of a C# repository.
+    """
     return f"using System;\n\nnamespace {namespace}\n{{\n    {declaration}\n    {{\n    }}\n}}\n"
 
 
 def csharp_tree(root: Path) -> Path:
-    """A repository whose folders do not follow the namespaces, like many real ones."""
+    """Writes a fake C# repository (Demo_Toolkit) whose folders do not follow the namespaces, with same-named types, several types in one file and an obj folder to ignore, and returns its path.
+
+    The locate, place, plan, PR and breaking-change tests run against it.
+    """
     repo = root / "Demo_Toolkit"
     files = {
         "Demo_oM/AdministrativeInformation/ProjectInfo.cs": cs("BH.oM.Demo", "public class ProjectInfo : IdentityBase"),

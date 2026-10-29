@@ -9,6 +9,10 @@ def only(plan: Plan, repo: str) -> Plan:
     return Plan([f for f in plan.files if f.repo.lower() == repo.lower()], [(r, t) for r, t in plan.removed if r.lower() == repo.lower()], plan.errors)
 
 def render_report(plan: Plan, python_pr: str = "", only_repo: str | None = None) -> str:
+    """Writes the text of the C# pull request for a plan: the dependency on the Python PR, breaking changes, then per repository each file with its location, changes and notes, removed types and problems.
+
+    With only_repo, only that repository is described. `plan` writes the whole report and one report per repository, and `pr` uses the latter as the pull request body.
+    """
     if only_repo is not None:
         plan = only(plan, only_repo)
 

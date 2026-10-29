@@ -22,6 +22,8 @@ class Resolution:
 
 
 def normalise(repo: str) -> str:
+    """Reduces a repository given as a url, with a trailing slash or a .git suffix, to Owner/Name. Used by `resolve_repo` on the repo recorded in a class.
+    """
     text = repo.strip().rstrip("/")
     if "github.com/" in text:
         text = text.split("github.com/", 1)[1]
@@ -31,6 +33,8 @@ def normalise(repo: str) -> str:
 
 
 def load_listing(path: Path) -> Listing:
+    """Reads a repository listing json (repository to top-level folders) from a file. The `plan` and `resolve` commands use it to validate and scan repositories.
+    """
     return {k: list(v) for k, v in json.loads(path.read_text(encoding="utf-8")).items()}
 
 
@@ -40,6 +44,10 @@ def build_listing(clones: dict[str, Path]) -> Listing:
 
 
 def resolve_repo(info: TypeInfo, listing: Listing | None = None) -> Resolution:
+    """Returns the repository that owns a class: the one recorded in the class (checked against the listing when there is one), otherwise the only listed repository with a folder named after the assembly.
+
+    Raises ResolveError when the repository is unknown or ambiguous. `plan`, `repos` and `resolve` use it to decide where the C# of each class goes.
+    """
     by_lower = {k.lower(): k for k in (listing or {})}
 
     if info.repo:

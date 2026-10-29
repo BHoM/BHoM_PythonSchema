@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace PythonSchemaGeneration.Mapping
 {
 
@@ -24,6 +26,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Creates the tracker for one generated module, given the type being generated, its Python name and the names already used by fields and generic " +
+            "parameters. The PythonEmitter creates one per type.")]
         public NameTracker(Type self, string selfName, IEnumerable<string> reserved)
         {
             m_Self = self;
@@ -37,11 +41,13 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Marks a name as taken so that no import can use it as its local name. Not called by the generator code at present.")]
         public void Reserve(string name) { m_ReservedNames.Add(name); }
 
         /***************************************************/
 
-        //Import of a standard or support name, for example AddStandardName("typing", "Any")
+        [Description("Registers an import of a standard library or support name, such as typing Any, and returns the local name to write in the annotation. The TypeMapper " +
+            "uses it for Python types that are not generated oM types.")]
         public string AddStandardName(string module, string name)
         {
             return Add(module, name, name, false, false, null);
@@ -49,7 +55,9 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
-        //Reference to a generated oM type. top: the name is needed while the class is being defined (bases, enum defaults).
+        [Description("Registers a reference to a generated oM type, records it among the module's references, and returns the local name to write: the class name for the " +
+            "type itself, otherwise an import that is early when it is safe or needed for the class definition. The TypeMapper calls it for oM types; the " +
+            "references later feed the CycleDetector.")]
         public string Reference(Type type, PyRef pyRef, bool isSafeForEarlyImport)
         {
             Type def = TypeRegistry.Definition(type);
@@ -65,6 +73,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Adds an import (module and name) and returns its local name, reusing an existing import of the same source. Resolves clashes with fields and other " +
+            "imports by prefixing the assembly name and then appending underscores. Used by AddStandardName and Reference.")]
         private string Add(string module, string name, string preferredName, bool isSafeForEarlyImport, bool isOm, Type omType, string assembly = null)
         {
             string key = module + ":" + name;
@@ -89,6 +99,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Tells whether a local name is already reserved or used by an import. Used by Add to keep names unique inside a module.")]
         private bool IsTaken(string local)
         {
             return m_ReservedNames.Contains(local) || m_ImportByLocal.ContainsKey(local);

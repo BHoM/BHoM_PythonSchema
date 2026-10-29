@@ -17,7 +17,10 @@ TEST_BUILD = REPO / ".ci" / "unit-tests" / "csharp" / "PythonSchemaGeneration.Te
 
 @pytest.fixture
 def assemblies(tmp_path: Path) -> Path:
-    """A folder with just the fixture oM assemblies and BHoM.dll, like the folder of a build of the merged C#."""
+    """Fixture that copies the fixture oM assemblies and `BHoM.dll` from the test build into a temporary folder and returns it, or fails in CI and skips locally if the generator or build is missing.
+
+    The `py2cs align` tests pass it as `--assemblies`, like the folder of a build of the merged C#.
+    """
     sources = [TEST_BUILD / name for name in ("FixtureAlpha_oM.dll", "FixtureBeta_oM.dll", "BHoM.dll")]
     if not default_generator().exists() or not all(s.exists() for s in sources):
         message = f"the generator or the test build is missing; {BUILD_HINT}"
@@ -32,17 +35,28 @@ def assemblies(tmp_path: Path) -> Path:
     return folder
 
 def copy_fixtures(destination: Path) -> Path:
+    """Copies the generated fixtures package into a `bhom_schema` folder under the given folder and returns it.
+
+    Builds the base and head package roots that the `py2cs align` tests compare.
+    """
     shutil.copytree(require_output("fixtures"), destination / "bhom_schema")
     return destination / "bhom_schema"
 
 def edit(package: Path, old: str, new: str) -> None:
+    """Replaces a text in the generated `Beam.py` of a package, asserting that the text exists, and writes the file back.
+
+    Lets the align tests make a Python PR that differs from the C#.
+    """
     path = package / BEAM
     text = path.read_text(encoding="utf-8")
     assert old in text
     path.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
 
 def test_a_pr_that_matches_the_csharp_passes(tmp_path: Path, assemblies: Path, capsys: pytest.CaptureFixture[str]):
-    """The base lacks the Small property that the C# already has; the PR adds it exactly as the C# says."""
+    """Checks that `py2cs align` exits 0 and reports no differences when the PR adds a property exactly as the generator writes it from the C#.
+
+    Protects the pull request check that lets a correct Python change through.
+    """
     base = copy_fixtures(tmp_path / "base")
     text = (base / BEAM).read_text(encoding="utf-8")
     (base / BEAM).write_text("".join(line for line in text.splitlines(keepends=True) if not line.startswith("    Small:")), encoding="utf-8", newline="\n")
@@ -53,6 +67,10 @@ def test_a_pr_that_matches_the_csharp_passes(tmp_path: Path, assemblies: Path, c
     assert "1 classes compared, 0 differences" in capsys.readouterr().out
 
 def test_a_pr_that_differs_from_the_csharp_lists_the_difference(tmp_path: Path, assemblies: Path, capsys: pytest.CaptureFixture[str]):
+    """Checks that `py2cs align` exits 1 and names the property and default value that differ when the PR changes a default from the C#.
+
+    Protects the pull request check that stops Python that diverges from the merged C#.
+    """
     base = copy_fixtures(tmp_path / "base")
     head = copy_fixtures(tmp_path / "head")
     edit(head, "Count: Annotated[int, ClrType('long')] = 3", "Count: Annotated[int, ClrType('long')] = 4")
@@ -62,6 +80,10 @@ def test_a_pr_that_differs_from_the_csharp_lists_the_difference(tmp_path: Path, 
     assert "difference: BH.oM.FixtureAlpha.Beam.Count: default differs: '3' != '4'" in capsys.readouterr().out
 
 def test_a_class_the_csharp_does_not_have_fails(tmp_path: Path, assemblies: Path, capsys: pytest.CaptureFixture[str]):
+    """Checks that `py2cs align` exits 1 and reports a class missing from the C# when the PR adds a class the C# does not have.
+
+    Protects the pull request check that stops Python classes whose C# was not merged.
+    """
     base = copy_fixtures(tmp_path / "base")
     head = copy_fixtures(tmp_path / "head")
     (head / "FixtureAlpha_oM" / "Proposed.py").write_text(

@@ -20,6 +20,7 @@ class Status:
     url: str = ""
 
 def short(repo: str, pull: PullRequest) -> str:
+    """Returns a linked pull request as Owner/Name#number for the status text. Used by `linked_status`."""
     return f"{repo}#{pull.number}"
 
 def linked_status(client: GitHubClient, repos: list[str], python_pr: int) -> Status | None:

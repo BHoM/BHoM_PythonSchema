@@ -11,6 +11,10 @@ from py2cs.reader import read_package
 
 
 def test_reads_interface_class_and_enum(tmp_path: Path):
+    """Checks that read_package reads an interface, a class and an enum with kind, bases, namespace, assembly, repository, path, properties, defaults and enum members.
+
+    Protects the reader stage, which turns the Python into the manifest that diff and plan use.
+    """
     manifest = read_package(demo_package(tmp_path))
     assert sorted(manifest) == ["BH.oM.Demo.IdentityBase", "BH.oM.Demo.Mode", "BH.oM.Demo.ProjectInfo"]
 
@@ -26,6 +30,10 @@ def test_reads_interface_class_and_enum(tmp_path: Path):
 
 
 def test_reads_every_annotation_shape(tmp_path: Path):
+    """Checks that the reader maps every annotation shape (generics, collections, tuple, nullable, enum, alias, datetime, decimal, UUID, ClrType override, quantity, display text, description) to the right C# type and default.
+
+    Protects the type mapping of the reader.
+    """
     pkg = package(tmp_path, {
         "A_oM/Target.py": module("Target", "BH.oM.A.Target", "BH.oM.A", "A_oM", repo="BHoM/A"),
         "A_oM/Kind.py": module("Kind", "BH.oM.A.Kind", "BH.oM.A", "A_oM", repo="BHoM/A", kind="enum", bases="Enum", imports=["from enum import Enum"], body=["One = 1"]),
@@ -76,6 +84,10 @@ def test_reads_every_annotation_shape(tmp_path: Path):
 
 
 def test_manifest_round_trips_through_json(tmp_path: Path):
+    """Checks that a manifest written with dump_manifest and loaded with load_manifest equals the original.
+
+    Protects the manifest file that the py2cs commands pass between workflow steps.
+    """
     manifest = read_package(demo_package(tmp_path))
     dump_manifest(manifest, tmp_path / "m.json")
     again = load_manifest(tmp_path / "m.json")
@@ -83,6 +95,10 @@ def test_manifest_round_trips_through_json(tmp_path: Path):
 
 
 def test_unsupported_annotation_is_reported(tmp_path: Path):
+    """Checks that an unsupported annotation (a union of two types) makes read_package raise a ValueError.
+
+    Protects the reader from silently dropping a field.
+    """
     pkg = package(tmp_path, {"A_oM/Bad.py": module("Bad", "BH.oM.A.Bad", "BH.oM.A", "A_oM", body=["Value: int | str = 1"])})
     with pytest.raises(ValueError):
         read_package(pkg)
@@ -91,6 +107,10 @@ def test_unsupported_annotation_is_reported(tmp_path: Path):
 # ---------------------------------------------------------------- diff
 
 def changed(tmp_path: Path, extra: list[str] | None = None, **edits: str):
+    """Builds the demo package as base and as head (with extra fields and with whole modules replaced by the keyword arguments) and returns both manifests.
+
+    The diff tests use it to produce two versions of the package.
+    """
     base = read_package(demo_package(tmp_path / "base"))
     head_root = demo_package(tmp_path / "head", extra or [])
     for relative, source in edits.items():
@@ -99,17 +119,29 @@ def changed(tmp_path: Path, extra: list[str] | None = None, **edits: str):
 
 
 def test_diff_of_identical_packages_is_empty(tmp_path: Path):
+    """Checks that diff_manifests of two identical packages is empty.
+
+    Protects the diff stage from false changes that would raise unneeded C# PRs.
+    """
     base, head = changed(tmp_path)
     assert not diff_manifests(base, head)
 
 
 def test_diff_property_added(tmp_path: Path):
+    """Checks that an added property gives one modified change with the detail property added.
+
+    Protects the diff stage, which decides what the C# PR changes.
+    """
     base, head = changed(tmp_path, ["ProjectNumber: str = ''"])
     diff = diff_manifests(base, head)
     assert [(c.clr_name, c.kind, c.details) for c in diff.changes] == [("BH.oM.Demo.ProjectInfo", "modified", ["property added: string ProjectNumber"])]
 
 
 def test_diff_added_removed_and_changed(tmp_path: Path):
+    """Checks that diff_manifests reports an added class, a removed class and a modified class with removed and added properties, a type change, a default change and a base change.
+
+    Protects the diff stage, which decides what the C# PR changes.
+    """
     base = read_package(demo_package(tmp_path / "base"))
     head_root = demo_package(tmp_path / "head")
     (head_root / "Demo_oM" / "Mode.py").unlink()
@@ -130,6 +162,10 @@ def test_diff_added_removed_and_changed(tmp_path: Path):
 
 
 def test_diff_enum_members(tmp_path: Path):
+    """Checks that diff_manifests reports a changed enum value and an added enum member.
+
+    Protects the diff stage for enums.
+    """
     base = read_package(demo_package(tmp_path / "base"))
     head_root = demo_package(tmp_path / "head")
     (head_root / "Demo_oM" / "Mode.py").write_text(module(

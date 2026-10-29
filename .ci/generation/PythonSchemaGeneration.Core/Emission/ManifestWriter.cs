@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using PythonSchemaGeneration.Model;
 using System.Text.Json;
 
@@ -8,6 +9,8 @@ namespace PythonSchemaGeneration.Emission
     {
         /***************************************************/
 
+        [Description("Serializes the rendered types, sorted by C# name, to the indented language-neutral manifest JSON (schema version 1). The generator writes it "
+            + "next to the Python so the tests and py2cs can compare the Python with what the C# says.")]
         public static string ToJson(IEnumerable<RenderedType> rendered)
         {
             List<object> types = rendered
@@ -27,6 +30,8 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
+        [Description("Builds the manifest entry of one rendered type: names, paths, kind, bases, repo, description, generic parameters, properties with defaults, "
+            + "quantities and display text, and enum members. Called by ToJson for every type.")]
         private static Dictionary<string, object> Describe(RenderedType r)
         {
             TypeModel model = r.Model;

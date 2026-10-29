@@ -52,6 +52,10 @@ class TypeNode:
 
 
 def parse_type(text: str) -> TypeNode:
+    """Parses C# type text such as `List<int>?` or `double[,]` into a TypeNode tree, raising ValueError when text is left over.
+
+    The drafting code uses it to shorten names and to read collection types.
+    """
     node, index = _parse(text, 0)
     if index != len(text):
         raise ValueError(f"cannot parse C# type {text!r}")
@@ -59,6 +63,10 @@ def parse_type(text: str) -> TypeNode:
 
 
 def _parse(text: str, i: int) -> tuple[TypeNode, int]:
+    """Parses one type name, its generic arguments and its `?` or array suffixes starting at an index, and returns the node with the next index.
+
+    Recursive worker of `parse_type`.
+    """
     start = i
     while i < len(text) and (text[i].isalnum() or text[i] in "._"):
         i += 1
@@ -99,9 +107,17 @@ class Names:
     _simple: dict[str, str] = field(default_factory=lambda: {})
 
     def render(self, text: str) -> str:
+        """Writes C# type text with qualified names shortened to simple names, recording the usings they need.
+
+        Used when drafting whole files and member changes so the code uses `using` directives like hand-written BHoM code.
+        """
         return self._render(parse_type(text))
 
     def _render(self, node: TypeNode) -> str:
+        """Renders one TypeNode: shortens a qualified name unless its simple name is ambiguous or already taken by another namespace, and adds the namespace to the usings.
+
+        Worker of `render`, also called with built nodes by `Defaults`.
+        """
         name = node.name
         if "." in name:
             namespace, simple = name.rsplit(".", 1)
@@ -120,6 +136,10 @@ class Names:
 
 
 def csharp_string(text: str) -> str:
+    """Returns text as a C# string literal in double quotes, escaping backslashes, quotes and control characters.
+
+    Used for `[Description]` and `[DisplayText]` attributes and string defaults in drafted C#.
+    """
     out = ['"']
     for c in text:
         if c == "\\":
@@ -144,11 +164,18 @@ def csharp_string(text: str) -> str:
 
 class Defaults:
     def __init__(self, names: Names, manifest: Manifest):
+        """Stores the name shortener and manifest used to translate Python defaults into C# initialisers.
+
+        Created per type by `render_type` and by `patch` for member-level changes.
+        """
         self.names = names
         self.manifest = manifest
 
     def initialiser(self, prop: PropertyInfo) -> str | None:
-        """C# initialiser text for a property default, or None when there is none or it cannot be translated."""
+        """Translates the Python default of a property to C# initialiser text, or None when it has no default or cannot be translated.
+
+        Used when drafting new files and new members; untranslatable defaults become reviewer notes.
+        """
         if not prop.has_default or prop.default is None:
             return None
         text = prop.default
@@ -162,6 +189,10 @@ class Defaults:
     # -- literals
 
     def _literal(self, node: ast.expr, prop: PropertyInfo) -> str | None:
+        """Translates a literal Python default (number, string, bool, Decimal, UUID, datetime, timedelta, enum member, signed number) to a C# expression; raises ValueError otherwise.
+
+        Worker of `initialiser`.
+        """
         clr = prop.clr_type.rstrip("?")
         if isinstance(node, ast.Constant):
             value = node.value
@@ -216,6 +247,10 @@ class Defaults:
 
     @staticmethod
     def _float(value: float, clr: str) -> str:
+        """Formats a Python float as a C# literal, with infinities as `double` constants and an `f` suffix for `float` properties.
+
+        Used by `_literal`.
+        """
         if value == float("inf"):
             return "double.PositiveInfinity"
         if value == float("-inf"):
@@ -228,6 +263,10 @@ class Defaults:
     # -- factories
 
     def _factory(self, text: str, prop: PropertyInfo) -> str | None:
+        """Translates a `default_factory` (list, set, dict, uuid4, Color, datetime.now, or a lambda building a class, colour, collection or rectangular array) to a C# initialiser; raises ValueError otherwise.
+
+        Worker of `initialiser` for fields whose default is built per instance.
+        """
         clr = prop.clr_type.rstrip("?")
         node = ast.parse(text, mode="eval").body
         if isinstance(node, ast.Name):
@@ -265,6 +304,10 @@ class Defaults:
         raise ValueError(f"cannot translate factory {text}")
 
     def _concrete(self, clr: str) -> str:
+        """Returns the C# text of a type that can be constructed, replacing a collection interface with its usual class.
+
+        Used by `_factory` and `_new_collection` to write `new ...`.
+        """
         node = parse_type(clr)
         if node.suffix.startswith("["):
             return self.names.render(clr)
@@ -274,6 +317,10 @@ class Defaults:
         return self.names._render(node)  # pyright: ignore[reportPrivateUsage]
 
     def _new_collection(self, clr: str) -> str:
+        """Returns a `new` expression for an empty collection of the given C# type: an empty array, a read-only wrapper around an empty one, or the plain class.
+
+        Used by `_factory` for empty list, set and dict defaults.
+        """
         node = parse_type(clr)
         if node.suffix.startswith("[") and "," not in node.suffix:
             element = TypeNode(node.name, node.args, "")
@@ -287,6 +334,10 @@ class Defaults:
 
     @staticmethod
     def _element(clr: str) -> str:
+        """Returns the text of the first generic argument of a type, or the type without its suffix, as the element type of a collection.
+
+        Used by `_factory` to translate the items of a list or set default.
+        """
         node = parse_type(clr)
         if node.args:
             return _format(node.args[0])
@@ -294,6 +345,10 @@ class Defaults:
 
 
 def _format(node: TypeNode) -> str:
+    """Writes a TypeNode back to C# text without shortening any name.
+
+    Used by `Defaults._element` to build a type for translating collection items.
+    """
     text = node.name
     if node.args:
         text += "<" + ", ".join(_format(a) for a in node.args) + ">"
@@ -303,7 +358,10 @@ def _format(node: TypeNode) -> str:
 # ------------------------------------------------------------------------------------------------ rendering
 
 def ambiguous_names(manifest: Manifest) -> frozenset[str]:
-    """Simple type names that more than one type of the manifest uses. Writing them unqualified could bind to the wrong type."""
+    """Returns the simple type names that more than one type of the manifest uses. Writing them unqualified could bind to the wrong type, so they are always written in full.
+
+    Passed to `Names` by `render_type` and by `patch`.
+    """
     owners: dict[str, set[str]] = {}
     for info in manifest.values():
         owners.setdefault(info.simple_name, set()).add(info.clr_name.split("`")[0])
@@ -311,10 +369,9 @@ def ambiguous_names(manifest: Manifest) -> frozenset[str]:
 
 
 def render_type(info: TypeInfo, manifest: Manifest, notes: list[str] | None = None, read_only_required: bool = False) -> tuple[str, set[str]]:
-    """The namespace block for one type, and the namespaces it needs.
+    """Returns the namespace block of C# for one type (enum, class, struct or interface) and the namespaces it needs.
 
-    Fields without a default become settable properties without an initial value, unless read_only_required is set: they then
-    become get-only properties set by a constructor, as in the immutable oM types they were generated from.
+    Fields without a default become settable properties without an initial value, unless read_only_required is set: they then become get-only properties set by a constructor, as in the immutable oM types they were generated from. `emit_new` calls it when py2cs drafts a whole new file.
     """
     names = Names(info.namespace, ambiguous_names(manifest))
     defaults = Defaults(names, manifest)
@@ -323,6 +380,10 @@ def render_type(info: TypeInfo, manifest: Manifest, notes: list[str] | None = No
     indent = "    "
 
     def attribute(text: str) -> str:
+        """Formats an attribute as an indented bracketed line.
+
+        A small helper inside `render_type` that no code currently calls.
+        """
         return f"{indent * 2}[{text}]"
 
     if info.description:
@@ -339,6 +400,10 @@ def render_type(info: TypeInfo, manifest: Manifest, notes: list[str] | None = No
 
 
 def _enum(info: TypeInfo, usings: set[str]) -> list[str]:
+    """Returns the C# lines of an enum: `[Flags]` for flags enums, members with descriptions and explicit values when they are not simply sequential.
+
+    Called by `render_type` for the enum kind.
+    """
     indent = "    "
     lines: list[str] = []
     if info.flags:
@@ -358,6 +423,10 @@ def _enum(info: TypeInfo, usings: set[str]) -> list[str]:
 
 
 def _class_like(info: TypeInfo, manifest: Manifest, names: Names, defaults: Defaults, usings: set[str], notes: list[str] | None, read_only_required: bool) -> list[str]:
+    """Returns the C# lines of a class, abstract class, struct or interface: header with bases and generic constraints, properties and, for required fields, a constructor.
+
+    Called by `render_type`; adds reviewer notes for fields drafted without an initial value.
+    """
     indent = "    "
     lines: list[str] = []
     keyword = {"interface": "interface", "struct": "struct"}.get(info.kind, "class")
@@ -401,16 +470,27 @@ CSHARP_KEYWORDS = {"abstract", "as", "base", "bool", "break", "byte", "case", "c
 
 
 def identifier(name: str) -> str:
+    """Returns a property name, prefixed with `@` when it is a C# keyword.
+
+    Used when writing properties and constructor assignments in drafted C#.
+    """
     return "@" + name if name in CSHARP_KEYWORDS else name
 
 
 def parameter_name(name: str) -> str:
+    """Returns a property name as a constructor parameter name: first letter lower-cased, prefixed with `@` when it is a C# keyword.
+
+    Used by `_constructor` when drafting get-only types.
+    """
     text = name[:1].lower() + name[1:]
     return "@" + text if text in CSHARP_KEYWORDS else text
 
 
 def _constructor(info: TypeInfo, required: list[PropertyInfo], names: Names) -> list[str]:
-    """Types with required fields are immutable in the oM: a constructor takes them, the properties only have getters."""
+    """Returns the C# lines of a constructor taking the required fields and assigning them to the get-only properties.
+
+    Called by `_class_like` when `read_only_required` is set; types with required fields are immutable in the oM.
+    """
     indent = "        "
     parameters = ", ".join(f"{names.render(p.clr_type)} {parameter_name(p.name)}" for p in required)
     lines = [f"{indent}/***************************************************/",
@@ -425,7 +505,10 @@ def _constructor(info: TypeInfo, required: list[PropertyInfo], names: Names) -> 
 
 
 def property_attributes(prop: PropertyInfo, usings: set[str]) -> list[str]:
-    """The C# attributes of a property, without the square brackets."""
+    """Returns the C# attributes of a property, without the square brackets: Description, quantity, DisplayText and DynamicProperty, adding the usings they need.
+
+    Used by `_property` for new files and by `patch` for new members of existing files.
+    """
     attributes: list[str] = []
     if prop.description:
         usings.add("System.ComponentModel")
@@ -442,12 +525,19 @@ def property_attributes(prop: PropertyInfo, usings: set[str]) -> list[str]:
     return attributes
 
 def untranslated_default(prop: PropertyInfo, initialiser: str | None) -> str | None:
-    """A reviewer note when a Python default has no C# translation."""
+    """Returns a reviewer note when a Python default has no C# translation, or None.
+
+    Used when drafting new files and members so the pull request tells the reviewer to set the default by hand.
+    """
     if prop.has_default and initialiser is None and prop.default not in (None, "None"):
         return f"the default {prop.default} of {prop.name} could not be translated to C#; set it by hand"
     return None
 
 def _property(info: TypeInfo, prop: PropertyInfo, names: Names, defaults: Defaults, usings: set[str], notes: list[str] | None, read_only: bool = False) -> list[str]:
+    """Returns the C# lines of one property: its attributes and either an interface accessor or a `public virtual` property with an initialiser translated from the Python default.
+
+    Called by `_class_like` for each field of a new type.
+    """
     indent = "        "
     lines = [f"{indent}[{a}]" for a in property_attributes(prop, usings)]
 
@@ -470,11 +560,18 @@ def _property(info: TypeInfo, prop: PropertyInfo, names: Names, defaults: Defaul
 # ------------------------------------------------------------------------------------------------ files
 
 def _using_lines(namespaces: set[str]) -> list[str]:
+    """Returns sorted `using` lines for a set of namespaces, with System namespaces last.
+
+    Used by `emit_new` to write the top of a drafted file.
+    """
     return [f"using {ns};" for ns in sorted(namespaces, key=lambda n: (n.startswith("System"), n))]
 
 
 def emit_new(info: TypeInfo, manifest: Manifest, notes: list[str] | None = None, read_only_required: bool = False) -> str:
-    """A whole new C# file for a type that does not exist yet. Reviewer notes are added to notes."""
+    """Returns the text of a whole new C# file (copyright header, usings and namespace block) for a type that does not exist yet. Reviewer notes are added to notes.
+
+    The `plan` step uses it for added types, and the `plan` command writes the result into the draft C# repository.
+    """
     block, namespaces = render_type(info, manifest, notes, read_only_required)
     usings = "\n".join(_using_lines(namespaces))
     return COPYRIGHT + "\n" + (usings + "\n\n" if usings else "") + block

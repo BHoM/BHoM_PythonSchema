@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (82 tests), pytest (156 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (84 tests), pytest (158 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -65,7 +65,7 @@ BHoM_PythonSchema/
 │  │  ├─ PythonSchemaGeneration.Core/   C# class library: all the real logic (testable)
 │  │  └─ py2cs/                         Python package, the Python → C# converter (python -m py2cs)
 │  │     ├─ reader / diff / locate / place / emitter / report / resolve
-│  │     └─ pr.py                       GitHub client interface + PR raiser (real client and fake client)
+│  │     └─ pr.py                       GitHub client interface + PR raiser (real client and mock client)
 │  └─ unit-tests/
 │     ├─ csharp/
 │     │  ├─ PythonSchemaGeneration.Tests/     NUnit tests
@@ -211,7 +211,7 @@ and under test, never overwritten by the generator.
 | `place` | Chooses a path for a **new** type: folder of sibling types in the same namespace, else `Enums/` convention, else namespace folder, else assembly root; the choice is stated in the PR |
 | `emitter` | New type → whole new file (BHoM copyright header, namespace, usings, `[Description]`, properties, enum members). Modified type → **member-level patch**: py2cs writes a change list and the Roslyn patcher (`PythonSchemaGeneration.Patcher`) changes only those members, keeping everything else in the file (audit 1, step 2) |
 | `report` | Structured change report per type (added/removed/changed members) for the PR body, with a "Breaking changes" section and the `breaking-change` label (`plan.json` carries `labels`) |
-| `pr` | Creates or updates the draft C# PR and the links back (section 8); real and fake GitHub clients |
+| `pr` | Creates or updates the draft C# PR and the links back (section 8); real and mock GitHub clients |
 | `__main__` | `python -m py2cs check / manifest / diff / align / plan / drafts / resolve` (`pr` comes with phase 8) |
 
 The reader does static parsing instead of importing so it can run on exactly the files a PR changed, on the base
@@ -394,8 +394,8 @@ installed, the real-type tests and the full-corpus run. A phase is only finished
 | Locating the C# repository for the linked PR | `__bhom__["repo"]` used first; scan fallback; case-insensitive; unknown assembly gives a clear error | pytest |
 | Class carries what the Action needs | `__bhom__` has CLR name, namespace, assembly and repo on every generated class | pytest |
 | The weekly generation never raises C# PRs | It commits directly and `linked-csharp-pr.yml` only triggers on `pull_request`, never on `push` | workflow review + dry run |
-| Idempotent re-run | Pushing again to the same Python PR updates the same C# branch and PR, no duplicates | pytest with fake GitHub client |
-| Closing the Python PR | Closed unmerged → linked C# PRs closed with a comment; merged → comment only | pytest with fake GitHub client |
+| Idempotent re-run | Pushing again to the same Python PR updates the same C# branch and PR, no duplicates | pytest with mock GitHub client |
+| Closing the Python PR | Closed unmerged → linked C# PRs closed with a comment; merged → comment only | pytest with mock GitHub client |
 | App token is least-privilege | One token per target repository, minted for that repository only; token never printed | workflow review + dry run |
 | Fork PRs | Workflow does not run with the App secrets on fork PRs | workflow condition check |
 | The spike set | Phase 1 golden, phase 2 extraction, phase 3 emission, phase 4 metadata, phase 5 locate/diff, phase 6 round trips | all layers |
@@ -496,7 +496,7 @@ this repository.
 `py2cs.pr` talks to GitHub only through a small `GitHubClient` interface (get repo, list tree, create or update branch and
 file, create or update PR, comment, close). The real client wraps the REST API directly (the `gh` CLI is not installed on
 this machine, so local dry runs must not depend on it; GitHub-hosted runners have it, but we don't rely on it). Tests use a
-fake client with recorded responses, so branch naming, idempotence and the close behaviour are unit-tested
+mock client with recorded responses, so branch naming, idempotence and the close behaviour are unit-tested
 without network access.
 
 ### 8.4 What I need from you before phase 8c

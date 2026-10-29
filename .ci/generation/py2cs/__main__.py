@@ -26,6 +26,10 @@ from py2cs.resolve import ResolveError, load_listing, resolve_repo
 from py2cs.github import GitHubError
 
 def main(argv: list[str] | None = None) -> int:
+    """Builds the argument parser with every command and its options, parses the arguments, runs them and turns failures into exit codes (1 for Python read errors, 2 for GitHub, alignment and value errors).
+
+    It is the entry point of `python -m py2cs`, used by the workflows and the tests.
+    """
     parser = argparse.ArgumentParser(prog="py2cs", description="Python to C# converter for the BHoM schema")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -120,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 def run(args: argparse.Namespace) -> int:
+    """Dispatcher of the commands: runs the command named in the arguments (check, manifest, diff, align, repos, plan, pr, close, status, verify, drafts or resolve), prints its result and returns the exit code.
+
+    Each branch wires the py2cs modules together for one workflow step; unknown commands return 2.
+    """
     if args.command == "check":
         result = check_package(args.root, args.base_root)
         for error in result.errors:
@@ -168,6 +176,8 @@ def run(args: argparse.Namespace) -> int:
         listing = load_listing(args.listing) if args.listing else load_allowed(args.allowed_repos) if args.allowed_repos else None
 
         def clone_for(repo: str) -> Path | None:
+            """Finds the local checkout of a C# repository under the clones folder, by the repository name and ignoring case, or returns None. Passed to `make_plan` by the `plan` command.
+            """
             if args.clones_parent is None:
                 return None
             path = args.clones_parent / repo.split("/")[-1]
@@ -177,6 +187,7 @@ def run(args: argparse.Namespace) -> int:
             return matches[0] if matches else None
 
         def patch_with(patches: list[FilePatch]) -> list[PatchResult]:
+            """Runs the C# patcher with the dll path given on the command line. Passed to `make_plan` by the `plan` command when --patcher is set."""
             return run_patcher(patches, args.patcher)
 
         patcher: Patcher | None = patch_with if args.patcher else None

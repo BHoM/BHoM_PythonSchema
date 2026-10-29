@@ -10,22 +10,25 @@ from pathlib import Path
 
 from py2cs.compare import compare_manifests
 from py2cs.diff import diff_manifests
-from py2cs.github import FakeGitHub, FakeRepository, GitHubClient, RestClient
+from py2cs.github import MockGitHub, MockRepository, GitHubClient, RestClient
 from py2cs.model import Manifest, load_manifest
 from py2cs.reader import read_package
 from py2cs.resolve import Listing, ResolveError, resolve_repo
 
 def load_allowed(path: Path) -> Listing:
-    """The repositories that C# pull requests may be raised in, one Owner/Name per line (# starts a comment).
+    """Reads Converted-repositories.txt, the list of repositories that C# pull requests may be raised in, as a repository listing.
 
-    A Python pull request names its repository itself (in __bhom__), so without this list it could aim a pull request at any
-    repository the GitHub App can reach.
+    The `repos` and `plan` commands use it to refuse any class whose `__bhom__` names another repository, so a Python pull request cannot aim
+    a draft pull request at a repository the GitHub App can reach but that is not part of the loop. One Owner/Name per line, # starts a comment.
     """
     repos = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
     return {repo: [] for repo in repos}
 
 def affected_repos(base: Manifest, head: Manifest, listing: Listing | None) -> tuple[list[str], list[str]]:
-    """(repositories, problems): the repositories that own the added, removed or changed classes."""
+    """Lists the C# repositories that own the classes a Python change adds, removes or modifies, and the classes whose repository cannot be resolved or is not allowed.
+
+    The `repos` command prints the list as the matrix of the linked-PR workflow, which raises one draft pull request per repository.
+    """
     repos: set[str] = set()
     problems: list[str] = []
     for change in diff_manifests(base, head).changes:
@@ -54,8 +57,9 @@ print(json.dumps({"count": count, "failures": failures}))
 """
 
 def verify_package(package: Path, manifest: Path | None = None) -> tuple[int, list[str]]:
-    """(number of modules, problems): every module of a generated package imports, and it reads back as the C# manifest says.
+    """Checks a generated package: imports every module, and compares what py2cs reads back from the files with the C# manifest. Returns the number of modules and the problems.
 
+    The `verify` command runs it in the weekly generation workflow before anything is committed, so a package that does not import or does not match the C# is never committed.
     The imports run in a separate interpreter, so the checked package does not mix with the one installed in this environment.
     """
     problems: list[str] = []
@@ -74,13 +78,13 @@ def verify_package(package: Path, manifest: Path | None = None) -> tuple[int, li
     return count, problems
 
 def make_client(token_env: str | None, offline_repos: list[str] | None = None) -> tuple[GitHubClient, bool]:
-    """(client, offline). The token is read from an environment variable, so it is never on a command line.
+    """Creates the GitHub client for the `pr`, `close` and `status` commands from a token held in an environment variable, and says whether it is an offline stand-in.
 
-    Without a token and with offline_repos, empty in-memory repositories stand in, for a dry run on a laptop.
+    The token is never on a command line. Without a token and with offline_repos, a MockGitHub with empty repositories stands in, so a dry run on a laptop prints what would be done without calling GitHub.
     """
     token = os.environ.get(token_env or "", "")
     if token:
         return RestClient(token), False
     if offline_repos is not None:
-        return FakeGitHub({repo: FakeRepository() for repo in offline_repos}), True
+        return MockGitHub({repo: MockRepository() for repo in offline_repos}), True
     raise ValueError(f"the environment variable {token_env} holds no token")

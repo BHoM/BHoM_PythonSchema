@@ -25,14 +25,20 @@ class Placement:
 
 
 def cs_files(folder: Path) -> list[Path]:
+    """Lists the .cs files under a folder, sorted, skipping build and tool folders such as obj, bin and .git. `locate` and `place` search these files.
+    """
     return sorted(p for p in folder.rglob("*.cs") if not (SKIPPED_FOLDERS & set(p.relative_to(folder).parts[:-1])))
 
 
 def read(path: Path) -> str:
+    """Reads a C# file as text, dropping a byte order mark and ignoring undecodable bytes. Used by `locate` and `place` to look at declarations and namespaces.
+    """
     return path.read_text(encoding="utf-8-sig", errors="ignore")
 
 
 def assembly_folder(repo_root: Path, assembly: str) -> Path | None:
+    """Finds the folder of an assembly directly under the repository root, ignoring case, or returns None. `locate` and `place` search only inside it.
+    """
     for child in sorted(repo_root.iterdir()):
         if child.is_dir() and child.name.lower() == assembly.lower():
             return child
@@ -40,10 +46,13 @@ def assembly_folder(repo_root: Path, assembly: str) -> Path | None:
 
 
 def declaration(name: str) -> re.Pattern[str]:
+    """Builds the regular expression that matches a class, interface, enum or struct declaration with that exact name. Used by `locate` to find the file of an existing type.
+    """
     return re.compile(rf"\b(?:class|interface|enum|struct)\s+{re.escape(name)}\b")
 
 
 def namespace_of(text: str) -> str | None:
+    """Returns the namespace declared in C# source text, or None. `locate` and `place` use it to prefer files in the same namespace as the type."""
     match = re.search(r"^\s*namespace\s+([\w.]+)", text, re.M)
     return match.group(1) if match else None
 
@@ -54,6 +63,8 @@ def locate(repo_root: Path, info: TypeInfo) -> Located:
     pattern = declaration(info.simple_name)
 
     def matches(files: list[Path]) -> list[Path]:
+        """Keeps the files that declare the type, preferring those whose namespace is the type's namespace. Used by `locate` first for files named after the type, then for all files.
+        """
         found = [f for f in files if pattern.search(read(f))]
         exact = [f for f in found if namespace_of(read(f)) == info.namespace]
         return exact or found

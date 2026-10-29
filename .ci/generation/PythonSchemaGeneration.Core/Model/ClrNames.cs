@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text;
 
 namespace PythonSchemaGeneration.Model
@@ -18,6 +19,8 @@ namespace PythonSchemaGeneration.Model
 
         /***************************************************/
 
+        [Description("Writes a C# type as canonical text: keyword aliases for built-in types, a question mark for nullables, bracket syntax for arrays and angle brackets " +
+            "for generic arguments. The same text is rebuilt by the Python to C# converter, so it is used for type model names, manifests and mapped C# types.")]
         public static string Format(Type type)
         {
             if (type.IsGenericParameter)
@@ -47,7 +50,7 @@ namespace PythonSchemaGeneration.Model
 
         /***************************************************/
 
-        //Full name without generic arity and arguments, nested types separated by dots
+        [Description("Returns the full name of a type without generic arity or arguments and with dots for nested types. Used by Format, the type filter and the mapper's default C# types.")]
         public static string BaseName(Type type)
         {
             Type def = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
@@ -62,6 +65,7 @@ namespace PythonSchemaGeneration.Model
 
         /***************************************************/
 
+        [Description("Joins strings with a comma and a space. Not called by the generator code at present.")]
         public static string Join(IEnumerable<string> items)
         {
             StringBuilder sb = new StringBuilder();

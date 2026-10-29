@@ -43,12 +43,20 @@ class ReadError:
     message: str
 
     def __str__(self) -> str:
+        """Formats the problem as `path:line: message`, leaving out the line when it is 0.
+
+        The py2cs `check` command and the pull request report print each problem with it.
+        """
         return f"{self.path}:{self.line}: {self.message}" if self.line else f"{self.path}: {self.message}"
 
 class ReadErrors(ValueError):
     """Every problem found while reading a package, raised together."""
 
     def __init__(self, errors: list[ReadError]):
+        """Builds the exception from a list of ReadError, joining their text as the message and keeping the list on `errors`.
+
+        `read_package` and `read_file` raise it when no errors list is passed in, so the caller sees every problem at once.
+        """
         super().__init__("\n".join(str(e) for e in errors))
         self.errors = errors
 
@@ -60,18 +68,34 @@ class RefInfo:
 
     @property
     def clr_name(self) -> str:
+        """Returns the full C# name (with generic arity) of the referenced class from its marker.
+
+        The reader uses it to turn a Python import back into a C# type name.
+        """
         return str(self.marker["clr_name"])
 
     @property
     def base_name(self) -> str:
+        """Returns the C# name without the generic arity suffix, with nested-type `+` written as `.`.
+
+        The reader builds the C# type text of a field or base class from it.
+        """
         return self.clr_name.split("`")[0].replace("+", ".")
 
     @property
     def kind(self) -> str:
+        """Returns the kind of the referenced type (class, abstract, interface, enum or struct) from its marker, defaulting to class.
+
+        The reader uses it to decide whether a referenced type is a value type and whether it counts as a model base.
+        """
         return str(self.marker.get("kind", "class"))
 
     @property
     def renamed_members(self) -> dict[str, str]:
+        """Returns the map of Python enum member names to C# names that the marker records, or an empty map.
+
+        Part of reading the marker of a referenced enum.
+        """
         return dict(self.marker.get("renamed_members", {}))
 
 @dataclass
@@ -83,12 +107,20 @@ class Resolver:
     """Finds the marker of other modules, so a reference can be turned back into its C# name."""
 
     def __init__(self, package_root: Path):
+        """Creates a resolver for a bhom_schema folder with empty caches for references, written markers and assembly markers.
+
+        `read_package` makes one per run so each module is parsed once.
+        """
         self.root = package_root
         self._refs: dict[str, RefInfo | None] = {}
         self._written: dict[Path, dict[str, Any] | None] = {}
         self._assemblies: dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]] = {}
 
     def path_of(self, module: str) -> Path | None:
+        """Returns the file of a `bhom_schema.` module inside the package folder, or None when the module is outside the package or the file does not exist.
+
+        First step of turning an import into the referenced class's C# name.
+        """
         if not module.startswith(ROOT_PACKAGE + "."):
             return None
         parts = module.split(".")[1:]
@@ -96,6 +128,10 @@ class Resolver:
         return path if path.exists() else None
 
     def ref(self, module: str) -> RefInfo | None:
+        """Returns what the module of an imported bhom_schema class says about itself (its written marker, else a worked-out one) or None when it cannot be found.
+
+        The Converter calls it to translate a field type or base class into a C# type name. A placeholder guards against classes that refer to each other.
+        """
         if module in self._refs:
             return self._refs[module]
         # A placeholder, so two hand-written classes naming each other cannot recurse forever
@@ -112,7 +148,10 @@ class Resolver:
         return info
 
     def written_marker(self, path: Path) -> dict[str, Any] | None:
-        """The __bhom__ marker written in a file, or None."""
+        """Returns the `__bhom__` marker written in a file, or None when it has none or the file cannot be parsed. Results are cached.
+
+        Generated files always carry one; hand-written classes usually do not.
+        """
         if path not in self._written:
             try:
                 self._written[path] = find_marker(ast.parse(path.read_text(encoding="utf-8")))
@@ -121,7 +160,10 @@ class Resolver:
         return self._written[path]
 
     def assembly_markers(self, assembly: str) -> list[tuple[tuple[str, ...], dict[str, Any]]]:
-        """(folders below the assembly folder, marker) of every class of an assembly folder that has a written marker."""
+        """Lists the written markers of every class in an assembly folder, each with its folders below the assembly folder. Results are cached.
+
+        `infer_marker` uses them to work out the namespace and repository of a hand-written class from the generated classes around it.
+        """
         if assembly not in self._assemblies:
             found: list[tuple[tuple[str, ...], dict[str, Any]]] = []
             folder = self.root / assembly
@@ -136,6 +178,10 @@ class Resolver:
         return self._assemblies[assembly]
 
     def _inferred_marker(self, path: Path) -> dict[str, Any] | None:
+        """Parses a file and works out the marker of its first class, returning None if the file has no class or the marker cannot be worked out.
+
+        Used by `ref` when a referenced hand-written module has no written marker.
+        """
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
@@ -149,12 +195,20 @@ class Resolver:
             return None
 
 def find_marker(tree: ast.Module) -> dict[str, Any] | None:
+    """Finds the `__bhom__` annotated assignment in a parsed module and returns its literal value, or None when there is none.
+
+    The reader's first look at a file: generated classes state their C# name, namespace and repository this way.
+    """
     for node in ast.walk(tree):
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__bhom__" and node.value is not None:
             return ast.literal_eval(node.value)
     return None
 
 def collect_imports(tree: ast.Module) -> dict[str, tuple[str, str]]:
+    """Maps each name imported with `from ... import` in a parsed module to its (module, original name), using the alias as the key.
+
+    The reader uses it to resolve aliased and cross-module references in annotations.
+    """
     imports: dict[str, tuple[str, str]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -163,7 +217,10 @@ def collect_imports(tree: ast.Module) -> dict[str, tuple[str, str]]:
     return imports
 
 def name_of(node: ast.expr, imports: dict[str, tuple[str, str]]) -> str | None:
-    """The original name behind `Name` or `module.Name`, so aliased imports read the same as plain ones."""
+    """Returns the original name behind a `Name` or `module.Name` expression, undoing import aliases, or None for other expressions.
+
+    The reader uses it to recognise `Field`, `Annotated`, `ClassVar` and base classes however they were imported.
+    """
     if isinstance(node, ast.Name):
         return imports.get(node.id, (None, node.id))[1]
     if isinstance(node, ast.Attribute):
@@ -173,7 +230,10 @@ def name_of(node: ast.expr, imports: dict[str, tuple[str, str]]) -> str | None:
 # ------------------------------------------------------------------------------------------------ inferring the marker
 
 def namespace_prefix(markers: list[tuple[tuple[str, ...], dict[str, Any]]]) -> str | None:
-    """The namespace of the assembly folder itself, from the classes in it: the generator writes BH.oM.X.A.B into Assembly/A/B."""
+    """Works out the C# namespace of an assembly folder itself from its generated classes, as the most common prefix once the class's folders are removed.
+
+    Lets `infer_marker` give a hand-written class in a new subfolder the right namespace.
+    """
     prefixes: Counter[str] = Counter()
     for folders, marker in markers:
         segments = str(marker["namespace"]).split(".")
@@ -184,7 +244,10 @@ def namespace_prefix(markers: list[tuple[tuple[str, ...], dict[str, Any]]]) -> s
     return prefixes.most_common(1)[0][0] if prefixes else None
 
 def infer_kind(cls: ast.ClassDef, imports: dict[str, tuple[str, str]], resolver: Resolver) -> tuple[str, bool]:
-    """(kind, is flags enum) from the bases of a class without a marker."""
+    """Decides the kind (class, abstract, interface or enum) and whether it is a flags enum from the base classes of a class that has no marker.
+
+    Part of working out a hand-written class's marker; raises ValueError when the class has no usable base.
+    """
     originals: set[str] = set()
     referenced: list[str] = []
     for base in cls.bases:
@@ -207,7 +270,10 @@ def infer_kind(cls: ast.ClassDef, imports: dict[str, tuple[str, str]], resolver:
     raise ValueError(f"{cls.name} has no base class; derive it from SchemaModel, a bhom_schema class, Enum or an interface")
 
 def infer_marker(path: Path, root: Path, cls: ast.ClassDef, imports: dict[str, tuple[str, str]], resolver: Resolver) -> Inferred:
-    """Works out the __bhom__ marker of a hand-written class from its folder and the generated classes around it."""
+    """Works out the `__bhom__` marker of a hand-written class from its folder and the generated classes around it: namespace, repository, kind and C# name.
+
+    Lets a developer add a class in a pull request without writing a marker; the reader records a note saying it was worked out.
+    """
     parts = path.relative_to(root).parts
     if len(parts) < 2:
         raise ValueError("the file must be inside an assembly folder, for example Structure_oM/Elements/<Name>.py")
@@ -266,20 +332,29 @@ class Converter:
     metadata: list[ast.expr] = field(default_factory=lambda: [])
 
     def origin(self, local: str) -> tuple[str | None, str]:
-        """(module, original name) of an imported name, or (None, name) for builtins and local names."""
+        """Returns the (module, original name) of an imported name, or (None, name) for builtins and local names.
+
+        The Converter uses it to decide whether a name is a bhom_schema class or a primitive.
+        """
         if local in self.imports:
             return self.imports[local]
         return None, local
 
     def original(self, node: ast.expr) -> str:
-        """The original name behind a Name or module.Name node, so aliased imports read the same as plain ones."""
+        """Returns the original name behind a Name or module.Name node, raising ValueError for any other expression.
+
+        The Converter uses it to read the head of an annotation however it was imported.
+        """
         name = name_of(node, self.imports)
         if name is None:
             raise ValueError(f"unsupported expression: {ast.unparse(node)}")
         return name
 
     def convert(self, node: ast.expr) -> tuple[str, bool]:
-        """Returns the C# type and whether it is a value type on the Python side."""
+        """Converts a Python annotation to canonical C# type text and says whether it is a value type on the Python side. Raises ValueError for unsupported annotations.
+
+        The inverse of the C# TypeMapper: used by the reader for field types, base classes and type-parameter bounds.
+        """
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return self.convert(ast.parse(node.value, mode="eval").body)
 
@@ -334,10 +409,18 @@ class Converter:
         raise ValueError(f"unsupported annotation: {ast.unparse(node)}")
 
     def _nullable(self, node: ast.expr) -> tuple[str, bool]:
+        """Converts the type inside an optional annotation, adding `?` when it is a value type that is not already nullable.
+
+        Handles `X | None`, `Optional[X]` and `Union[X, None]`.
+        """
         inner, value = self.convert(node)
         return (inner + "?" if value and not inner.endswith("?") else inner), False
 
     def _named(self, local: str, args: list[str]) -> tuple[str, bool]:
+        """Converts a plain or subscripted class name to C# type text: a type parameter, the class itself, a bhom_schema class found through the resolver, or a primitive.
+
+        Raises ValueError when the name cannot be resolved.
+        """
         if local in self.type_params:
             return local, False
         if local == self.self_name and local not in self.imports:
@@ -356,6 +439,10 @@ class Converter:
 
     @staticmethod
     def _constructed(ref: RefInfo, args: list[str]) -> str:
+        """Builds the C# text of a referenced class, adding generic arguments, or its own parameter names when it is generic and none are given.
+
+        Called by `_named` once the referenced class is known.
+        """
         if args:
             return f"{ref.base_name}<{', '.join(args)}>"
         if "`" in ref.clr_name:
@@ -363,23 +450,35 @@ class Converter:
         return ref.base_name
 
 def is_none(node: ast.expr) -> bool:
+    """Returns True when an expression is the constant `None`.
+
+    Used by the reader to spot `X | None` and `Optional` annotations.
+    """
     return isinstance(node, ast.Constant) and node.value is None
 
 def is_class_var(node: ast.expr, converter: Converter) -> bool:
+    """Returns True when an annotation is `ClassVar` (bare or subscripted), after resolving imports.
+
+    The reader skips such attributes because they are not C# properties.
+    """
     head = node.value if isinstance(node, ast.Subscript) else node
     return name_of(head, converter.imports) == "ClassVar"
 
 # ------------------------------------------------------------------------------------------------ files
 
 def read_file(path: Path, root: Path, resolver: Resolver | None = None, errors: list[ReadError] | None = None) -> TypeInfo | None:
-    """Reads one module. Returns None for files without a class (for example __init__.py) or that cannot be read.
+    """Reads one Python module into a TypeInfo, or None when it has no class or cannot be parsed. Problems go into `errors`, or are raised as ReadErrors when no list is given.
 
-    Problems are added to errors; without an errors list they are raised.
+    Called by `read_package` for each file, and by the py2cs check for one file at a time.
     """
     relative = path.relative_to(root).as_posix()
     problems: list[ReadError] = []
 
     def error(line: int, message: str) -> None:
+        """Records a problem with the file's relative path, a line and a message.
+
+        Collects what `_read` reports so `read_file` can hand it on or raise it.
+        """
         problems.append(ReadError(relative, line, message))
 
     info = _read(path, root, resolver or Resolver(root), error)
@@ -390,6 +489,10 @@ def read_file(path: Path, root: Path, resolver: Resolver | None = None, errors: 
     return info
 
 def _read(path: Path, root: Path, resolver: Resolver, error: Callable[[int, str], None]) -> TypeInfo | None:
+    """Parses a module with ast and builds its TypeInfo: marker (written or worked out), generic parameters, bases, fields or enum members, and interface properties. Problems are passed to `error`.
+
+    The working part of `read_file`; this is how the Python side of the schema becomes a manifest.
+    """
     source = path.read_text(encoding="utf-8")
     try:
         tree = ast.parse(source)
@@ -475,12 +578,24 @@ def _read(path: Path, root: Path, resolver: Resolver, error: Callable[[int, str]
     return info
 
 def is_field_call(node: ast.expr, converter: Converter) -> bool:
+    """Returns True when an expression is a call of pydantic `Field`, however it was imported.
+
+    `read_field` uses it to find defaults and descriptions.
+    """
     return isinstance(node, ast.Call) and name_of(node.func, converter.imports) == "Field"
 
 def is_ellipsis(node: ast.expr) -> bool:
+    """Returns True when an expression is the `...` constant, which Pydantic's `Field(...)` uses for a required field.
+
+    Used by `read_field` to tell required fields from fields with a default.
+    """
     return isinstance(node, ast.Constant) and node.value is Ellipsis
 
 def read_field(stmt: ast.AnnAssign, converter: Converter) -> PropertyInfo:
+    """Reads one annotated class attribute into a PropertyInfo: C# type, quantity, display text and dynamic markers from `Annotated`, and default, factory, description and alias from `Field`.
+
+    Called by `_read` for each field of a class.
+    """
     assert isinstance(stmt.target, ast.Name)
     py_name = stmt.target.id
     converter.metadata = []
@@ -517,9 +632,9 @@ def read_field(stmt: ast.AnnAssign, converter: Converter) -> PropertyInfo:
     return prop
 
 def read_package(package_root: Path, errors: list[ReadError] | None = None) -> Manifest:
-    """Reads every module under a bhom_schema folder (skipping the hand-written _support package).
+    """Reads every module under a bhom_schema folder (skipping the hand-written _support package) into a manifest keyed by C# name.
 
-    Problems are added to errors; without an errors list they are raised together as ReadErrors.
+    Problems go into `errors`, or are raised together as ReadErrors when no list is given. It is the Python side of every py2cs command: manifest, diff, check, align, plan and verify.
     """
     problems: list[ReadError] = []
     resolver = Resolver(package_root)

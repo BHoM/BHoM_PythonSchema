@@ -25,6 +25,7 @@ class PythonPr:
 
     @property
     def reference(self) -> str:
+        """Returns the Python pull request as Owner/Name#number. Used in the C# pull request text and in the comments py2cs writes."""
         return f"{self.repo}#{self.number}"
 
 @dataclass
@@ -34,6 +35,8 @@ class Action:
     detail: str = ""
 
     def __str__(self) -> str:
+        """Returns the action as one line of kind, repository and detail. `pr`, `close` and the command line print these lines, with `would` in front on a dry run.
+        """
         return f"{self.kind} {self.repo} {self.detail}".strip()
 
 @dataclass
@@ -42,15 +45,22 @@ class PrResult:
     pull_request: PullRequest | None = None
 
 def branch_name(number: int) -> str:
+    """Returns the branch python-schema/pr-<N> that holds the C# draft for Python pull request N. `pr`, `close` and `status` all derive the branch from it.
+    """
     return f"{BRANCH_PREFIX}{number}"
 
 def plan_folder(plan_dir: Path, repo: str) -> Path:
+    """Returns the folder of a plan directory that holds the files planned for one repository (the slash of Owner/Name becomes a double underscore). Used by `pr` to read the files it pushes.
+    """
     return plan_dir / repo.replace("/", "__")
 
 def load_summary(plan_dir: Path) -> dict[str, Any]:
+    """Reads plan.json from a plan folder written by `plan`. `pr` uses it to know which files, labels and actions belong to which repository."""
     return json.loads((plan_dir / "plan.json").read_text(encoding="utf-8"))
 
 def title_for(python_pr: PythonPr, files: list[dict[str, Any]]) -> str:
+    """Builds the C# pull request title from the Python PR number and the class names of the planned files, naming at most three. Used by `pr` when it opens or updates the draft.
+    """
     names = sorted({str(f["type"]).rsplit(".", 1)[-1].split("`")[0] for f in files})
     shown = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
     return f"Python schema #{python_pr.number}: {shown}"
@@ -121,6 +131,8 @@ def raise_pr(client: GitHubClient, plan_dir: Path, repo: str, python_pr: PythonP
     return result
 
 def _new_branch(result: PrResult) -> bool:
+    """Tells whether the actions so far include creating the branch. In a dry run `raise_pr` uses it to compare files with the base branch, which the new branch would start from.
+    """
     return any(a.kind == "create branch" for a in result.actions)
 
 def close_linked(client: GitHubClient, repo: str, python_pr: PythonPr, merged: bool, dry_run: bool = False) -> PrResult:

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 
 namespace PythonSchemaGeneration.Loading
@@ -7,6 +8,7 @@ namespace PythonSchemaGeneration.Loading
     {
         /***************************************************/
 
+        [Description("Tells whether a namespace is an oM namespace, by asking the BHoM Engine. Used by the TypeSelector.")]
         public static bool IsOmNamespace(string ns)
         {
             return BH.Engine.Base.Query.IsOmNamespace(ns);
@@ -14,6 +16,7 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Tells whether an assembly is an oM assembly, by asking the BHoM Engine. Used by the AssemblyLoader.")]
         public static bool IsOmAssembly(Assembly assembly)
         {
             return BH.Engine.Base.Query.IsOmAssembly(assembly);
@@ -21,6 +24,8 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Tells whether an assembly belongs to one of the given GitHub organisations, by asking the JSON schema engine. The AssemblyLoader uses it to filter " +
+            "assemblies by organisation.")]
         public static bool IsInOrg(Assembly assembly, IEnumerable<string> organisations)
         {
             BH.oM.JsonSchema.ConvertConfig config = new BH.oM.JsonSchema.ConvertConfig { OrganisationsToInclude = organisations.ToList() };
@@ -29,7 +34,8 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
-        //Same layout rule as the JSON schema repo: Assembly/Namespace/Folders/Name.json. Returned without the extension.
+        [Description("Returns the path of a type relative to the output package, in the form Assembly/Namespace folders/Name without extension, using the JSON schema " +
+            "engine's layout rule and falling back to the local rule for types the engine does not know. The TypeRegistry uses it to place each generated file.")]
         public static string RelativeTypePath(Type type)
         {
             string path = BH.Engine.JsonSchema.Query.RelativeSchemaId(type);
@@ -44,6 +50,8 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Builds the relative type path locally from the assembly name and the type's namespace, mirroring the JSON schema engine rule. RelativeTypePath uses it " +
+            "for recompiled copies of the oM that the engine does not recognise.")]
         private static string LocalRelativeTypePath(Type type)
         {
             //Same rule as BH.Engine.JsonSchema.Query.RelativeSchemaId: Assembly/Namespace folders (without the first segment)/Name
@@ -53,6 +61,8 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Returns the folder with the BHoM assemblies: the BHoM folder reported by the engine when it exists, otherwise ProgramData BHoM Assemblies. The " +
+            "generator uses it when no assembly folder is given, and the tests use it to find the oM dlls.")]
         public static string DefaultAssemblyFolder()
         {
             string folder = null;
@@ -66,6 +76,8 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Reads the GitHub repository (Owner/Name) from the github.com address in an assembly's description attribute, or returns null when there is none. The " +
+            "TypeExtractor stores it as the provenance repository of each type, and it drives the --repos filter.")]
         public static string AssemblyRepo(Assembly assembly)
         {
             string description = assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description;

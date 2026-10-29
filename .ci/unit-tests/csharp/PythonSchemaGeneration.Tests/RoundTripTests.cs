@@ -14,6 +14,8 @@ namespace PythonSchemaGeneration.Tests
     {
         [TestCase("fixtures")]
         [TestCase("spike")]
+        [Description("Checks that the C# drafted by py2cs from the generated Python for the given set compiles with Roslyn and that the generator reflects every " +
+            "drafted type back from the compiled assembly. Protects the Python to C# direction of the round trip.")]
         public void DraftsCompileAndReflectBack(string set)
         {
             if (set == "spike")
@@ -65,6 +67,8 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Description("Builds the compiler references (framework assemblies, BHoM, System.Drawing and Quantities_oM) used to compile the drafted C#. Used by " +
+            "DraftsCompileAndReflectBack.")]
         private static List<MetadataReference> References()
         {
             string[] trusted = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")).Split(Path.PathSeparator);

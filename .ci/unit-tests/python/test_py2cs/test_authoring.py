@@ -15,12 +15,19 @@ from py2cs.diff import diff_manifests
 from py2cs.reader import ReadError, ReadErrors, read_package
 
 def hand_written(root: Path, relative: str, source: str) -> None:
+    """Writes dedented hand-written Python (no __bhom__ marker) into a package folder, creating folders.
+
+    The authoring tests use it to add the classes a developer would type by hand.
+    """
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(source).lstrip("\n"), encoding="utf-8", newline="\n")
 
 def demo_with_folders(tmp_path: Path) -> Path:
-    """The demo package plus a generated class in a sub folder, so namespaces of new folders can be worked out."""
+    """Builds the demo package plus a generated Wall class in a Demo_oM/Elements sub folder.
+
+    test_namespace_of_a_new_folder_follows_the_generator_rule uses it so the reader can work out the namespace of a class in a new sub folder.
+    """
     pkg = demo_package(tmp_path)
     (pkg / "Demo_oM" / "Elements").mkdir()
     (pkg / "Demo_oM" / "Elements" / "Wall.py").write_text(module("Wall", "BH.oM.Demo.Elements.Wall", "BH.oM.Demo.Elements", "Demo_oM"), encoding="utf-8")
@@ -29,6 +36,10 @@ def demo_with_folders(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------- idioms
 
 def test_common_typing_idioms_are_understood(tmp_path: Path):
+    """Checks that the reader understands the usual ways a person writes a field (Optional, Union, List, Dict, typing., Field with positional or keyword default, required Field, quoted forward reference, ClassVar skipped) and gives the right C# type, default and description.
+
+    Protects the reader stage of py2cs, which must accept hand-written Python and not only generator output.
+    """
     pkg = demo_package(tmp_path)
     hand_written(pkg, "Demo_oM/Idioms.py", """
         import typing
@@ -63,7 +74,10 @@ def test_common_typing_idioms_are_understood(tmp_path: Path):
     assert "Constant" not in props
 
 def test_positional_field_default_drafts_a_settable_property(tmp_path: Path):
-    """The reproduced bug: Field(0, description=...) used to read as required and made the C# class read-only."""
+    """Checks that Field(0, description=...) is read as a field with a default, so the drafted C# property is settable with an initial value and the class gets no read-only constructor.
+
+    Protects the reader and csharp.emit_new from a past bug that read such a field as required.
+    """
     pkg = demo_package(tmp_path, ["Stage: int = Field(0, description='RIBA stage')"])
     manifest = read_package(pkg)
     text = emit_new(manifest["BH.oM.Demo.ProjectInfo"], manifest)
@@ -73,7 +87,10 @@ def test_positional_field_default_drafts_a_settable_property(tmp_path: Path):
 # ---------------------------------------------------------------- worked-out markers
 
 def test_a_new_class_without_a_marker_is_read_not_skipped(tmp_path: Path):
-    """The reproduced bug: a class without __bhom__ was skipped, so the diff said nothing changed."""
+    """Checks that a hand-written class with no __bhom__ marker is read with namespace, assembly, repository, kind and bases worked out from its folder and neighbours, and that diff reports it as added.
+
+    Protects the diff stage from a past bug where such a class was skipped and the PR looked unchanged.
+    """
     base = read_package(demo_package(tmp_path / "base"))
     head_root = demo_package(tmp_path / "head")
     hand_written(head_root, "Demo_oM/ProjectStage.py", """
@@ -92,6 +109,10 @@ def test_a_new_class_without_a_marker_is_read_not_skipped(tmp_path: Path):
     assert [(c.clr_name, c.kind) for c in diff_manifests(base, head).changes] == [("BH.oM.Demo.ProjectStage", "added")]
 
 def test_namespace_of_a_new_folder_follows_the_generator_rule(tmp_path: Path):
+    """Checks that a class in a new sub folder gets the namespace the generator would use (the parent namespace plus the folder name).
+
+    Protects the namespace of the new C# files that py2cs drafts from hand-written Python.
+    """
     pkg = demo_with_folders(tmp_path)
     hand_written(pkg, "Demo_oM/Elements/Openings/Door.py", """
         from bhom_schema._support import SchemaModel
@@ -103,6 +124,10 @@ def test_namespace_of_a_new_folder_follows_the_generator_rule(tmp_path: Path):
     assert info.namespace == "BH.oM.Demo.Elements.Openings"
 
 def test_kind_generic_and_enum_details_are_worked_out(tmp_path: Path):
+    """Checks that the reader works out an interface (I prefix), a generic class with constraints (PEP 695 type parameters) and a flags enum (IntFlag, None_ read as None) for classes without a marker.
+
+    Protects the drafting of new C# types from hand-written Python.
+    """
     pkg = demo_package(tmp_path)
     hand_written(pkg, "Demo_oM/ILabelled.py", """
         from bhom_schema.Demo_oM.IdentityBase import IdentityBase
@@ -135,6 +160,10 @@ def test_kind_generic_and_enum_details_are_worked_out(tmp_path: Path):
     assert access.kind == "enum" and access.flags and [m.name for m in access.members] == ["None", "Read", "Write"]
 
 def test_a_new_assembly_folder_is_an_error(tmp_path: Path):
+    """Checks that a class in a folder that is not an existing assembly folder (Brand_oM) is a read error.
+
+    Protects the reader from inventing a C# assembly, which only a person can create.
+    """
     pkg = demo_package(tmp_path)
     hand_written(pkg, "Brand_oM/Thing.py", """
         from bhom_schema._support import SchemaModel
@@ -148,6 +177,10 @@ def test_a_new_assembly_folder_is_an_error(tmp_path: Path):
 # ---------------------------------------------------------------- errors
 
 def test_problems_are_collected_per_file_and_the_rest_is_read(tmp_path: Path):
+    """Checks that read errors (a second class in a file, an unsupported type, an underscore field name) are collected with file and line while the rest of the package is still read.
+
+    Lets one py2cs run report every Python problem of a PR at once.
+    """
     pkg = demo_package(tmp_path)
     hand_written(pkg, "Demo_oM/Broken.py", """
         from collections.abc import Sequence
@@ -174,6 +207,10 @@ def test_problems_are_collected_per_file_and_the_rest_is_read(tmp_path: Path):
     ]
 
 def test_two_files_declaring_the_same_class_is_an_error(tmp_path: Path):
+    """Checks that the same C# class declared in two Python files is reported as one read error naming both files.
+
+    Protects the manifest, which needs a single source for each class.
+    """
     pkg = demo_package(tmp_path)
     (pkg / "Demo_oM" / "Copy.py").write_text((pkg / "Demo_oM" / "ProjectInfo.py").read_text(encoding="utf-8"), encoding="utf-8")
     errors: list[ReadError] = []
@@ -181,6 +218,10 @@ def test_two_files_declaring_the_same_class_is_an_error(tmp_path: Path):
     assert [str(e) for e in errors] == ["Demo_oM/ProjectInfo.py: BH.oM.Demo.ProjectInfo is already declared in Demo_oM/Copy.py"]
 
 def test_command_line_reports_problems_instead_of_a_traceback(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Checks that py2cs diff prints the Python read errors on stderr and exits with 1 instead of a traceback.
+
+    Protects the diff command that the linked-PR workflow runs on the PR's Python.
+    """
     demo_package(tmp_path / "base")
     head = demo_package(tmp_path / "head", ["Stage: Sequence[int] = ()"])
     status = main(["diff", "--base-root", str(tmp_path / "base" / "bhom_schema"), "--head-root", str(head), "--out", str(tmp_path / "d.json")])
@@ -191,6 +232,10 @@ def test_command_line_reports_problems_instead_of_a_traceback(tmp_path: Path, ca
 # ---------------------------------------------------------------- check
 
 def test_check_lists_errors_and_missing_descriptions(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Checks that check_package returns warnings for unmarked classes and missing class or property descriptions, that py2cs check exits 0 for warnings only, and exits 1 and prints the error for an unsupported union.
+
+    Protects the check step of the PR checks, which lists problems of hand-written Python before any C# is drafted.
+    """
     base = demo_package(tmp_path / "base")
     head = demo_package(tmp_path / "head", ["Stage: int = 0", "Note: str = Field(default='', description='A note.')"])
     hand_written(head, "Demo_oM/Fresh.py", """

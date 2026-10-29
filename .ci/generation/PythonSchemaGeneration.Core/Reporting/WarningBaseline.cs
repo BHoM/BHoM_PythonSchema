@@ -15,6 +15,8 @@ namespace PythonSchemaGeneration.Reporting
 
         /***************************************************/
 
+        [Description("Reduces a warning to its kind by removing the leading [context] and replacing type names and numbers with placeholders, so the same problem in another " +
+            "type has the same kind. Used by Kinds and the baseline comparison.")]
         public static string Kind(string warning)
         {
             string text = m_Context.Replace(warning ?? "", "");
@@ -24,6 +26,7 @@ namespace PythonSchemaGeneration.Reporting
 
         /***************************************************/
 
+        [Description("Returns the distinct kinds of the given warnings in ordinal order. Used by Write and Compare, and by Program to report the number of kinds.")]
         public static List<string> Kinds(IEnumerable<string> warnings)
         {
             return warnings.Select(Kind).Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal).ToList();
@@ -31,7 +34,7 @@ namespace PythonSchemaGeneration.Reporting
 
         /***************************************************/
 
-        [Description("One kind per line. Blank lines and lines starting with # are comments.")]
+        [Description("Reads the committed list of known warning kinds (one per line, blank lines and lines starting with # ignored). Program passes it to Compare to fail a run that has a kind not in the list.")]
         public static List<string> Read(string path)
         {
             return File.ReadAllLines(path).Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith("#")).ToList();
@@ -39,6 +42,7 @@ namespace PythonSchemaGeneration.Reporting
 
         /***************************************************/
 
+        [Description("Writes the kinds of the given warnings, with a header, to the baseline file. Program does this for --write-baseline, after a new kind has been reviewed.")]
         public static void Write(string path, IEnumerable<string> warnings)
         {
             string header = "# Known warning kinds of the generator. A kind that is not listed fails the run.\n# Update with --write-baseline after reviewing a new kind.\n";
@@ -47,7 +51,7 @@ namespace PythonSchemaGeneration.Reporting
 
         /***************************************************/
 
-        [Description("The kinds in the warnings that the baseline does not list, and the listed kinds that no longer occur.")]
+        [Description("Compares the warning kinds of a run with the baseline: returns the new kinds, which fail the run, and the listed kinds that no longer occur, which Program reports so the baseline can be trimmed.")]
         public static (List<string> New, List<string> Gone) Compare(IEnumerable<string> warnings, IEnumerable<string> baseline)
         {
             List<string> found = Kinds(warnings);

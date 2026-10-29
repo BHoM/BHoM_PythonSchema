@@ -39,6 +39,8 @@ class Plan:
     errors: list[str] = field(default_factory=lambda: [])
 
     def repos(self) -> list[str]:
+        """Returns the sorted repositories that have a planned file or a removed type with a known repository. `plan` writes one report per repository and `pr` raises one pull request per repository.
+        """
         return sorted({f.repo for f in self.files} | {r for r, _ in self.removed if r != "?"})
 
     def labels(self) -> list[str]:
@@ -46,6 +48,8 @@ class Plan:
         return ["breaking-change"] if self.removed or any(f.breaking for f in self.files) else []
 
     def summary(self) -> dict[str, Any]:
+        """Returns the plan as a dictionary of files, removed types, labels and errors for plan.json. `pr` reads it later to push the planned files.
+        """
         return {
             "files": [{"repo": f.repo, "path": f.path, "action": f.action, "type": f.clr_name, "rule": f.rule, "notes": f.notes, "breaking": f.breaking}
                       for f in self.files],
@@ -56,9 +60,9 @@ class Plan:
 
 def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[str], Path | None], listing: Listing | None = None,
               patcher: Patcher | None = None, only_repo: str | None = None) -> Plan:
-    """New types get a whole new file; types that exist in C# are patched member by member with the Roslyn patcher.
+    """Turns a diff of two Python versions into the planned C# files: whole new files for new types, member-level patches (through the Roslyn patcher) for types that already exist.
 
-    With only_repo, the types of other repositories are left out (the linked-PR job has one checkout per repository).
+    It resolves the repository and finds the file in the clone of each class, and records problems instead of raising. Reads the clones, never writes into them. With only_repo, classes of other repositories are left out for the linked-PR job. The `plan` command calls it.
     """
     plan = Plan()
     pending: list[tuple[PlannedFile, FilePatch]] = []

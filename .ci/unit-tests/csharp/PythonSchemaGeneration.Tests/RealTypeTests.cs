@@ -11,18 +11,25 @@ namespace PythonSchemaGeneration.Tests
         private static GenerationResult m_Result;
 
         [OneTimeSetUp]
+        [Description("Skips or fails the fixture when the real BHoM assemblies are missing and otherwise generates the spike set once. Prepares the shared result " +
+            "for the tests in this class.")]
         public void Setup()
         {
             RealAssemblies.RequireOrSkip();
             m_Result = RealAssemblies.Spike();
         }
 
+        [Description("Returns the generated spike type with the given CLR name. The tests in this class use it to inspect real BHoM types.")]
         private static RenderedType R(string clrName) { return m_Result.Types.Single(t => t.Model.ClrName == clrName); }
+
+        [Description("Joins the simple names of the given types with commas so a type's bases can be compared as one string. Used by the base-type tests.")]
         private static string Names(IEnumerable<Type> types) { return string.Join(",", types.Select(t => t.Name)); }
 
         /***************************************************/
 
         [Test]
+        [Description("Checks that every spike type is generated from the real assemblies and that the run produces no warnings. Protects the generator against " +
+            "real oM types.")]
         public void EverySpikeTypeIsGeneratedWithoutWarnings()
         {
             foreach (string name in RealAssemblies.SpikeTypes)
@@ -31,6 +38,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that Line and ICurve get the expected bases, that Line's defaults, dependencies and path are generated. Protects the base and default " +
+            "handling on a real geometry type.")]
         public void LineAndTheCurveInterfaceChain()
         {
             Assert.That(Names(R("BH.oM.Geometry.Line").Model.Bases), Is.EqualTo("ICurve"));
@@ -41,6 +50,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that BHoMObject gets its GUID, tags, custom data and fragment fields with the expected defaults and CLR types. Protects the base " +
+            "class that most generated types inherit.")]
         public void BHoMObjectHasDefaultedFields()
         {
             string text = R("BH.oM.Base.BHoMObject").Text;
@@ -51,6 +62,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that Bar derives from BHoMObject and carries quantity metadata for angle properties. Protects quantity extraction on a real structural type.")]
         public void BarSubclassesBHoMObjectAndCarriesQuantities()
         {
             RenderedType bar = R("BH.oM.Structure.Elements.Bar");
@@ -60,6 +72,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that a real enum with a None member is renamed to None_ and records the original name. Protects enum emission on a real type.")]
         public void EnumWithNoneMember()
         {
             string text = R("BH.oM.Graphics.Enums.GradientCenteringOptions").Text;
@@ -68,6 +81,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that the real generic BHoMGroup is named with its arity and keeps its type parameter bound. Protects generics handling on a real type.")]
         public void GenericWithConstraint()
         {
             RenderedType group = R("BH.oM.Base.BHoMGroup`1");
@@ -76,6 +90,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that the two Room types from different assemblies get different module paths. Protects TypeRegistry placement of same-named real types.")]
         public void SameNamedRoomsLiveInDifferentAssemblies()
         {
             Assert.That(R("BH.oM.Acoustic.Room").Ref.RelativePath, Is.EqualTo("Acoustic_oM/Room"));
@@ -83,6 +98,8 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that Gradient's dictionary of decimal to colour is written with special types imported from the support package. Protects TypeMapper " +
+            "and imports for special types.")]
         public void GradientUsesNonHashableAndSpecialTypes()
         {
             string text = R("BH.oM.Graphics.Gradient").Text;
@@ -91,6 +108,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that a hash set of oM objects is written as a list with the original type kept. Protects the hashable fallback on a real type.")]
         public void ComparisonConfigHasSetsOfObjects()
         {
             string text = R("BH.oM.Base.BaseComparisonConfig").Text;
@@ -98,6 +116,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that the spike types considered stable match their committed golden files. Protects the exact output for real types.")]
         public void StableTypesMatchGoldenFiles()
         {
             foreach (string name in new[] { "BH.oM.Graphics.Enums.GradientCenteringOptions" })
@@ -108,6 +127,7 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
+        [Description("Checks that the spike set contains no cyclic references between generated types. Protects the CycleDetector result for the spike set.")]
         public void SpikeOutputHasNoReferenceCycles()
         {
             Assert.That(m_Result.CyclicTypes, Is.EqualTo(0));

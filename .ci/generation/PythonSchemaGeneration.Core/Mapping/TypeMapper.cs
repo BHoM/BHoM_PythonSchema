@@ -1,5 +1,6 @@
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
+using System.ComponentModel;
 
 namespace PythonSchemaGeneration.Mapping
 {
@@ -42,6 +43,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Creates the mapper for one generated module, given the registry, reporter, the module's name tracker and the context text used in warnings. The " +
+            "PythonEmitter creates one per type.")]
         public TypeMapper(TypeRegistry registry, Reporter reporter, NameTracker tracker, string context)
         {
             m_Context = context;
@@ -52,6 +55,9 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps a C# type to a Python type expression plus the C# type the Python to C# converter would give back for it, handling generic parameters, nullables, " +
+            "primitives, arrays, oM types, delegates and collections, and mapping anything else to Any with a warning. The central step of the type mapping stage, " +
+            "called by the emitter for every property and base.")]
         public MappedType Map(Type type)
         {
             if (type.IsGenericParameter)
@@ -103,6 +109,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Returns the mapping to Python's Any (importing it through the name tracker) with object as the C# type. The fallback of Map for types with no Python equivalent.")]
         private MappedType Any()
         {
             return new MappedType { Expression = m_NameTracker.AddStandardName("typing", "Any"), DefaultClr = "object" };
@@ -110,6 +117,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps a type with no Python equivalent to Any and warns about it, except for object, System.Type and System.Enum, which are mapped silently. Used by Map.")]
         private MappedType UnsupportedType(Type type)
         {
             if (type != typeof(object) && type.FullName != "System.Type" && type.FullName != "System.Enum")
@@ -120,6 +128,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Returns the C# type text of a List of the given item type. Used to give the default C# type of Python lists.")]
         private static string ListOf(string item)
         {
             return $"System.Collections.Generic.List<{item}>";
@@ -127,6 +136,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps the built-in C# types (bool, integers, floats, decimal, char, string, object, Guid, date and time types, Color, Type, Enum) to Python types and " +
+            "their default C# types, or returns null when the type is not one of them. Used by Map.")]
         private MappedType PrimitiveType(Type type)
         {
             if (type == typeof(bool))
@@ -168,6 +179,7 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps a C# array to nested Python lists, one level per dimension of the array rank. Used by Map.")]
         private MappedType ArrayType(Type type)
         {
             MappedType item = Map(type.GetElementType());
@@ -185,6 +197,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps a generated oM type to its imported Python class name, with its mapped type arguments in brackets when it is generic, and marks enums and structs " +
+            "as value types. Registers the reference through the name tracker; used by Map.")]
         private MappedType OmType(Type type)
         {
             PyRef pyRef = m_Registry.Ref(type);
@@ -206,6 +220,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
+        [Description("Maps generic and non-generic collection types to Python list, set, dict or tuple (a set or dictionary with unhashable keys becomes a list), including " +
+            "any other IEnumerable of T as a list. Returns null for a type that is not a collection; used by Map.")]
         private MappedType CollectionType(Type type)
         {
             if (type.IsGenericType)
@@ -303,7 +319,8 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
-        //Python sets and dictionary keys need hashable values, and Pydantic models are not hashable
+        [Description("Tells whether values of a type can be Python set members or dictionary keys: primitives, strings, decimals, enums, object, Guid, date and time types " +
+            "and tuples of those. Pydantic models are not hashable, so CollectionType turns such sets and dictionaries into lists.")]
         public static bool IsHashable(Type type)
         {
             Type underlying = Nullable.GetUnderlyingType(type);

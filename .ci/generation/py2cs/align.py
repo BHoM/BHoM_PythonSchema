@@ -29,6 +29,7 @@ class AlignResult:
 
     @property
     def ok(self) -> bool:
+        """Tells whether the alignment check found no difference. The `align` command returns exit code 0 when it is true."""
         return not self.problems
 
 def changed_types(base: Manifest, head: Manifest) -> tuple[list[str], list[str]]:
@@ -55,6 +56,7 @@ def align(base: Manifest, head: Manifest, generated: Manifest) -> AlignResult:
     return result
 
 def default_generator() -> Path:
+    """Returns the path of the built C# generator dll that `generate` runs when no other path is given."""
     return GENERATOR
 
 def generate(types: list[str], assemblies: Path, output: Path, generator: Path | None = None) -> None:

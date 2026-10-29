@@ -2,6 +2,7 @@ using PythonSchemaGeneration.Loading;
 using PythonSchemaGeneration.Mapping;
 using PythonSchemaGeneration.Model;
 using PythonSchemaGeneration.Reporting;
+using System.ComponentModel;
 using System.Reflection;
 
 namespace PythonSchemaGeneration.Extraction
@@ -17,6 +18,7 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Creates the extractor with the registry of generated types and the warning reporter, and the reader of default values it uses. The generator creates it once per run.")]
         public TypeExtractor(TypeRegistry registry, Reporter reporter)
         {
             m_Registry = registry;
@@ -26,6 +28,9 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Turns one reflected type (or the definition of a generic type) into a language-neutral TypeModel with its names, provenance repository from the " +
+            "assembly description, description, kind, generic parameters, and enum members or bases and properties. Warns when the assembly names no repository; " +
+            "the Generator calls it for every type before the emitter renders it.")]
         public TypeModel Extract(Type type)
         {
             Type def = TypeRegistry.Definition(type);
@@ -65,6 +70,7 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Classifies a type as enum, interface, struct, abstract class or class. Used by Extract to set the kind of the type model.")]
         private static TypeKind KindOf(Type type)
         {
             if (type.IsEnum) return TypeKind.Enum;
@@ -76,6 +82,7 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Adds the members of an enum to the model in declaration order, each with its name, description and numeric value as invariant text. Called by Extract for enums.")]
         private void ExtractEnum(Type def, TypeModel model)
         {
             Type underlying = Enum.GetUnderlyingType(def);
@@ -93,6 +100,8 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Adds to the model the base class and the directly declared interfaces that are generated oM types, dropping interfaces already implied by the base " +
+            "class or another interface, and warns when a non-oM base class is dropped. Called by Extract for non-enum types.")]
         private void ExtractBases(Type def, TypeModel model)
         {
             Type baseType = def.BaseType;
@@ -121,6 +130,9 @@ namespace PythonSchemaGeneration.Extraction
 
         /***************************************************/
 
+        [Description("Adds the public, non-indexed properties declared on the type to the model in metadata order with their default, type, quantity, dynamic flag, " +
+            "description and display text, and skips (with a warning) names starting with an underscore that Pydantic would treat as private. Called by Extract for " +
+            "non-enum types.")]
         private void ExtractProperties(Type def, TypeModel model)
         {
             List<PropertyInfo> properties = def

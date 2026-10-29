@@ -63,6 +63,10 @@ Manifest = dict[str, TypeInfo]
 
 
 def from_json(data: dict[str, Any]) -> TypeInfo:
+    """Builds a TypeInfo from one type entry of the manifest JSON (camelCase keys) written by the C# generator or by `to_json`.
+
+    `load_manifest` uses it to read the C# manifest that `align` and `verify` compare against.
+    """
     properties: list[PropertyInfo] = []
     for p in data.get("properties", []):
         quantity = p.get("quantity")
@@ -81,6 +85,10 @@ def from_json(data: dict[str, Any]) -> TypeInfo:
 
 
 def to_json(info: TypeInfo) -> dict[str, Any]:
+    """Converts a TypeInfo to the manifest JSON entry, leaving out empty optional fields and Python-only details for interfaces.
+
+    `dump_manifest` uses it for the `manifest` command and for the Python manifest compared with the C# one.
+    """
     data: dict[str, Any] = {
         "clrName": info.clr_name, "name": info.name, "pythonName": info.python_name, "relativePath": info.relative_path,
         "namespace": info.namespace, "assembly": info.assembly, "kind": info.kind, "bases": info.bases,
@@ -117,10 +125,18 @@ def to_json(info: TypeInfo) -> dict[str, Any]:
 
 
 def load_manifest(path: Path) -> Manifest:
+    """Reads a manifest JSON file into a dictionary of TypeInfo keyed by C# name.
+
+    Used to load the manifest the C# generator wrote, so `align` and `verify` can compare it with the Python.
+    """
     data = json.loads(path.read_text(encoding="utf-8"))
     return {t["clrName"]: from_json(t) for t in data["types"]}
 
 
 def dump_manifest(manifest: Manifest, path: Path) -> None:
+    """Writes a manifest to a JSON file with types sorted by C# name.
+
+    Used by the py2cs `manifest` command to save what was read from the Python package.
+    """
     types = [to_json(manifest[k]) for k in sorted(manifest)]
     path.write_text(json.dumps({"schemaVersion": 1, "types": types}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -10,6 +10,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that CommandLine.Parse reads every supported option into generation options and the baseline paths. Protects the command line that " +
+            "the generation workflow calls.")]
         public void KnownOptionsAreRead()
         {
             CommandLine command = CommandLine.Parse(new[]
@@ -37,6 +39,8 @@ namespace PythonSchemaGeneration.Tests
         [TestCase(new[] { "--output", "--types", "A" }, "--output needs a value")]
         [TestCase(new[] { "output", "o" }, "Unexpected argument 'output'")]
         [TestCase(new string[0], "Missing --output")]
+        [Description("Checks that unknown options, missing values, stray arguments and a missing output are reported as errors with no options. Protects the " +
+            "generator command line so mistakes fail the run.")]
         public void MistakesAreErrorsNotIgnored(string[] args, string expected)
         {
             CommandLine command = CommandLine.Parse(args);
@@ -54,6 +58,7 @@ namespace PythonSchemaGeneration.Tests
                   "type <type> has no Python equivalent and is mapped to Any")]
         [TestCase("[A.B] base type System.Attribute is not an oM type and was dropped", "base type <type> is not an oM type and was dropped")]
         [TestCase("assembly has no github.com URL in its Description, repo is unknown", "assembly has no <type> URL in its Description, repo is unknown")]
+        [Description("Checks that WarningBaseline.Kind strips type names and numbers from a warning to give its kind. Protects the warning baseline comparison.")]
         public void TheKindOfAWarningHasNoNamesOrNumbers(string warning, string kind)
         {
             Assert.That(WarningBaseline.Kind(warning), Is.EqualTo(kind));
@@ -62,6 +67,7 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that the same problem in different types counts as one warning kind. Protects the warning baseline from growing for repeated problems.")]
         public void TheSameProblemInAnotherTypeIsTheSameKind()
         {
             string[] warnings =
@@ -75,6 +81,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that Compare returns kinds missing from the baseline as new and baseline kinds no longer seen as gone. Protects the rule that a new " +
+            "warning kind fails the run.")]
         public void ANewKindFailsAndAGoneKindIsReported()
         {
             string[] baseline = { "known kind", "kind that no longer occurs" };
@@ -88,6 +96,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a baseline file is written with a comment header, sorted and de-duplicated, and read back ignoring comments. Protects the " +
+            "committed baseline file format.")]
         public void TheBaselineFileRoundTripsAndIgnoresComments()
         {
             string path = Path.Combine(Path.GetTempPath(), "pysg-baseline-" + Guid.NewGuid().ToString("N") + ".txt");
@@ -106,6 +116,8 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that a generator run on the fixtures has no warning kinds outside the committed baseline and no failed types. Protects the committed " +
+            "baseline against drifting from the generator.")]
         public void TheFixtureWarningsAreInTheCommittedBaseline()
         {
             string baseline = Path.Combine(TestPaths.Root, ".ci", "generation", "warnings-baseline.txt");

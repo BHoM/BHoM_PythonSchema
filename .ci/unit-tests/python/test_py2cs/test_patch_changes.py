@@ -13,8 +13,15 @@ from py2cs.reader import read_package
 PATCHER_INPUTS = Path(__file__).resolve().parents[2] / "golden" / "patcher"
 
 def changes_between(tmp_path: Path, before: list[str], after: list[str], **marker: Any) -> tuple[list[dict[str, Any]], list[str], list[str]]:
-    """(changes, usings, notes) between two versions of a Demo_oM class body."""
+    """Builds two versions of a Demo_oM class Thing from the two bodies and returns the changes, usings and notes that build_patch produces between them.
+
+    The patch change tests use it to see the change list that py2cs sends to the C# patcher.
+    """
     def version(name: str, body: list[str]):
+        """Reads a package holding IdentityBase, Other and Thing (with the given body or extra fields) and returns its manifest.
+
+        Used by changes_between for its before and after versions.
+        """
         return read_package(package(tmp_path / name, {
             "Demo_oM/IdentityBase.py": module("IdentityBase", "BH.oM.Demo.IdentityBase", "BH.oM.Demo", "Demo_oM", kind="interface", bases="ABC", imports=["from abc import ABC"]),
             "Demo_oM/Other.py": module("Other", "BH.oM.Geometry.Other", "BH.oM.Geometry", "Demo_oM", kind="interface", bases="ABC", imports=["from abc import ABC"]),
@@ -25,6 +32,10 @@ def changes_between(tmp_path: Path, before: list[str], after: list[str], **marke
     return patch.changes, patch.usings, patch.notes
 
 def test_added_properties_name_their_existing_neighbour(tmp_path: Path):
+    """Checks that added properties become addProperty changes that name the existing property they follow, with initialiser, description and quantity attributes, and that a property with no default adds a note and the needed usings.
+
+    Protects the member-level change list that the patcher applies.
+    """
     changes, usings, notes = changes_between(tmp_path, ["A: int = 0", "B: int = 0"], [
         "First: str = ''", "A: int = 0", "Mid: Annotated[float, Quantity('Length', 'm')] = Field(default=1.5, description='Middle.')", "B: int = 0", "Last: str"])
     assert changes == [
@@ -36,6 +47,10 @@ def test_added_properties_name_their_existing_neighbour(tmp_path: Path):
     assert notes == ["Last has no default in Python, so it was added without an initial value"]
 
 def test_changed_and_removed_properties(tmp_path: Path):
+    """Checks that a changed type, default, description or quantity, and a removed property, become the matching change entries and that an untranslatable default adds a note.
+
+    Protects the member-level change list that the patcher applies.
+    """
     changes, _, notes = changes_between(tmp_path,
         ["A: int = 0", "B: str = Field(default='', description='Old.')", "C: Annotated[float, Quantity('Length', 'm')] = 0.0", "D: int = 0", "E: str = ''"],
         ["A: float = 0.0", "B: str = Field(default='x', description='New.')", "C: Annotated[float, Quantity('Area', 'm2'), DisplayText('Area')] = 0.0", "E: str = odd()"])
@@ -50,6 +65,10 @@ def test_changed_and_removed_properties(tmp_path: Path):
     assert notes == ["the default odd() of E could not be translated to C#; set it by hand"]
 
 def test_class_description_and_bases(tmp_path: Path):
+    """Checks that a changed class description and changed bases become setDescription and setBases changes and that only the added base adds a using.
+
+    Protects the member-level change list that the patcher applies.
+    """
     before = read_package(package(tmp_path / "base", {
         "Demo_oM/IdentityBase.py": module("IdentityBase", "BH.oM.Demo.IdentityBase", "BH.oM.Demo", "Demo_oM", kind="interface", bases="ABC", imports=["from abc import ABC"]),
         "Demo_oM/Other.py": module("Other", "BH.oM.Geometry.Other", "BH.oM.Geometry", "Demo_oM", kind="interface", bases="ABC", imports=["from abc import ABC"]),
@@ -68,6 +87,10 @@ def test_class_description_and_bases(tmp_path: Path):
     assert patch.usings == ["BH.oM.Geometry", "System.ComponentModel"], "only the added base needs a using"
 
 def test_enum_members(tmp_path: Path):
+    """Checks that added, renumbered and removed enum members become addEnumMember, setEnumValue and removeEnumMember changes.
+
+    Protects the member-level change list that the patcher applies to enums.
+    """
     enum = {"kind": "enum", "bases": "Enum", "imports": ["from enum import Enum"]}
     changes, _, _ = changes_between(tmp_path, ["A = 1", "B = 2", "C = 3"], ["A = 1", "# Brand new.", "New = 4", "B = 5"], **enum)
     assert changes == [
@@ -77,6 +100,10 @@ def test_enum_members(tmp_path: Path):
     ]
 
 def test_kind_and_generic_changes_are_left_to_a_person(tmp_path: Path):
+    """Checks that an unchanged class gives no notes and that a change of kind gives no change entries and a note to change the declaration by hand.
+
+    Protects the patcher from editing declarations that only a person should change.
+    """
     _, _, notes = changes_between(tmp_path, ["A: int = 0"], ["A: int = 0"])
     assert notes == []
     before = read_package(package(tmp_path / "b", {"Demo_oM/Thing.py": module("Thing", "BH.oM.Demo.Thing", "BH.oM.Demo", "Demo_oM")}))
@@ -86,12 +113,20 @@ def test_kind_and_generic_changes_are_left_to_a_person(tmp_path: Path):
     assert patch.changes == [] and patch.notes == ["the kind changed from class to abstract; change the declaration by hand"]
 
 def test_the_real_patcher_changes_only_the_new_lines(tmp_path: Path):
+    """Checks that running the real C# patcher on a copy of a real file adds only the new property (with its description and using) and leaves the input file unchanged.
+
+    Protects the Roslyn patcher round trip behind the plan stage.
+    """
     require_patcher()
     original = PATCHER_INPUTS / "ProjectIdentification.cs"
     copy = tmp_path / "ProjectIdentification.cs"
     shutil.copyfile(original, copy)
 
     def project_identification(root: Path, extra: list[str]):
+        """Builds a package with the dKoP IdKoPObject interface and ProjectIdentification class (plus any extra fields) and returns its manifest.
+
+        The real patcher test uses it for the base and head versions.
+        """
         return read_package(package(root, {
             "dKoP_oM/IdKoPObject.py": module("IdKoPObject", "BH.oM.dKoP.IdKoPObject", "BH.oM.dKoP", "dKoP_oM", repo="BHoM/dKoP_Toolkit", kind="interface", bases="ABC",
                                              imports=["from abc import ABC"]),
