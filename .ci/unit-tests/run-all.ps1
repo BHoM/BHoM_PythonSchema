@@ -63,7 +63,7 @@ Step "pytest alignment and round trip" { & $python -m pytest ".ci/unit-tests/pyt
 
 # ---- Pyright over the repository sources (the generated output is checked inside the pytest suites)
 if (-not $SkipPyright) {
-    Step "pyright" { & $python -m pyright }
+    Step "pyright" { & $python -m pyright --pythonpath $python }
 }
 
 Write-Host "`nAll stages passed." -ForegroundColor Green
