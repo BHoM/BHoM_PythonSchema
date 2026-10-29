@@ -1,4 +1,4 @@
-"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | status | verify | drafts | resolve"""
+"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | status | verify | drafts | resolve | notes"""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from py2cs.ci import affected_repos, load_allowed, make_client, verify_package
 from py2cs.csharp import emit_new
 from py2cs.diff import diff_manifests
 from py2cs.model import dump_manifest
+from py2cs.notes import render_notes
 from py2cs.patch import FilePatch, PatchResult, run_patcher
 from py2cs.plan import Patcher, make_plan
 from py2cs.pr import PythonPr, close_linked, raise_pr
@@ -110,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--root", required=True, type=Path)
     p.add_argument("--listing", type=Path)
 
+    p = sub.add_parser("notes", help="release notes: what changed between the previous release and a new bhom_schema folder, breaking changes first")
+    p.add_argument("--head-root", required=True, type=Path)
+    p.add_argument("--base-root", type=Path, help="the previous release; leave out for the first release")
+    p.add_argument("--version", required=True)
+    p.add_argument("--previous", help="the previous release's tag, named in the notes")
+    p.add_argument("--out", required=True, type=Path)
+
     args = parser.parse_args(argv)
     try:
         return run(args)
@@ -145,6 +153,13 @@ def run(args: argparse.Namespace) -> int:
         diff = diff_manifests(read_package(args.base_root), read_package(args.head_root))
         args.out.write_text(json.dumps(diff.to_json(), indent=2) + "\n", encoding="utf-8")
         print(f"{len(diff.changes)} changed types")
+        return 0
+
+    if args.command == "notes":
+        base = read_package(args.base_root) if args.base_root is not None else {}
+        diff = diff_manifests(base, read_package(args.head_root))
+        args.out.write_text(render_notes(diff, args.version, args.previous), encoding="utf-8")
+        print(f"release notes for {len(diff.changes)} changed types")
         return 0
 
     if args.command == "align":

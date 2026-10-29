@@ -1,6 +1,6 @@
 # Audit 1: plan to fix the review findings
 
-Date: 2026-10-26. Status: **Steps 1 to 3 done**; Step 4 written and tested, but not run on GitHub yet (see "What was done in Step 4"); Step 5 done (see "What was done in Step 5"); Steps 6 to 8 not started.
+Date: 2026-10-26. Status: **Steps 1 to 3 done**; Step 4 written and tested, but not run on GitHub yet (see "What was done in Step 4"); Step 5 done (see "What was done in Step 5"); Step 6 done, but the release workflow has not run on GitHub yet (see "What was done in Step 6"); Steps 7 and 8 not started.
 
 The solution was reviewed against the Option 2 system design: the C# oM is the "source of truth", meaning that when the
 Python and the C# disagree, the C# wins. The review found eight issues (**Issue 1** to **Issue 8**). This plan fixes them in
@@ -44,7 +44,7 @@ will do, and says how we will know it works.
 |---|---|
 | How py2cs changes an existing C# file (Step 2) | **Patch member by member.** This reverses the old "suggested full-file replacement" decision in CODING-PLAN section 9. Whole files are written only for brand-new types. |
 | Where the input assemblies come from (Step 4) | **Our own build, on GitHub** (revised 2026-10-29; was: share the BHoM_JSONSchema weekly build). Our workflows clone BHoM, BHoM_Engine, JSONSchema_Toolkit and CSharpSchema_Test from GitHub and build them. BHoM_JSONSchema is not changed until our system is proven, and with far fewer projects converted to Python than to JSON, the two DLL sets may stay separate for good. |
-| Which assemblies go into the package (Step 6) | **For now, only the assemblies of the main BHoM repository**, [BHoM/BHoM](https://github.com/BHoM/BHoM) (local clone `C:\Github\BHoM`). Toolkits such as `dKoP_Toolkit` are left out for now. |
+| Which assemblies go into the package (Step 6) | **For now, only `BHoM/CSharpSchema_Test`; BHoM/BHoM later** (by adding it to `Converted-repositories.txt` and `Included-repositories.txt`). Toolkits such as `dKoP_Toolkit` stay out. |
 | BHoM JSON compatibility (Step 5) | **Approved** (2026-10-29) and done: follow the rules of BHoM_JSONSchema (`_t`, interface implementers as the allowed `_t` values, enums as names). The old 5A/5B split is dropped. Reasons are in Step 5. |
 
 What the scope decision changes in the other steps:
@@ -63,7 +63,7 @@ What the scope decision changes in the other steps:
 | 3 (done) | Issue 4 | Agree how the Python PR and the C# PR stay in step, and warn about breaking changes | The rules must exist before they are automated |
 | 4 (code done) | Issue 5 | Automate everything on GitHub, using the JSON repository's build | Once the loop is safe, make it run by itself |
 | 5 (done) | Issue 3 | Let objects with interface-typed fields be saved to JSON and loaded back | Makes the package useful to other Python projects (decision needed) |
-| 6 | Issue 6 | Limit the package to BHoM/BHoM, give it a real version number, publish it | Needed before anyone installs it |
+| 6 (code done) | Issue 6 | The scope (test repository for now), a version number from BHoM, release notes, publishing | Needed before anyone installs it |
 | 7 | Issue 7 | Five small generator fixes | Low risk; can be picked up at any time |
 | 8 | Issue 8 | Tidy the documentation | Last, so the docs describe the finished state |
 
@@ -519,36 +519,77 @@ their form.
 
 ---
 
-## Step 6 (Issue 6): limit the package to BHoM/BHoM, give it a version number, publish it
+## What was done in Step 6
+
+- **6.2 attribute classes:** `TypeSelector` skips every class based on `System.Attribute`.
+- **6.3 version:** the generator reads `Major.Minor` from the file version of `BHoM.dll` (`BHoMAdapter.BHoMVersion`) and, on a full run (not `--types`), writes
+  `bhom_schema/_version.py` with `__bhom_version__` and `__version__` (`X.Y.0.dev0`, or `X.Y.0` with `--release X.Y`). The file is only rewritten when its
+  text changes. `--release` fails with exit code 1 when `X.Y` is not the version read. `pyproject.toml` takes the version from that file, `bhom_schema.__version__`
+  shows it, and `py2cs` and the test helpers skip `_version.py`. The committed `_version.py` says `10.0`, the version the CI builds; the next weekly run corrects it
+  if BHoM says otherwise (a laptop with another BHoM installed, such as 9.3, would write that).
+- **6.4 notes:** `python -m py2cs notes --head-root ... [--base-root ... --previous TAG] --version X.Y.0 --out notes.md`.
+- **6.5 `release.yml`:** manual, dry run by default, the steps of 6.5 above; the build job has `contents: write`, only the TestPyPI job has `id-token: write`, and no
+  secret is used.
+- **Tests:** NUnit `VersionTests` (attribute classes, the version read, `_version.py` once, `--release` match and mismatch, no file for a partial run);
+  pytest `test_notes.py` and two workflow tests. A wheel built from the repository is named `bhom_schema-10.0.0.dev0`.
+- **Not verified:** the release workflow has never run on GitHub; TestPyPI trusted publishing is not set up (an administrator does it once, see
+  [Workflows.md](../Workflows.md)); real PyPI is left for when BHoM/BHoM is in scope; the relation between a BHoM release number and the `BHoM.dll` file version is
+  assumed (the `--release` check stops a wrong name).
+
+---
+
+## Step 6 (Issue 6): the scope, a version number, and publishing
+
+> **Revised 2026-10-29** after reading BHoM_JSONSchema's releases, BHoM's versioning code and Step 5. The scope is the CSharpSchema_Test
+> repository for now; BHoM/BHoM comes later.
 
 ### What's wrong, in plain words
 
-- The package currently takes **every** BHoM assembly installed on the machine: about 70, including toolkits and test-only
-  ones (`UnitTest_oM`, `NUnit_oM`, `Test_oM`). Decision taken: for now, only the main BHoM repository.
-- It also includes C# *attribute* classes (the things written in square brackets, like `[Description]`). They aren't data, so
-  they don't belong in the package.
-- Its version is always `0.1.0`, so users can't tell which BHoM release it matches, and it isn't published anywhere they can
-  `pip install` it from.
+- It also includes C# *attribute* classes (the things written in square brackets, like `[Description]`). They aren't data, so they don't
+  belong in the package.
+- The version is always `0.1.0`, so users can't tell which BHoM release the classes match, and nobody can `pip install` the package.
+
+### What we decided
+
+| Question | Decision |
+|---|---|
+| Scope | Only `BHoM/CSharpSchema_Test` for now (already the case: `Converted-repositories.txt` and `--repos`). BHoM/BHoM is added later by adding it to the two repository lists |
+| What is a version for? | pip needs one, users pin and upgrade by it, and a release is a point you can name in a bug report. Nothing else: Python users do not run Versioning_Toolkit |
+| Where does the number come from? | From BHoM, not typed by hand: the generator reads the `Major.Minor` of the file version of `BHoM.dll` (the same value BHoM_Engine's `BHoMVersion()` gives, for example `10.0`) |
+| Version in every class marker? | No |
+| Stamping `_bhomVersion` when saving JSON, a warning when loading JSON of another version, refusing unknown keys? | No. Python never writes JSON for C# to upgrade, so nothing needs them. The optional `bhom_version` field stays, so the published schemas and the classes agree, and a value that is set is written and read |
+| How are releases made? | Like BHoM_JSONSchema: `develop` is regenerated every week; at the end of a milestone a branch `vX.Y` is made, regenerated, tagged and released, and then left alone |
+| Where is it published? | A GitHub Release with the wheel, and TestPyPI. Real PyPI when BHoM/BHoM is in scope: putting the test classes there would keep them on a public index for good |
 
 ### What we will do
 
-6.1 **Keep only BHoM/BHoM**, with the `--repos BHoM/BHoM` filter from Step 4. The weekly workflow and the README commands use it.
-The test that compares our class list with BHoM_JSONSchema compares only the BHoM/BHoM assemblies.
+6.1 **Scope:** nothing new. It is done (`--repos`, `Converted-repositories.txt`).
 
-6.2 **Leave out attribute classes**: the generator skips any class based on `System.Attribute`. If test-only assemblies turn out
-to live in BHoM/BHoM too, add a short, reviewed list of assemblies to skip.
+6.2 **Leave out attribute classes.** The generator skips any class based on `System.Attribute`. (The list of test-only assemblies is not
+needed until BHoM/BHoM is in scope.)
 
-6.3 **Give it a real version**: the package version follows the BHoM release the `.dll` files came from (for example `9.0.x`).
-The generator writes it into a generated file `bhom_schema/_version.py` and into each class's `__bhom__` marker, so you can
-always tell which BHoM version an object came from.
+6.3 **Version from BHoM.** The generator writes `bhom_schema/_version.py`:
+- `__bhom_version__ = "10.0"`: the BHoM `Major.Minor` of the assemblies it read.
+- `__version__ = "10.0.0.dev0"` on `develop` (the committed value only changes when the BHoM version changes, so the weekly run does not
+  make a commit just for a date), and `"10.0.0"` for a release.
+- `--release X.Y` makes a release version. It fails when `X.Y` is not the BHoM version it read, so a release cannot be named wrongly.
+- `pyproject.toml` takes the package version from `_version.py`, and `bhom_schema.__version__` shows it.
 
-6.4 **Publishing**: decide where users will install it from (a company package index, GitHub Packages, or the public PyPI),
-then add a workflow that builds the wheel after the weekly generation commits. This needs a decision, but not before Step 6.
+6.4 **Release notes.** `python -m py2cs notes` compares the classes of the previous release with the new ones and writes the added and
+removed classes and a "Breaking changes" section (removed or renamed properties, changed types and so on, the same list the linked C# pull
+request uses). That is how a Python user learns what to change before upgrading.
+
+6.5 **`release.yml`** (by hand, input `X.Y`, with a dry run): clones and builds the C# repositories, regenerates with `--release`,
+checks the result, commits it to a new branch `vX.Y`, tags `vX.Y.0`, builds the wheel, creates a GitHub Release with the wheel and the
+release notes, and publishes to TestPyPI. TestPyPI is reached with "trusted publishing" (GitHub proves who it is, so there is no password or
+token to store); that is set up once on TestPyPI.
 
 ### How we'll know it works
 
-- Tests: only BHoM/BHoM assemblies are generated; attribute classes are skipped; the version in `_version.py` matches the markers.
-- A wheel built on GitHub installs and imports with the right version.
+- Tests: attribute classes are not generated; `_version.py` holds the BHoM version and `X.Y.0.dev0`; `--release` gives `X.Y.0` and fails for a
+  different `X.Y`; the release notes list added, removed and breaking changes; the release workflow has no push or schedule trigger, only
+  the publish job can ask for the identity token, and it uses no stored secret.
+- A wheel built from the repository installs and reports the right version.
 - The build and test gate passes.
 
 ---

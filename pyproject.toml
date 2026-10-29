@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bhom-schema"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python classes generated from the BHoM C# object model (oM)."
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -12,6 +12,9 @@ dependencies = ["pydantic>=2.13,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pyright==1.1.414", "pyyaml>=6", "types-PyYAML", "jsonschema>=4.18", "types-jsonschema"]
+
+[tool.setuptools.dynamic]
+version = { attr = "bhom_schema._version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

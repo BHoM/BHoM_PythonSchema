@@ -45,14 +45,14 @@ def attach(package: Path) -> None:
 
 
 def module_names(package: Path) -> list[str]:
-    """Lists the dotted module names of every generated class file in a package, skipping `__init__` files and the `_support` folder.
+    """Lists the dotted module names of every generated class file in a package, skipping `__init__` and `_version` files and the `_support` folder.
 
     The fixture and spike suites use it to import every generated module and rebuild its model.
     """
     names: list[str] = []
     for file in sorted(package.rglob("*.py")):
         relative = file.relative_to(package.parent).with_suffix("")
-        if relative.parts[-1] == "__init__" or relative.parts[1] == "_support":
+        if relative.parts[-1] in ("__init__", "_version") or relative.parts[1] == "_support":
             continue
         names.append(".".join(relative.parts))
     return names

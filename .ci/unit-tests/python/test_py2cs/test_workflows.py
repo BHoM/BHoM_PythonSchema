@@ -168,3 +168,32 @@ def test_a_python_pr_with_no_csharp_change_still_gets_a_status():
     status = load("linked-csharp-pr.yml")["jobs"]["status"]
     assert "needs.repos.outputs.any == 'false'" in status["if"]
     assert "--no-csharp-change" in str(status["steps"])
+
+
+def test_the_release_workflow_is_manual_and_only_the_publish_job_gets_an_identity_token():
+    """Checks that the release workflow starts only by hand, that contents are read-only by default, and that only the TestPyPI job can ask for an identity token.
+
+    Protects the release from an unplanned trigger and TestPyPI from a token held by the build job.
+    """
+    workflow = load("release.yml")
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
+    assert workflow["permissions"] == {"contents": "read"}
+    assert list(workflow["jobs"]) == ["build", "publish-testpypi"]
+    assert workflow["jobs"]["build"]["permissions"] == {"contents": "write"}
+    assert workflow["jobs"]["publish-testpypi"]["permissions"] == {"id-token": "write"}
+    assert workflow["jobs"]["publish-testpypi"]["environment"] == "testpypi"
+
+
+def test_the_release_workflow_stores_no_secret_and_nothing_is_published_in_a_dry_run():
+    """Checks that the release workflow reads no repository secret, passes --release to the generator, and keeps every push, release and publish step behind not dry run.
+
+    Protects the release from a stored password and from publishing when only a check was asked for.
+    """
+    workflow = load("release.yml")
+    text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    assert "secrets." not in text
+    assert '--release "${{ inputs.version }}"' in text
+    assert workflow["jobs"]["publish-testpypi"]["if"] == "${{ !inputs.dry_run }}"
+    publishing = [s for s in workflow["jobs"]["build"]["steps"] if "git push" in s.get("run", "") or "gh release" in s.get("run", "")]
+    assert publishing and all(s["if"] == "${{ !inputs.dry_run }}" for s in publishing)

@@ -23,6 +23,19 @@ python -m venv .venv
 
 `run-all.ps1` starts with a preflight that reports missing assemblies. It never builds a repo for you.
 
+## Installing and versions
+
+The version of the package is the BHoM version of its classes: `bhom_schema.__bhom_version__` is `10.0` and `bhom_schema.__version__` is
+`10.0.0` for a release. `develop` is regenerated every week and is `10.0.0.dev0`. A release is made by hand, like BHoM_JSONSchema's: the
+*Release* workflow makes the branch `v10.0` and the tag `v10.0.0`, and attaches the wheel and the release notes (with a "Breaking changes"
+section) to a GitHub Release. The wheel is also published to TestPyPI:
+
+```powershell
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+```
+
+To upgrade, read the release notes first. See [docs/Workflows.md](docs/Workflows.md) for how a release is made.
+
 ## Saving and loading JSON
 
 The classes read and write the JSON that [BHoM_JSONSchema](https://github.com/BHoM/BHoM_JSONSchema) describes, the same as BHoM in C#:

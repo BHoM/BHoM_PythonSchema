@@ -1,0 +1,166 @@
+name: Release
+
+# Makes a release by hand, at the end of a milestone, like BHoM_JSONSchema: a branch vX.Y with the regenerated classes, the tag vX.Y.0, a GitHub
+# Release with the wheel and the release notes, and the wheel on TestPyPI. The branch is left alone afterwards. If any check fails, nothing is pushed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The BHoM version to release, as Major.Minor (for example 10.0). It must be the version the built BHoM.dll reports
+        type: string
+        required: true
+      dry_run:
+        description: Generate, check and build the wheel, but do not push, release or publish
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      PYTHONPATH: ${{ github.workspace }}/.ci/generation
+
+    steps:
+      - name: The version has the form Major.Minor
+        shell: pwsh
+        run: |
+          if ("${{ inputs.version }}" -notmatch '^\d+\.\d+$') {
+            Write-Error "The version must be Major.Minor, for example 10.0"
+            exit 1
+          }
+
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: The release does not exist yet
+        shell: pwsh
+        run: |
+          $existing = git ls-remote --heads --tags origin "v${{ inputs.version }}" "v${{ inputs.version }}.0"
+          if ($existing) {
+            Write-Error "v${{ inputs.version }} already exists: a release is never made twice. Take the next Major.Minor"
+            exit 1
+          }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - uses: NuGet/setup-nuget@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Cloned from GitHub (read only), never taken from a laptop
+      - name: Clone the repositories
+        shell: pwsh
+        run: ./.github/scripts/Clone-Repositories.ps1 -List Included-repositories.txt
+
+      - name: Build the repositories in dependency order
+        shell: pwsh
+        run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt
+
+      - name: Build the generator
+        run: dotnet build .ci/generation/PythonSchemaGeneration/PythonSchemaGeneration.csproj -c Release --nologo
+
+      # --release fails the step when the version is not the BHoM version that was read
+      - name: Generate src/bhom_schema for the release
+        shell: pwsh
+        run: |
+          $repos = (Get-Content Converted-repositories.txt | Where-Object { $_.Trim() -ne "" -and -not $_.StartsWith("#") } | ForEach-Object { $_.Trim() }) -join ","
+          dotnet .ci/generation/PythonSchemaGeneration/bin/Release/net8.0/PythonSchemaGeneration.dll `
+            --output src/bhom_schema `
+            --repos $repos `
+            --release "${{ inputs.version }}" `
+            --manifest "$env:RUNNER_TEMP/manifest.json" `
+            --report "$env:RUNNER_TEMP/report.txt" `
+            --baseline-warnings .ci/generation/warnings-baseline.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install the Python tools
+        run: python -m pip install -e ".[dev]" build
+
+      - name: Every module imports, and the Python reads back as the C# says
+        run: python -m py2cs verify --package src/bhom_schema --manifest "$env:RUNNER_TEMP/manifest.json"
+
+      - name: Pyright
+        run: python -m pyright
+
+      - name: Build the wheel
+        run: python -m build --wheel --outdir dist
+
+      - name: Write the release notes
+        shell: pwsh
+        run: |
+          $previous = git tag --list "v*.0" --sort=-v:refname | Select-Object -First 1
+          $arguments = @("notes", "--head-root", "src/bhom_schema", "--version", "${{ inputs.version }}.0", "--out", "$env:RUNNER_TEMP/notes.md")
+          if ($previous) {
+            git worktree add "$env:RUNNER_TEMP/previous" $previous
+            $arguments += @("--base-root", "$env:RUNNER_TEMP/previous/src/bhom_schema", "--previous", $previous)
+          }
+          python -m py2cs @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # One folder, so the files keep a flat layout in the artifact
+      - name: Upload the wheel and the notes
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory staging | Out-Null
+          Copy-Item dist/*.whl, "$env:RUNNER_TEMP/notes.md", "$env:RUNNER_TEMP/report.txt" staging
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: staging
+
+      - name: Commit to the release branch, tag and release
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Generated files are written with LF line endings; keep them as they are
+          git config core.autocrlf false
+          git checkout -b "v${{ inputs.version }}"
+          git add src/bhom_schema
+          git commit --allow-empty -m "Release v${{ inputs.version }}.0" -m "Generated from the BHoM ${{ inputs.version }} oM."
+          git tag "v${{ inputs.version }}.0"
+          git push origin "v${{ inputs.version }}" "v${{ inputs.version }}.0"
+          gh release create "v${{ inputs.version }}.0" (Get-Item staging/*.whl).FullName --title "BHoM schema ${{ inputs.version }}.0" --notes-file "$env:RUNNER_TEMP/notes.md"
+
+  # Trusted publishing: TestPyPI trusts this workflow and environment, so there is no token or password to store
+  publish-testpypi:
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+
+      - name: Collect the wheel
+        run: mkdir dist && cp release/*.whl dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

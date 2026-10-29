@@ -10,7 +10,16 @@ if (command.Error != null)
     return 2;
 }
 
-GenerationResult result = Generator.Run(command.Options);
+GenerationResult result;
+try
+{
+    result = Generator.Run(command.Options);
+}
+catch (InvalidOperationException e)
+{
+    Console.Error.WriteLine("error: " + e.Message);
+    return 1;
+}
 
 Console.WriteLine($"Generated {result.Types.Count} of {result.AvailableTypes} types, wrote {result.FilesWritten} files, {result.Reporter.Warnings.Count} warnings.");
 

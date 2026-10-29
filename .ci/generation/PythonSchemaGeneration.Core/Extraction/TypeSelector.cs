@@ -29,7 +29,7 @@ namespace PythonSchemaGeneration.Extraction
         /***************************************************/
 
         [Description("Tells whether a type is converted: it is in an oM namespace and is an enum or an IObject implementer, but it is not a static class, compiler " +
-            "generated, or a constructed generic type. Applies the same rules as the JSON schema generator, and Select uses it.")]
+            "generated, an attribute class, or a constructed generic type. Applies the same rules as the JSON schema generator, and Select uses it.")]
         public static bool IsSelected(Type type)
         {
             if (type.Namespace == null || !BHoMAdapter.IsOmNamespace(type.Namespace))
@@ -39,6 +39,10 @@ namespace PythonSchemaGeneration.Extraction
                 return false;
 
             if (type.IsDefined(typeof(CompilerGeneratedAttribute), false))
+                return false;
+
+            //An attribute class (a [Description]-like marker) is not data, so it is not part of the schema
+            if (typeof(Attribute).IsAssignableFrom(type))
                 return false;
 
             if (type.IsGenericType && !type.IsGenericTypeDefinition)

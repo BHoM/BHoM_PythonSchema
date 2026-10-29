@@ -78,12 +78,13 @@ namespace PythonSchemaGeneration.Tests
             return Generator.Run(options);
         }
 
-        [Description("Copies the hand-written bhom_schema __init__ and _support modules into the given package folder, because the generated modules import them. " +
+        [Description("Copies the hand-written bhom_schema __init__, _version and _support modules into the given package folder, because the generated modules import them. " +
             "Every test that generates Python into a folder calls it first.")]
         public static void CopySupport(string package)
         {
             Directory.CreateDirectory(package);
             File.Copy(Path.Combine(TestPaths.SupportPackage, "__init__.py"), Path.Combine(package, "__init__.py"), true);
+            File.Copy(Path.Combine(TestPaths.SupportPackage, "_version.py"), Path.Combine(package, "_version.py"), true);
             string support = Path.Combine(package, "_support");
             Directory.CreateDirectory(support);
             foreach (string file in Directory.GetFiles(Path.Combine(TestPaths.SupportPackage, "_support"), "*.py"))

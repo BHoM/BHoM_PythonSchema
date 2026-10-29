@@ -60,6 +60,23 @@ The linked pull request can be tried without writing anything:
    PR. Run it once more to see that it updates the same branch and PR. When the Python PR is closed without merging, the workflow
    closes the draft with a comment; delete the branch by hand.
 
+## Making a release
+
+Run *Release* from the Actions tab at the end of a milestone, with the BHoM version as `Major.Minor` (for example `10.0`). It is a dry run
+by default: it builds the C# repositories, regenerates with `--release 10.0`, checks the result, builds the wheel and writes the release notes,
+and attaches them to the run. The generator stops the run when `10.0` is not the version of the `BHoM.dll` it read. Untick `dry_run` to:
+
+1. commit the regenerated classes to a new branch `v10.0` and tag `v10.0.0` (a release is never made twice; an existing branch or tag stops the run);
+2. create a GitHub Release with the wheel and the release notes (`python -m py2cs notes`: the breaking changes first, then the added, removed and changed classes);
+3. publish the wheel to TestPyPI.
+
+TestPyPI is reached with trusted publishing, so no password or token is stored. Set it up once, by an administrator:
+
+- On test.pypi.org, add a pending publisher for the project `bhom-schema` with this repository, the workflow `release.yml` and the environment `testpypi`.
+- In the repository settings, create the environment `testpypi` (it can require a reviewer).
+
+Real PyPI is added the same way when BHoM/BHoM is in scope. The branch `v10.0` is left alone afterwards.
+
 ## The linked pull request status
 
 Nothing tells this repository when a C# pull request is merged, so `linked-csharp-pr.yml` also sets a commit status on the Python PR

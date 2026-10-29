@@ -45,7 +45,7 @@ root = pathlib.Path(sys.argv[1])
 failures = []
 count = 0
 for path in sorted((root / "bhom_schema").rglob("*.py")):
-    if path.name == "__init__.py" or "_support" in path.parts:
+    if path.name in ("__init__.py", "_version.py") or "_support" in path.parts:
         continue
     count += 1
     module = ".".join(path.relative_to(root).with_suffix("").parts)

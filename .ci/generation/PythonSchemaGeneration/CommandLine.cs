@@ -7,10 +7,10 @@ namespace PythonSchemaGeneration
     {
         /***************************************************/
 
-        private static readonly string[] m_Known = { "output", "assemblies", "org", "repos", "types", "manifest", "report", "baseline-warnings", "write-baseline" };
+        private static readonly string[] m_Known = { "output", "assemblies", "org", "repos", "types", "manifest", "report", "baseline-warnings", "write-baseline", "release" };
 
         public const string Usage = "Usage: PythonSchemaGeneration --output <bhom_schema folder> [--assemblies <folder>] [--org BHoM,Other] [--repos BHoM/BHoM,BHoM/Other_Toolkit] "
-            + "[--types A,B] [--manifest <file>] [--report <file>] [--baseline-warnings <file>] [--write-baseline <file>]";
+            + "[--types A,B] [--manifest <file>] [--report <file>] [--baseline-warnings <file>] [--write-baseline <file>] [--release <Major.Minor>]";
 
         public GenerationOptions Options { get; private set; }
 
@@ -65,6 +65,7 @@ namespace PythonSchemaGeneration
             if (arguments.TryGetValue("types", out string types))
                 result.Options.TypeFilter = Split(types);
 
+            result.Options.ReleaseVersion = arguments.GetValueOrDefault("release");
             result.BaselinePath = arguments.GetValueOrDefault("baseline-warnings");
             result.WriteBaselinePath = arguments.GetValueOrDefault("write-baseline");
             return result;

@@ -61,6 +61,18 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
+        [Description("Reads the BHoM version, as Major.Minor (for example 10.0), from the file version of the BHoM assembly among the loaded ones, the same value BHoM's own " +
+            "BHoMVersion gives. Returns null when BHoM.dll was not loaded. The generator writes it into _version.py, so the package version follows the BHoM release.")]
+        public static string BHoMVersion(IEnumerable<Assembly> assemblies)
+        {
+            Assembly bhom = assemblies.FirstOrDefault(a => a.GetName().Name == "BHoM");
+            string version = bhom?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
+            string[] parts = (version ?? "").Split('.');
+            return parts.Length >= 2 ? parts[0] + "." + parts[1] : null;
+        }
+
+        /***************************************************/
+
         [Description("Returns the folder with the BHoM assemblies: the BHoM folder reported by the engine when it exists, otherwise ProgramData BHoM Assemblies. The " +
             "generator uses it when no assembly folder is given, and the tests use it to find the oM dlls.")]
         public static string DefaultAssemblyFolder()
