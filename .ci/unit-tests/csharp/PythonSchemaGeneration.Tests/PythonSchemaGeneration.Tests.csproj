@@ -4,6 +4,7 @@
 
   <PropertyGroup>
     <CSharpSchemaTestRoot Condition="'$(CSharpSchemaTestRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..', '..', '..', 'CSharpSchema_Test'))</CSharpSchemaTestRoot>
+    <CSharpSchemaTestDir>$([MSBuild]::EnsureTrailingSlash('$(CSharpSchemaTestRoot)'))</CSharpSchemaTestDir>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -29,13 +30,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Core\PythonSchemaGeneration.Core.csproj" />
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj" />
-    <ProjectReference Include="$(CSharpSchemaTestRoot)FixtureAlpha_oM\FixtureAlpha_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
-    <ProjectReference Include="$(CSharpSchemaTestRoot)FixtureBeta_oM\FixtureBeta_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
+    <ProjectReference Include="$(CSharpSchemaTestDir)FixtureAlpha_oM\FixtureAlpha_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
+    <ProjectReference Include="$(CSharpSchemaTestDir)FixtureBeta_oM\FixtureBeta_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
   </ItemGroup>
 
   <!-- The test classes live in the CSharpSchema_Test repository, cloned next to this one (or pass -p:CSharpSchemaTestRoot=<folder>) -->
   <Target Name="CheckCSharpSchemaTest" BeforeTargets="BeforeBuild">
-    <Error Condition="!Exists('$(CSharpSchemaTestRoot)FixtureAlpha_oM\FixtureAlpha_oM.csproj')" Text="CSharpSchema_Test was not found at $(CSharpSchemaTestRoot). Clone https://github.com/BHoM/CSharpSchema_Test next to this repository, or pass -p:CSharpSchemaTestRoot=&lt;folder&gt;." />
+    <Error Condition="!Exists('$(CSharpSchemaTestDir)FixtureAlpha_oM\FixtureAlpha_oM.csproj')" Text="CSharpSchema_Test was not found at $(CSharpSchemaTestDir). Clone https://github.com/BHoM/CSharpSchema_Test next to this repository, or pass -p:CSharpSchemaTestRoot=&lt;folder&gt;." />
   </Target>
 
 </Project>

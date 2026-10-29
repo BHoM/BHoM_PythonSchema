@@ -56,6 +56,7 @@ namespace PythonSchemaGeneration
                 catch (Exception e)
                 {
                     reporter.Warn(type.FullName, "could not be converted: " + e.Message);
+                    result.FailedTypes.Add(type.FullName);
                     renderedTypesByModelType[type] = null;
                     continue;
                 }

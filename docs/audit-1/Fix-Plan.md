@@ -1,6 +1,6 @@
 # Audit 1: plan to fix the review findings
 
-Date: 2026-10-26. Status: **Steps 1 to 3 done**; Steps 4 to 8 not started.
+Date: 2026-10-26. Status: **Steps 1 to 3 done**; Step 4 written and tested, but not run on GitHub yet (see "What was done in Step 4"); Steps 5 to 8 not started.
 
 The solution was reviewed against the Option 2 system design: the C# oM is the "source of truth", meaning that when the
 Python and the C# disagree, the C# wins. The review found eight issues (**Issue 1** to **Issue 8**). This plan fixes them in
@@ -43,7 +43,7 @@ will do, and says how we will know it works.
 | Topic | Decision |
 |---|---|
 | How py2cs changes an existing C# file (Step 2) | **Patch member by member.** This reverses the old "suggested full-file replacement" decision in CODING-PLAN section 9. Whole files are written only for brand-new types. |
-| Where the input assemblies come from (Step 4) | **Share the weekly build of BHoM_JSONSchema.** Their job already builds the BHoM repositories; we reuse those built `.dll` files and only run our own generator. |
+| Where the input assemblies come from (Step 4) | **Our own build, on GitHub** (revised 2026-10-29; was: share the BHoM_JSONSchema weekly build). Our workflows clone BHoM, BHoM_Engine, JSONSchema_Toolkit and CSharpSchema_Test from GitHub and build them. BHoM_JSONSchema is not changed until our system is proven, and with far fewer projects converted to Python than to JSON, the two DLL sets may stay separate for good. |
 | Which assemblies go into the package (Step 6) | **For now, only the assemblies of the main BHoM repository**, [BHoM/BHoM](https://github.com/BHoM/BHoM) (local clone `C:\Github\BHoM`). Toolkits such as `dKoP_Toolkit` are left out for now. |
 | BHoM JSON compatibility (Step 5) | **Open.** Reasons are in Step 5; it needs your decision before Step 5 starts. |
 
@@ -61,7 +61,7 @@ What the scope decision changes in the other steps:
 | 1 (done) | Issue 2 | Make py2cs understand Python written by people, not only by the generator | Everything py2cs drafts depends on reading the Python correctly |
 | 2 (done) | Issue 1 | Change only the lines that need changing in an existing C# file | So the drafted C# is something BHoM reviewers will accept |
 | 3 (done) | Issue 4 | Agree how the Python PR and the C# PR stay in step, and warn about breaking changes | The rules must exist before they are automated |
-| 4 | Issue 5 | Automate everything on GitHub, using the JSON repository's build | Once the loop is safe, make it run by itself |
+| 4 (code done) | Issue 5 | Automate everything on GitHub, using the JSON repository's build | Once the loop is safe, make it run by itself |
 | 5 | Issue 3 | Let objects with interface-typed fields be saved to JSON and loaded back | Makes the package useful to other Python projects (decision needed) |
 | 6 | Issue 6 | Limit the package to BHoM/BHoM, give it a real version number, publish it | Needed before anyone installs it |
 | 7 | Issue 7 | Five small generator fixes | Low risk; can be picked up at any time |
@@ -275,6 +275,39 @@ to stop. The only rule left is that `linked-csharp-pr.yml` triggers on `pull_req
 
 ---
 
+## What was done in Step 4
+
+Everything is written and tested here. It has **not been run on GitHub yet**: that needs the GitHub App and two settings (see
+[Workflows.md](../Workflows.md)), and the first runs are yours to start.
+
+- **4.1 generator:** `--baseline-warnings <file>` and `--write-baseline <file>`, a committed `.ci/generation/warnings-baseline.txt`
+  (two known kinds), exit code 1 when a type could not be converted or a warning kind is new, exit code 2 for a misspelt option
+  (`CommandLine.cs`, `WarningBaseline.cs`).
+- **4.2 repository filter:** `--repos`, done earlier.
+- **4.3 build:** `Included-repositories.txt` now lists BHoM, BHoM_Engine, JSONSchema_Toolkit and CSharpSchema_Test.
+  `.github/scripts/Clone-Repositories.ps1` clones them from GitHub (read only) and records each commit;
+  `Build-Repositories.ps1` builds them in dependency order with the JSON repo's `build.ps1`. Nothing comes from a laptop.
+- **4.4 weekly generation:** `python-schema-generation.yml`. It generates only what `Converted-repositories.txt` lists
+  (CSharpSchema_Test), checks it (`py2cs verify`: every module imports and reads back as the C# manifest says; Pyright), and commits
+  straight to `develop` with the commit of every built repository in the message.
+- **4.5 PR checks:** `pr-checks.yml` runs `run-all.ps1`, and `py2cs check` and `py2cs align` for a PR that changes `src/bhom_schema`.
+  The test project finds the CSharpSchema_Test clone through the `CSharpSchemaTestRoot` environment variable.
+- **4.6 linked C# PR:** `linked-csharp-pr.yml`, `py2cs/pr.py` (raise, update, close), `py2cs/github.py` (a REST client and an
+  in-memory fake) and the commands `repos`, `plan --only-repo --allowed-repos`, `pr` and `close`. C# pull requests can only be raised in
+  the repositories of `Converted-repositories.txt`.
+- **4.7 first generation:** `src/bhom_schema` holds the 27 CSharpSchema_Test classes and 5 BHoM base classes, generated on a laptop
+  last week. The first weekly run on GitHub should change nothing; if it does, it commits the difference.
+- **4.8 rehearsal:** the local dry run is done (a new property on `Beam` becomes 3 lines in `Objects.cs`, and a new `Panel.cs`, with
+  the clone untouched). The workflow dry run and the live run are for you to start, in the order in [Workflows.md](../Workflows.md).
+- **Tests:** `test_linked_pr.py` (branch names, a second run changing nothing, a changed PR updating the same PR, closing, dry runs,
+  the REST calls and that the token never appears), `test_workflows.py` (no `push` trigger, read-only permissions, one-repository
+  tokens, base-branch tooling, BHoM never written to), `test_verify.py` and `CommandLineAndBaselineTests.cs`.
+- **Differences from the plan:** the linked-PR comment on the Python PR is updated in place instead of repeated; the PR checks build
+  BHoM_Adapter and dKoP_Toolkit as well, because the real-type tests use `dKoP_oM`; `align` is part of the PR checks job, so
+  that job stays red until the linked C# PR is merged.
+
+---
+
 ## Step 4 (Issue 5): automate everything on GitHub, using the JSON repository's build
 
 ### What's wrong, in plain words
@@ -297,7 +330,7 @@ Today everything runs by hand on one machine:
 4.2 **Add a repository filter** to the generator, `--repos BHoM/BHoM` (**done 2026-10-28**: implemented as `--repos`, first used with `BHoM/CSharpSchema_Test`; a repo run only cleans its own assembly folders), which keeps only assemblies whose description points at
 that repository. This applies the scope decision while still reading the shared build (see Step 6).
 
-4.3 **Use the BHoM_JSONSchema weekly build** (decision taken):
+4.3 **Build the C# repositories ourselves** (revised 2026-10-29; the text below is the original idea, kept for later):
 - The JSON repository's weekly job already downloads and builds the BHoM repositories. We add one step to it that uploads the
   built `.dll` files as a workflow "artifact" (a file GitHub keeps for a few days).
 - When their job finishes, our workflow starts, downloads that artifact and runs our generator on it. Their logic and ours
@@ -325,8 +358,7 @@ on a laptop.
 
 4.8 **Rehearsal**: a dry run first (prints what it would do, changes nothing), then one live draft PR, only with your explicit
 go-ahead, cleaned up afterwards. **The target needs choosing again**: the old plan used `dKoP_Toolkit`, which is now out of
-scope. The options are a draft PR in BHoM/BHoM (very visible to many people), or a personal fork of BHoM/BHoM (invisible,
-but it doesn't test the GitHub App's access to the real repository).
+scope. **Decided: `BHoM/CSharpSchema_Test`**, a repository made for this. No BHoM repository is written to.
 
 ### How we'll know it works
 

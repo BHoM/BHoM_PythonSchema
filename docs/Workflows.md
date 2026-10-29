@@ -1,0 +1,78 @@
+# GitHub workflows
+
+Three workflows run the loop between this repository and the repository that owns the C# classes. For now that repository is
+[BHoM/CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test), a repository made for testing. **No other repository is ever
+written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built (read only) because the generator needs them.
+
+| Workflow | When | What it does |
+|---|---|---|
+| [python-schema-generation.yml](../.github/workflows/python-schema-generation.yml) | Every Saturday at 4 AM UTC, and by hand | Clones and builds the C# repositories, generates `src/bhom_schema` from the C#, checks it, and commits it straight to `develop`. Not a pull request. If a check fails, nothing is committed |
+| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Builds the same repositories, then runs `run-all.ps1` (build, NUnit, pytest, Pyright). For a PR that changes `src/bhom_schema` it also runs `py2cs check` and `py2cs align` |
+| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | Raises, updates or closes a linked **draft** pull request in the C# repository |
+
+## What each one reads and writes
+
+| | Reads | Writes |
+|---|---|---|
+| Generation | `Included-repositories.txt` (what to build), `Converted-repositories.txt` (what to convert), `.ci/generation/warnings-baseline.txt` | `src/bhom_schema` on `develop` |
+| PR checks | the same | nothing |
+| Linked C# PR | `Converted-repositories.txt` | a branch `python-schema/pr-<N>` and a draft PR in the C# repository, and one comment on the Python PR |
+
+`Converted-repositories.txt` is also the list of repositories a C# pull request may be raised in. A Python class names its own
+repository (`__bhom__["repo"]`), so without that list a pull request could aim at any repository the GitHub App can reach. To add
+a repository to the loop, add it to both text files (`Included-repositories.txt` so it is built, `Converted-repositories.txt` so it
+is converted), and install the App on it.
+
+## One-time setup
+
+Someone with admin rights on the organisation does this once.
+
+1. **A GitHub App** that can push a branch and open pull requests. Permissions: *Contents: read and write*, *Pull requests: read and
+   write*, *Metadata: read*. Install it on **BHoM_PythonSchema and CSharpSchema_Test only**. A repository outside the installation
+   cannot get a token, so the App cannot write to it.
+2. **Credentials** in this repository (Settings, Secrets and variables, Actions): variable `BHOM_APP_ID` and secret
+   `BHOM_APP_PRIVATE_KEY` (the whole `.pem` text). If the App already exists for other workflows, reuse its names.
+3. **`develop` must accept the weekly commit.** The generation pushes to `develop` with the workflow's own token. If `develop` is
+   protected and requires pull requests, allow `github-actions[bot]` (or the App) to bypass that rule.
+4. **Actions** are enabled, and the default workflow permissions can stay read-only: each workflow asks for what it needs.
+
+## Running things
+
+The weekly generation can be run by hand from the Actions tab (*Run workflow*). With `dry_run` ticked it generates and checks but
+does not commit; the generation report is attached to the run.
+
+The linked pull request can be tried without writing anything:
+
+1. **On a laptop.** In a scratch copy of `src/bhom_schema`, change a class, then (with the C# repository cloned next to this one):
+
+   ```powershell
+   $env:PYTHONPATH = ".ci/generation"
+   $env:PY2CS_PATCHER = ".ci/generation/PythonSchemaGeneration.Patcher/bin/Release/net8.0/PythonSchemaGeneration.Patcher.dll"
+   .venv\Scripts\python -m py2cs plan --base-root <before>/bhom_schema --head-root <after>/bhom_schema --clones-parent C:\Github --allowed-repos Converted-repositories.txt --only-repo BHoM/CSharpSchema_Test --python-pr BHoM/BHoM_PythonSchema#7 --out plan
+   .venv\Scripts\python -m py2cs pr --plan-dir plan --repo BHoM/CSharpSchema_Test --python-repo BHoM/BHoM_PythonSchema --python-pr 7 --dry-run
+   ```
+
+   Without a token the dry run is offline: it prints the branch, the files, the PR title and the labels, and never calls GitHub. It
+   does not write into the clone.
+2. **On GitHub, dry run.** Open a Python PR, then run *Linked C# pull request* with its number and `dry_run` ticked (the default). It
+   makes the App token for `CSharpSchema_Test` only, which proves the installation and permissions, and prints what it would do.
+3. **On GitHub, live.** Run it again with `dry_run` unticked. It pushes `python-schema/pr-<N>` to CSharpSchema_Test and opens a draft
+   PR. Run it once more to see that it updates the same branch and PR. When the Python PR is closed without merging, the workflow
+   closes the draft with a comment; delete the branch by hand.
+
+## The alignment check
+
+`pr-checks.yml` runs `py2cs align` for a PR that changes `src/bhom_schema`. It generates the Python for the changed classes from
+the C# `develop` branches it has just built, and compares it with the PR. So it fails until the linked C# PR is merged, which is the
+rule: a Python PR is a proposal and is only merged after its C# PR. After the C# PR is merged, re-run the workflow.
+
+## Safety
+
+- The App token is made for one repository at a time and passed only to the step that needs it, through the environment. It is never
+  printed, and error messages never contain it.
+- The tooling that holds the token (`py2cs` and the patcher) is taken from the **base** branch, so a pull request cannot change the
+  code that runs with the token.
+- A pull request from a fork gets no linked pull request, because forks never receive the secrets.
+- The linked-PR workflow has no `push` trigger, so the weekly generation commit can never start it.
+- `.ci/generation/warnings-baseline.txt` lists the known kinds of generator warning. A new kind fails the weekly run, which means a
+  change in BHoM that the generator does not handle yet. Review it, then update the baseline with `--write-baseline`.

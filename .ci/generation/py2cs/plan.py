@@ -55,8 +55,11 @@ class Plan:
         }
 
 def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[str], Path | None], listing: Listing | None = None,
-              patcher: Patcher | None = None) -> Plan:
-    """New types get a whole new file; types that exist in C# are patched member by member with the Roslyn patcher."""
+              patcher: Patcher | None = None, only_repo: str | None = None) -> Plan:
+    """New types get a whole new file; types that exist in C# are patched member by member with the Roslyn patcher.
+
+    With only_repo, the types of other repositories are left out (the linked-PR job has one checkout per repository).
+    """
     plan = Plan()
     pending: list[tuple[PlannedFile, FilePatch]] = []
     for change in diff.changes:
@@ -68,7 +71,8 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
                     repo = resolve_repo(info, listing).repo
                 except ResolveError as e:
                     plan.errors.append(str(e))
-            plan.removed.append((repo, change.clr_name))
+            if only_repo is None or repo.lower() == only_repo.lower():
+                plan.removed.append((repo, change.clr_name))
             continue
 
         info = head[change.clr_name]
@@ -76,6 +80,8 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
             repo = resolve_repo(info, listing).repo
         except ResolveError as e:
             plan.errors.append(str(e))
+            continue
+        if only_repo is not None and repo.lower() != only_repo.lower():
             continue
         root = clone_for(repo)
         if root is None:

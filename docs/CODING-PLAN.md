@@ -4,12 +4,12 @@ Status: **plan only, no code written yet.** Background and evidence are in
 [CSharp-to-Python-Gotchas.md](CSharp-to-Python-Gotchas.md); gotcha numbers below refer to that document.
 
 Revision 3: adds `ProjectIdentification` to the spike set, brings the CI work and the linked-PR Action into scope with the
-existing GitHub App, uses the real `BHoM/dKoP_Toolkit` for the rehearsal (no scratch repository), and records the decisions
+existing GitHub App, uses the `BHoM/CSharpSchema_Test` repository for the rehearsal (the BHoM repositories are never written to), and records the decisions
 taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (69 tests), pytest (108 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (83 tests), pytest (145 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -352,23 +352,20 @@ Both parts are in scope.
   run just rewrites the Python from it; it is not a pull request. If a check fails, nothing is committed.
 - **8b `pr-checks.yml`:** on every PR run `dotnet build`, NUnit, pytest and Pyright.
 - **8c `linked-csharp-pr.yml`:** the two linked PRs. Full design and wiring in section 8.
-- **8d Rehearsal on the real `dKoP_Toolkit`** (no scratch repository needed). The test subject is a new property added to the
-  Python version of `ProjectIdentification`, for example `ProjectNumber: str = ""`:
-  1. **Local dry run.** Create a throwaway branch of this repo, add the property in
-     `src/bhom_schema/dKoP_oM/ProjectIdentification.py`, then run `py2cs diff`, `resolve`, `locate`, `emit` and `pr --dry-run`
-     against the existing clone `C:\Github\dKoP_Toolkit` (on `develop`, clean, level with `origin/develop` when checked).
-     The dry run **never writes into that clone**: it works on a temporary copy or in memory and prints the proposed
-     replacement of `dKoP_oM/AdministrativeInformation/ProjectIdentification.cs`, the diff against the current file, the branch
-     name, the PR title and the PR body.
-  2. **Workflow dry run.** Open the Python PR and run `linked-csharp-pr.yml` with `dry_run=true`: it mints the App token for
-     `BHoM/dKoP_Toolkit` only (proving the installation and permissions work) and prints what it would do.
+- **8d Rehearsal on `BHoM/CSharpSchema_Test`**, a repository made for this, so no BHoM repository is written to. The test subject is a new
+  property on `Beam` (and a new class) in `src/bhom_schema/FixtureAlpha_oM`:
+  1. **Local dry run.** In a scratch copy of `src/bhom_schema`, add the property, then run `py2cs check`, `repos`, `plan` and
+     `pr --dry-run` against the clone `C:\Github\CSharpSchema_Test`. The dry run **never writes into that clone** and, without a token,
+     never calls GitHub: it prints the files, the branch, the PR title and the body. (Done once: `Objects.cs` gets the three lines
+     of the property, and `Panel.cs` is new.)
+  2. **Workflow dry run.** Open the Python PR and run `linked-csharp-pr.yml` with `dry_run=true`: it makes the App token for
+     `CSharpSchema_Test` only (proving the installation and permissions work) and prints what it would do.
   3. **Live run (needs your explicit go-ahead at that moment).** Re-run with `dry_run=false`. It pushes branch
-     `python-schema/pr-<N>` to `BHoM/dKoP_Toolkit` and opens a **draft** PR, so dKoP maintainers will see it. The PR body
-     states that it is a rehearsal. Afterwards check the cross-links, then **close the C# PR and delete its branch, and close
-     the Python PR without merging** (the property was never added in C#; merging it would make the next weekly generation
-     revert it). Re-running confirms idempotence (same branch, same PR) and the close behaviour.
+     `python-schema/pr-<N>` to `BHoM/CSharpSchema_Test` and opens a **draft** PR. Check the cross-links, run it again to confirm it
+     updates the same branch and PR, then **close the Python PR without merging**: the workflow closes the C# draft with a comment.
+     Delete the branch by hand.
 - **Done when:** the three workflows run green on a branch of this repo, the dry runs match the expected golden output, and the
-  rehearsal produced a correctly linked draft PR in `BHoM/dKoP_Toolkit` that has then been cleaned up.
+  rehearsal produced a correctly linked draft PR in `BHoM/CSharpSchema_Test` that has then been cleaned up.
 
 ### Final step (every phase, and last): full build and test
 
@@ -417,7 +414,7 @@ and **real-type tests** (the actual oM) run when the BHoM assemblies are install
 | 5 | `locate` (folder ≠ namespace), `resolve` (toolkit repo), diff/emit for an added property |
 | 6 | Round trip compiles and matches |
 | 7 | Part of the full-corpus import and type-check (needs `dKoP_oM.dll`, already installed) |
-| 8 | Subject of the rehearsal: a new `ProjectNumber` property in Python, dry-run against `C:\Github\dKoP_Toolkit`, then a live draft PR in `BHoM/dKoP_Toolkit` |
+| 8 | Subject of the rehearsal: a new property on `FixtureAlpha_oM/Beam` in Python, dry-run against `C:\Github\CSharpSchema_Test`, then a live draft PR in `BHoM/CSharpSchema_Test` |
 
 ---
 
@@ -427,7 +424,7 @@ and **real-type tests** (the actual oM) run when the BHoM assemblies are install
 |---|---|
 | Hidden dependencies on a locally installed BHoM make results differ on CI | Fixtures for logic tests; real-type tests fail in CI and skip locally with a message; CI builds the BHoM repos itself, as the JSON job does |
 | A needed assembly is missing from `ProgramData\BHoM\Assemblies` (`dKoP_oM.dll` is present now) | Phase 0 preflight reports it; build that repo only if its dll is really missing; fixture twins cover the logic meanwhile |
-| The live rehearsal leaves a stray PR or branch in `BHoM/dKoP_Toolkit`, or the test property gets merged | Draft PR clearly labelled as a rehearsal, explicit go-ahead before the live step, mandatory clean-up step, Python PR is closed unmerged |
+| The live rehearsal leaves a stray PR or branch in `BHoM/CSharpSchema_Test`, or the test property gets merged | Draft PR clearly labelled as a rehearsal, explicit go-ahead before the live step, mandatory clean-up step, Python PR is closed unmerged |
 | `IsInOrg` and other helpers come from JSONSchema_Toolkit, which must be built before our generator in CI | `JSONSchema_Toolkit` is already in `Included-repositories.txt`; one adapter file isolates the reference |
 | Reflection can't see default values (gotcha 3) | Instantiate-and-read where possible; required otherwise; golden tests pin the behaviour |
 | Cycle or import-time problems only appear on the full corpus | Phase 1 cycle fixture, phase 7 full-corpus gate, lazy loading as the fallback |
@@ -462,8 +459,8 @@ this repository.
    - secret `BHOM_APP_PRIVATE_KEY` (the full PEM text including the BEGIN/END lines)
 4. **Protect the secrets.** Optionally attach them to a GitHub **Environment** (for example `linked-csharp-pr`) so only the
    linked-PR job can read them, with a required reviewer if you want a human gate before anything is raised.
-5. **No scratch repository is needed.** The rehearsal uses the real `BHoM/dKoP_Toolkit` (phase 8d), so that repo must be within
-   the installation (step 2).
+5. **The rehearsal repository is `BHoM/CSharpSchema_Test`** (phase 8d), so that repo must be within the installation (step 2). The
+   installation should cover only `BHoM_PythonSchema` and `CSharpSchema_Test` for now, so the App cannot write to any other repository.
 
 ### 8.2 How the workflow uses it
 
@@ -506,8 +503,8 @@ without network access.
 1. The App's name/slug and its **App ID or Client ID**, and the names of the secret and variable that already hold them (so
    the workflow reuses them rather than creating duplicates).
 2. Confirmation that the installation covers `BHoM_PythonSchema` and **all repos in `Included-repositories.txt`**.
-3. Your go-ahead, at the time, for the **live rehearsal** that opens a draft PR in `BHoM/dKoP_Toolkit` (the dry runs need no
-   approval), and who in dKoP should be told in advance.
+3. Your go-ahead, at the time, for the **live rehearsal** that opens a draft PR in `BHoM/CSharpSchema_Test` (the dry runs need no
+   approval).
 4. Whether the linked PR should run for every Python PR automatically (current plan) or only when a label such as
    `csharp-sync` is present, or after approval of an Environment.
 5. Whether the weekly generation job should also use the App token to clone any private BHoM-organisation toolkits (public
@@ -521,10 +518,10 @@ without network access.
 |---|---|
 | Modified C# types | **Member-level patch** with Roslyn (revised by audit 1; was a full-file replacement): only changed members are touched, draft PR, change report in the PR body. |
 | CI scope | **Both** the weekly generation / PR-check workflows **and** the linked-PR Action are in scope now. |
-| Repository list, owners, workflow recipe | Start as **copies of the JSON repo's**. |
+| Repository list, owners, workflow recipe | `Included-repositories.txt` (BHoM, BHoM_Engine, JSONSchema_Toolkit, CSharpSchema_Test) is cloned and built on GitHub by our own workflows, with the JSON repo's `build.ps1`. BHoM_JSONSchema is not changed for now, and the two DLL sets may stay separate for good. `Converted-repositories.txt` lists what is converted and where C# PRs may be raised: CSharpSchema_Test only. |
 | Spike set | `Point` replaced by `ProjectIdentification` as the "simple flat class" slot; `Point` is still generated and checked as `Line`'s dependency. |
 | Cross-repo credential | Existing **GitHub App**, one short-lived token per target repository. |
 | `dKoP_oM.dll` | Already installed locally; preflight reports missing dlls and builds a repo only if its dll is missing. |
-| Rehearsal target | The real **`BHoM/dKoP_Toolkit`** (local clone `C:\Github\dKoP_Toolkit` for dry runs) using a new property on the Python `ProjectIdentification`; no scratch repository. Live step needs explicit go-ahead and is cleaned up afterwards. |
+| Rehearsal target | **`BHoM/CSharpSchema_Test`** (local clone `C:\Github\CSharpSchema_Test` for dry runs); no BHoM repository is written to. Live step needs explicit go-ahead and is cleaned up afterwards. |
 | Repo discovery | `__bhom__["repo"]` from the assembly's `Description` first; folder scan only as fallback. |
 | Existing C# file lookup | Search by declaration; never by namespace path. |

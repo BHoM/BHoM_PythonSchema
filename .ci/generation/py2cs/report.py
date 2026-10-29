@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from py2cs.plan import Plan
 
+def only(plan: Plan, repo: str) -> Plan:
+    """The part of a plan that belongs to one repository."""
+    return Plan([f for f in plan.files if f.repo.lower() == repo.lower()], [(r, t) for r, t in plan.removed if r.lower() == repo.lower()], plan.errors)
 
-def render_report(plan: Plan, python_pr: str = "") -> str:
+def render_report(plan: Plan, python_pr: str = "", only_repo: str | None = None) -> str:
+    if only_repo is not None:
+        plan = only(plan, only_repo)
+
     lines: list[str] = []
     if python_pr:
         lines.append(f"Depends on {python_pr}")

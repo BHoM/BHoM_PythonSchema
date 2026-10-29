@@ -7,6 +7,7 @@ Python (Pydantic) classes generated from the BHoM C# object model (oM), the Pyth
 - `.ci/generation/PythonSchemaGeneration*`: the C# to Python converter (reads the compiled oM assemblies).
 - `.ci/generation/py2cs`: the Python to C# converter, used by the linked-PR workflow to draft aligned C#.
 - `.ci/unit-tests`: NUnit and pytest tests, plus `run-all.ps1` that runs everything.
+- `.github/workflows`: the weekly generation, the PR checks and the linked C# pull request. See [docs/Workflows.md](docs/Workflows.md).
 - `docs/`: research notes and the coding plan.
 
 ## Development setup

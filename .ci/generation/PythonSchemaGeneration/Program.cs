@@ -1,41 +1,46 @@
 using PythonSchemaGeneration;
+using PythonSchemaGeneration.Reporting;
 
-//Usage: PythonSchemaGeneration --output <bhom_schema folder> [--assemblies <folder>] [--org BHoM,Other] [--repos BHoM/BHoM,BHoM/Other_Toolkit] [--types A,B] [--manifest <file>] [--report <file>]
-Dictionary<string, string> arguments = new Dictionary<string, string>();
-for (int i = 0; i < args.Length; i++)
+//Exit codes: 0 done, 1 a type could not be converted or a warning kind is not in the baseline, 2 wrong command line
+CommandLine command = CommandLine.Parse(args);
+if (command.Error != null)
 {
-    if (args[i].StartsWith("--") && i + 1 < args.Length)
-        arguments[args[i].Substring(2)] = args[++i];
-}
-
-if (!arguments.ContainsKey("output"))
-{
-    Console.Error.WriteLine("Missing --output <path to the bhom_schema package folder>");
+    Console.Error.WriteLine(command.Error);
+    Console.Error.WriteLine(CommandLine.Usage);
     return 2;
 }
 
-GenerationOptions options = new GenerationOptions
-{
-    OutputFolder = arguments["output"],
-    ReportPath = arguments.GetValueOrDefault("report"),
-    ManifestPath = arguments.GetValueOrDefault("manifest"),
-    AssemblyFolder = arguments.GetValueOrDefault("assemblies"),
-};
-
-if (arguments.TryGetValue("org", out string orgs))
-    options.Organisations = orgs.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
-
-if (arguments.TryGetValue("repos", out string repos))
-    options.Repos = repos.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
-
-if (arguments.TryGetValue("types", out string types))
-    options.TypeFilter = types.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
-
-GenerationResult result = Generator.Run(options);
+GenerationResult result = Generator.Run(command.Options);
 
 Console.WriteLine($"Generated {result.Types.Count} of {result.AvailableTypes} types, wrote {result.FilesWritten} files, {result.Reporter.Warnings.Count} warnings.");
 
 foreach (string warning in result.Reporter.Warnings.Take(25))
     Console.WriteLine("  warning: " + warning);
 
-return 0;
+int exitCode = 0;
+foreach (string type in result.FailedTypes)
+{
+    Console.Error.WriteLine($"error: {type} could not be converted");
+    exitCode = 1;
+}
+
+if (command.WriteBaselinePath != null)
+{
+    WarningBaseline.Write(command.WriteBaselinePath, result.Reporter.Warnings);
+    Console.WriteLine($"Wrote {WarningBaseline.Kinds(result.Reporter.Warnings).Count} warning kinds to {command.WriteBaselinePath}");
+}
+
+if (command.BaselinePath != null)
+{
+    (List<string> newKinds, List<string> goneKinds) = WarningBaseline.Compare(result.Reporter.Warnings, WarningBaseline.Read(command.BaselinePath));
+    foreach (string kind in goneKinds)
+        Console.WriteLine($"note: the warning kind '{kind}' no longer occurs; remove it from the baseline");
+
+    foreach (string kind in newKinds)
+    {
+        Console.Error.WriteLine($"error: new warning kind not in the baseline: {kind}");
+        exitCode = 1;
+    }
+}
+
+return exitCode;
