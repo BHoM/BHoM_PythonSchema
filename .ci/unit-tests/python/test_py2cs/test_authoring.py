@@ -2,26 +2,16 @@
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
 import pytest
 
-from helpers import demo_package, module, package
+from helpers import demo_package, module, package, write
 from py2cs.__main__ import main
 from py2cs.check import check_package
 from py2cs.csharp import emit_new
 from py2cs.diff import diff_manifests
 from py2cs.reader import ReadError, ReadErrors, read_package
-
-def hand_written(root: Path, relative: str, source: str) -> None:
-    """Writes dedented hand-written Python (no __bhom__ marker) into a package folder, creating folders.
-
-    The authoring tests use it to add the classes a developer would type by hand.
-    """
-    path = root / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(source).lstrip("\n"), encoding="utf-8", newline="\n")
 
 def demo_with_folders(tmp_path: Path) -> Path:
     """Builds the demo package plus a generated Wall class in a Demo_oM/Elements sub folder.
@@ -41,7 +31,7 @@ def test_common_typing_idioms_are_understood(tmp_path: Path):
     Protects the reader stage of py2cs, which must accept hand-written Python and not only generator output.
     """
     pkg = demo_package(tmp_path)
-    hand_written(pkg, "Demo_oM/Idioms.py", """
+    write(pkg, "Demo_oM/Idioms.py", """
         import typing
         from typing import Dict, List, Optional, Union
         import pydantic
@@ -93,7 +83,7 @@ def test_a_new_class_without_a_marker_is_read_not_skipped(tmp_path: Path):
     """
     base = read_package(demo_package(tmp_path / "base"))
     head_root = demo_package(tmp_path / "head")
-    hand_written(head_root, "Demo_oM/ProjectStage.py", """
+    write(head_root, "Demo_oM/ProjectStage.py", """
         from bhom_schema._support import SchemaModel
         from bhom_schema.Demo_oM.IdentityBase import IdentityBase
 
@@ -114,7 +104,7 @@ def test_namespace_of_a_new_folder_follows_the_generator_rule(tmp_path: Path):
     Protects the namespace of the new C# files that py2cs drafts from hand-written Python.
     """
     pkg = demo_with_folders(tmp_path)
-    hand_written(pkg, "Demo_oM/Elements/Openings/Door.py", """
+    write(pkg, "Demo_oM/Elements/Openings/Door.py", """
         from bhom_schema._support import SchemaModel
 
         class Door(SchemaModel):
@@ -129,13 +119,13 @@ def test_kind_generic_and_enum_details_are_worked_out(tmp_path: Path):
     Protects the drafting of new C# types from hand-written Python.
     """
     pkg = demo_package(tmp_path)
-    hand_written(pkg, "Demo_oM/ILabelled.py", """
+    write(pkg, "Demo_oM/ILabelled.py", """
         from bhom_schema.Demo_oM.IdentityBase import IdentityBase
 
         class ILabelled(IdentityBase):
             Label: str
     """)
-    hand_written(pkg, "Demo_oM/Group_1.py", """
+    write(pkg, "Demo_oM/Group_1.py", """
         from pydantic import Field
         from bhom_schema._support import SchemaModel
         from bhom_schema.Demo_oM.ILabelled import ILabelled
@@ -143,7 +133,7 @@ def test_kind_generic_and_enum_details_are_worked_out(tmp_path: Path):
         class Group_1[T: ILabelled](SchemaModel):
             Items: list[T] = Field(default_factory=list)
     """)
-    hand_written(pkg, "Demo_oM/Access.py", """
+    write(pkg, "Demo_oM/Access.py", """
         from enum import IntFlag
 
         class Access(IntFlag):
@@ -165,7 +155,7 @@ def test_a_new_assembly_folder_is_an_error(tmp_path: Path):
     Protects the reader from inventing a C# assembly, which only a person can create.
     """
     pkg = demo_package(tmp_path)
-    hand_written(pkg, "Brand_oM/Thing.py", """
+    write(pkg, "Brand_oM/Thing.py", """
         from bhom_schema._support import SchemaModel
 
         class Thing(SchemaModel):
@@ -182,7 +172,7 @@ def test_problems_are_collected_per_file_and_the_rest_is_read(tmp_path: Path):
     Lets one py2cs run report every Python problem of a PR at once.
     """
     pkg = demo_package(tmp_path)
-    hand_written(pkg, "Demo_oM/Broken.py", """
+    write(pkg, "Demo_oM/Broken.py", """
         from collections.abc import Sequence
         from bhom_schema._support import SchemaModel
 
@@ -238,7 +228,7 @@ def test_check_lists_errors_and_missing_descriptions(tmp_path: Path, capsys: pyt
     """
     base = demo_package(tmp_path / "base")
     head = demo_package(tmp_path / "head", ["Stage: int = 0", "Note: str = Field(default='', description='A note.')"])
-    hand_written(head, "Demo_oM/Fresh.py", """
+    write(head, "Demo_oM/Fresh.py", """
         from bhom_schema._support import SchemaModel
 
         class Fresh(SchemaModel):
@@ -254,7 +244,7 @@ def test_check_lists_errors_and_missing_descriptions(tmp_path: Path, capsys: pyt
     ]
 
     assert main(["check", "--root", str(head)]) == 0
-    hand_written(head, "Demo_oM/Bad.py", """
+    write(head, "Demo_oM/Bad.py", """
         from bhom_schema._support import SchemaModel
 
         class Bad(SchemaModel):

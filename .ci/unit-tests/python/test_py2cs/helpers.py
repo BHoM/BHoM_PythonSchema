@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import textwrap
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 import pytest
+from py2cs.github import MockGitHub, MockRepository
 
 GOLDEN = Path(__file__).resolve().parents[2] / "golden" / "py2cs"
 
@@ -154,3 +157,27 @@ def csharp_tree(root: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8", newline="\n")
     return repo
+
+
+class Recorder:
+    """A RestClient transport for tests: answers from a table of canned replies and records every request it receives."""
+
+    def __init__(self, answers: dict[tuple[str, str], tuple[int, Any]]):
+        """Stores the canned answers keyed by (method, path) and starts an empty request log."""
+        self.answers = answers
+        self.requests: list[tuple[str, str, dict[str, str], Any]] = []
+
+    def __call__(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> tuple[int, bytes]:
+        """Acts as the RestClient transport: records the request (method, path, headers, parsed body) and returns the canned status and JSON, or 404 Not Found."""
+        path = url.removeprefix("https://api.github.com")
+        self.requests.append((method, path, headers, json.loads(body) if body else None))
+        status, data = self.answers.get((method, path), (404, {"message": "Not Found"}))
+        return status, json.dumps(data).encode()
+
+
+def mock_github(*repos: str) -> MockGitHub:
+    """Builds a MockGitHub that holds the Python repository BHoM/BHoM_PythonSchema and an empty repository for each name given.
+
+    The linked-PR and status tests use it as the whole of GitHub, so nothing touches the network.
+    """
+    return MockGitHub({"BHoM/BHoM_PythonSchema": MockRepository(), **{repo: MockRepository() for repo in repos}})

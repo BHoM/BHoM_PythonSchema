@@ -48,7 +48,7 @@ namespace PythonSchemaGeneration.Emission
             body.Append(Marker(model, tracker, baseConstraintNotes, rendered));
 
             if (model.Kind == TypeKind.Enum)
-                AddEnumMembers(model, body, rendered);
+                AddEnumMembers(model, body);
             else if (model.Kind != TypeKind.Interface)
                 AddFields(model, body, tracker, rendered);
 
@@ -254,7 +254,7 @@ namespace PythonSchemaGeneration.Emission
 
         [Description("Appends the member lines of an enum class (name = value, with the member description as a comment) to the class body, or a pass line when "
             + "there are none. Render calls it for enum types.")]
-        private void AddEnumMembers(TypeModel model, StringBuilder body, RenderedType rendered)
+        private void AddEnumMembers(TypeModel model, StringBuilder body)
         {
             body.Append('\n');
             if (model.EnumMembers.Count == 0)

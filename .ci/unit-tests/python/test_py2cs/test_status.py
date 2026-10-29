@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from helpers import Recorder, mock_github
 from py2cs.__main__ import main
-from py2cs.github import MockGitHub, MockRepository, PullRequest, RestClient
+from py2cs.github import MockGitHub, PullRequest, RestClient
 from py2cs.pr import branch_name
 from py2cs.status import CONTEXT, linked_status, update_status
 
@@ -16,13 +17,6 @@ REPO = "BHoM/Demo_Toolkit"
 OTHER = "BHoM/Other_Toolkit"
 PYTHON_REPO = "BHoM/BHoM_PythonSchema"
 SHA = "abc123"
-
-def github(*repos: str) -> MockGitHub:
-    """Returns an in-memory MockGitHub holding an empty Python repository and an empty repository for each name given.
-
-    The status tests use it in place of the real GitHub.
-    """
-    return MockGitHub({PYTHON_REPO: MockRepository(), **{r: MockRepository() for r in repos}})
 
 def linked(remote: MockGitHub, repo: str, number: int = 7, state: str = "open", merged: bool = False) -> PullRequest:
     """Creates a draft PR on the linked branch of a Python PR in the given repository and sets its state and merged flag; returns it.
@@ -38,7 +32,7 @@ def test_an_open_linked_draft_is_pending():
 
     Protects the commit status that tells reviewers the C# PR is not merged yet.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     pull = linked(remote, REPO)
     status = linked_status(remote, [REPO], 7)
     assert status is not None
@@ -49,7 +43,7 @@ def test_a_merged_linked_pr_is_success():
 
     Protects the commit status that allows the Python PR to merge once the C# is merged.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     linked(remote, REPO, state="closed", merged=True)
     status = linked_status(remote, [REPO], 7)
     assert status is not None and (status.state, status.description) == ("success", f"Merged: {REPO}#1")
@@ -59,7 +53,7 @@ def test_a_linked_pr_closed_without_merging_is_a_failure():
 
     Protects the commit status from passing a Python PR whose C# was abandoned.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     linked(remote, REPO, state="closed", merged=False)
     status = linked_status(remote, [REPO], 7)
     assert status is not None and (status.state, status.description) == ("failure", f"{REPO}#1 was closed without merging")
@@ -69,8 +63,8 @@ def test_no_linked_pr_means_no_status():
 
     Protects the status job from reporting on unrelated PRs.
     """
-    assert linked_status(github(REPO), [REPO], 7) is None
-    remote = github(REPO)
+    assert linked_status(mock_github(REPO), [REPO], 7) is None
+    remote = mock_github(REPO)
     linked(remote, REPO, number=8)
     assert linked_status(remote, [REPO], 7) is None, "another Python PR's draft is not this one's"
 
@@ -79,19 +73,19 @@ def test_several_repositories_are_combined():
 
     Protects the status of a Python PR that changes classes of several C# repositories.
     """
-    remote = github(REPO, OTHER)
+    remote = mock_github(REPO, OTHER)
     linked(remote, REPO, state="closed", merged=True)
     linked(remote, OTHER)
     status = linked_status(remote, [REPO, OTHER], 7)
     assert status is not None and status.state == "pending" and OTHER in status.description
 
-    remote = github(REPO, OTHER)
+    remote = mock_github(REPO, OTHER)
     linked(remote, REPO, state="closed", merged=True)
     linked(remote, OTHER, state="closed", merged=True)
     status = linked_status(remote, [REPO, OTHER], 7)
     assert status is not None and status.state == "success"
 
-    remote = github(REPO, OTHER)
+    remote = mock_github(REPO, OTHER)
     linked(remote, REPO, state="closed", merged=True)
     linked(remote, OTHER, state="closed", merged=False)
     status = linked_status(remote, [REPO, OTHER], 7)
@@ -102,7 +96,7 @@ def test_the_newest_pr_of_the_branch_counts():
 
     Protects the status when a developer reopens the linked work.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     linked(remote, REPO, state="closed", merged=False)
     newer = linked(remote, REPO)
     status = linked_status(remote, [REPO], 7)
@@ -113,7 +107,7 @@ def test_the_status_is_written_on_the_head_commit_of_the_python_pr():
 
     Protects the status job of the linked-PR workflow.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     linked(remote, REPO, state="closed", merged=True)
     update_status(remote, remote, [REPO], PYTHON_REPO, 7, SHA)
     assert remote.repositories[PYTHON_REPO].statuses[(SHA, CONTEXT)][0] == "success"
@@ -124,7 +118,7 @@ def test_nothing_is_written_without_a_linked_pr_or_on_a_dry_run():
 
     Protects the status job from noise and the dry-run preview.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     assert update_status(remote, remote, [REPO], PYTHON_REPO, 7, SHA) is None
     assert not any(c[0] == "set_commit_status" for c in remote.calls)
 
@@ -138,7 +132,7 @@ def test_a_python_pr_that_needs_no_csharp_change_is_success():
 
     Protects the status job for Python PRs that need no linked C# PR.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     status = update_status(remote, remote, [REPO], PYTHON_REPO, 7, SHA, no_change=True)
     assert status is not None and status.description == "No C# change is needed"
     assert remote.repositories[PYTHON_REPO].statuses[(SHA, CONTEXT)][0] == "success"
@@ -148,7 +142,7 @@ def test_a_new_status_replaces_the_old_one_for_the_same_commit():
 
     Protects the status job when the C# PR is merged later.
     """
-    remote = github(REPO)
+    remote = mock_github(REPO)
     pull = linked(remote, REPO)
     update_status(remote, remote, [REPO], PYTHON_REPO, 7, SHA)
     assert remote.repositories[PYTHON_REPO].statuses[(SHA, CONTEXT)][0] == "pending"
@@ -176,19 +170,6 @@ def test_command_line_dry_run_without_a_token_is_offline(tmp_path: Path, capsys:
     assert "would set the status success: No C# change is needed" in capsys.readouterr().out
 
 # ---------------------------------------------------------------- the REST calls
-
-class Recorder:
-    def __init__(self, answers: dict[tuple[str, str], tuple[int, object]]):
-        """Stores the canned answers keyed by (method, path) and starts an empty request log."""
-        self.answers = answers
-        self.requests: list[tuple[str, str, object]] = []
-
-    def __call__(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> tuple[int, bytes]:
-        """Acts as the RestClient transport: records the request (method, path, parsed body) and returns the canned status and JSON, or 404 Not Found."""
-        path = url.removeprefix("https://api.github.com")
-        self.requests.append((method, path, json.loads(body) if body else None))
-        status, data = self.answers.get((method, path), (404, {"message": "Not Found"}))
-        return status, json.dumps(data).encode()
 
 def pull_json(number: int, state: str, merged_at: str | None) -> dict[str, object]:
     """Builds the JSON of a pull request as the GitHub API returns it, for the given number, state and merged_at.
@@ -221,6 +202,6 @@ def test_rest_client_sets_a_commit_status_with_a_short_description():
     """
     transport = Recorder({("POST", "/repos/o/r/statuses/abc123"): (201, {})})
     RestClient("tok", transport=transport).set_commit_status("o/r", "abc123", "pending", CONTEXT, "x" * 300, "https://github.com/o/r/pull/3")
-    method, path, body = transport.requests[0]
+    method, path, _, body = transport.requests[0]
     assert (method, path) == ("POST", "/repos/o/r/statuses/abc123")
     assert isinstance(body, dict) and body["state"] == "pending" and body["context"] == CONTEXT and len(str(body["description"])) == 140

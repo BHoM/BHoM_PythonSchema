@@ -32,7 +32,7 @@ def test_a_module_that_does_not_import_fails(tmp_path: Path, capsys: pytest.Capt
     shutil.copytree(require_output("fixtures"), package)
     (package / "FixtureAlpha_oM" / "Broken.py").write_text("from bhom_schema.Nowhere import Missing\n", encoding="utf-8")
 
-    count, problems = verify_package(package)
+    _, problems = verify_package(package)
     assert any(p.startswith("import failed: bhom_schema.FixtureAlpha_oM.Broken: ModuleNotFoundError") for p in problems)
 
     assert main(["verify", "--package", str(package)]) == 1

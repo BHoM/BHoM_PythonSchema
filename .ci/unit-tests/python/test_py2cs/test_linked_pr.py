@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from helpers import csharp_tree, demo_package, module, package, require_patcher
+from helpers import Recorder, csharp_tree, demo_package, mock_github, module, package, require_patcher
 from py2cs.__main__ import main
 from py2cs.ci import affected_repos, load_allowed, make_client
 from py2cs.diff import diff_manifests
@@ -50,13 +50,6 @@ def written_plan(tmp_path: Path, extra: list[str] | None = None, new_class: bool
     (out / "reports" / (REPO.replace("/", "__") + ".md")).write_text(render_report(plan, PR.reference, REPO), encoding="utf-8")
     return out
 
-def github() -> MockGitHub:
-    """Returns an in-memory MockGitHub with empty repositories for the demo C# repository and the Python repository.
-
-    The raise and close tests use it in place of the real GitHub.
-    """
-    return MockGitHub({REPO: MockRepository(), PYTHON_REPO: MockRepository()})
-
 # ---------------------------------------------------------------- raising
 
 def test_branch_is_named_after_the_python_pr():
@@ -72,8 +65,7 @@ def test_first_run_creates_branch_files_draft_pr_label_and_comment(tmp_path: Pat
     Protects the linked-PR workflow's raise job.
     """
     plan = written_plan(tmp_path, ["Count: int = 0"])
-    remote = github()
-    # Make the planned change breaking, as if the type changed: here a plain addition has no label
+    remote = mock_github(REPO)
     result = raise_pr(remote, plan, REPO, PR, python_client=remote)
 
     assert [c[0] for c in remote.calls] == ["create_branch", "put_file", "create_pull_request", "upsert_comment"]
@@ -92,7 +84,7 @@ def test_running_again_changes_nothing(tmp_path: Path):
     Protects the raise job from noise when the workflow re-runs.
     """
     plan = written_plan(tmp_path)
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, plan, REPO, PR, python_client=remote)
     remote.calls.clear()
 
@@ -107,7 +99,7 @@ def test_a_changed_python_pr_updates_the_same_branch_and_pr(tmp_path: Path):
 
     Protects the raise job when a developer pushes more commits to the Python PR.
     """
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, written_plan(tmp_path / "one", ["A: int = 0"]), REPO, PR, python_client=remote)
     remote.calls.clear()
 
@@ -122,7 +114,7 @@ def test_two_python_prs_get_two_branches(tmp_path: Path):
     Protects the link between each Python PR and its C# PR.
     """
     plan = written_plan(tmp_path)
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, plan, REPO, PythonPr(PYTHON_REPO, 7))
     raise_pr(remote, plan, REPO, PythonPr(PYTHON_REPO, 8))
     assert sorted(p.head for p in remote.repositories[REPO].pull_requests) == ["python-schema/pr-7", "python-schema/pr-8"]
@@ -133,7 +125,7 @@ def test_breaking_changes_label_the_pull_request(tmp_path: Path):
     Protects the label that tells reviewers a change may break users.
     """
     plan = written_plan(tmp_path, remove_enum=True)
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, plan, REPO, PR)
     pull = remote.repositories[REPO].pull_requests[0]
     assert remote.repositories[REPO].labels[pull.number] == ["breaking-change"]
@@ -144,7 +136,7 @@ def test_a_dry_run_writes_nothing_and_lists_what_it_would_do(tmp_path: Path):
     Protects the preview of the raise job.
     """
     plan = written_plan(tmp_path, new_class=True)
-    remote = github()
+    remote = mock_github(REPO)
     result = raise_pr(remote, plan, REPO, PR, dry_run=True, python_client=remote)
 
     assert remote.calls == []
@@ -178,7 +170,7 @@ def test_closing_an_unmerged_python_pr_closes_the_linked_draft_with_a_comment(tm
 
     Protects the close job of the linked-PR workflow.
     """
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     remote.calls.clear()
 
@@ -192,7 +184,7 @@ def test_a_merged_python_pr_only_comments(tmp_path: Path):
 
     Protects the close job, since a person merges the C# PR.
     """
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     close_linked(remote, REPO, PR, merged=True)
     pull = remote.repositories[REPO].pull_requests[0]
@@ -203,7 +195,7 @@ def test_closing_with_no_linked_pr_does_nothing():
 
     Protects the close job for Python PRs that needed no C# change.
     """
-    remote = github()
+    remote = mock_github(REPO)
     result = close_linked(remote, REPO, PR, merged=False)
     assert remote.calls == [] and result.actions[0].kind == "skip"
 
@@ -212,7 +204,7 @@ def test_closing_dry_run_writes_nothing(tmp_path: Path):
 
     Protects the preview of the close job.
     """
-    remote = github()
+    remote = mock_github(REPO)
     raise_pr(remote, written_plan(tmp_path), REPO, PR)
     remote.calls.clear()
     close_linked(remote, REPO, PR, merged=False, dry_run=True)
@@ -304,21 +296,6 @@ def test_make_client_reads_the_token_from_the_environment(monkeypatch: pytest.Mo
     assert "ghs_secret" not in repr(client)
 
 # ---------------------------------------------------------------- the REST client
-
-class Recorder:
-    """A transport that answers from a table and records every request."""
-
-    def __init__(self, answers: dict[tuple[str, str], tuple[int, Any]]):
-        """Stores the canned answers keyed by (method, path) and starts an empty request log."""
-        self.answers = answers
-        self.requests: list[tuple[str, str, dict[str, str], Any]] = []
-
-    def __call__(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> tuple[int, bytes]:
-        """Acts as the RestClient transport: records the request (method, path, headers, parsed body) and returns the canned status and JSON, or 404 Not Found."""
-        path = url.removeprefix("https://api.github.com")
-        self.requests.append((method, path, headers, json.loads(body) if body else None))
-        status, data = self.answers.get((method, path), (404, {"message": "Not Found"}))
-        return status, json.dumps(data).encode()
 
 def test_rest_client_calls_the_right_endpoints():
     """Checks that each RestClient method calls the right GitHub REST endpoint with the right body and the bearer token.

@@ -29,13 +29,6 @@ class Diff:
         """
         return bool(self.changes)
 
-    def of_kind(self, kind: str) -> list[TypeChange]:
-        """Returns the changes of one kind (added, removed or modified).
-
-        Used when planning and reporting to treat new, removed and modified types separately.
-        """
-        return [c for c in self.changes if c.kind == kind]
-
     def to_json(self) -> dict[str, Any]:
         """Converts the diff to a JSON-ready dictionary of changes with their details and breaking items.
 

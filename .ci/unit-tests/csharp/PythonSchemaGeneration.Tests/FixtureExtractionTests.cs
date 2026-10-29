@@ -144,7 +144,7 @@ namespace PythonSchemaGeneration.Tests
             Assert.That(text, Does.Contain("Duration: timedelta = timedelta(seconds=90.0)"));
             Assert.That(text, Does.Contain("Quote: str = "));
             Assert.That(text, Does.Contain("Big: float = 1.7976931348623157e+308"));
-            Assert.That(text, Does.Contain("BHoM_Guid: UUID") .Or.Not.Contain("BHoM_Guid"), "inherited properties are not repeated");
+            Assert.That(text, Does.Not.Contain("BHoM_Guid"), "inherited properties are not repeated");
         }
 
         [Test]

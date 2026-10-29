@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 
 from py2cs.model import Manifest, PropertyInfo, TypeInfo
 
-KEYWORD_TYPES = {"bool", "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong", "float", "double", "decimal", "char", "string", "object"}
 COPYRIGHT = """/*
  * This file is part of the Buildings and Habitats object Model (BHoM)
  * Copyright (c) 2015 - 2025, the respective contributors. All rights reserved.
@@ -378,13 +377,6 @@ def render_type(info: TypeInfo, manifest: Manifest, notes: list[str] | None = No
     usings: set[str] = set()
     lines: list[str] = []
     indent = "    "
-
-    def attribute(text: str) -> str:
-        """Formats an attribute as an indented bracketed line.
-
-        A small helper inside `render_type` that no code currently calls.
-        """
-        return f"{indent * 2}[{text}]"
 
     if info.description:
         usings.add("System.ComponentModel")

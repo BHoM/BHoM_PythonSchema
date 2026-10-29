@@ -41,11 +41,6 @@ namespace PythonSchemaGeneration.Mapping
 
         /***************************************************/
 
-        [Description("Marks a name as taken so that no import can use it as its local name. Not called by the generator code at present.")]
-        public void Reserve(string name) { m_ReservedNames.Add(name); }
-
-        /***************************************************/
-
         [Description("Registers an import of a standard library or support name, such as typing Any, and returns the local name to write in the annotation. The TypeMapper " +
             "uses it for Python types that are not generated oM types.")]
         public string AddStandardName(string module, string name)

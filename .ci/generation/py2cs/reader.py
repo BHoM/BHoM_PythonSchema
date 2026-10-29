@@ -90,14 +90,6 @@ class RefInfo:
         """
         return str(self.marker.get("kind", "class"))
 
-    @property
-    def renamed_members(self) -> dict[str, str]:
-        """Returns the map of Python enum member names to C# names that the marker records, or an empty map.
-
-        Part of reading the marker of a referenced enum.
-        """
-        return dict(self.marker.get("renamed_members", {}))
-
 @dataclass
 class Inferred:
     marker: dict[str, Any]

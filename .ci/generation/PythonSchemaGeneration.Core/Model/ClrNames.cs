@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 
 namespace PythonSchemaGeneration.Model
 {
@@ -61,21 +60,6 @@ namespace PythonSchemaGeneration.Model
                 fullName = fullName.Substring(0, tickIndex);
 
             return fullName.Replace('+', '.');
-        }
-
-        /***************************************************/
-
-        [Description("Joins strings with a comma and a space. Not called by the generator code at present.")]
-        public static string Join(IEnumerable<string> items)
-        {
-            StringBuilder sb = new StringBuilder();
-            foreach (string s in items)
-            {
-                if (sb.Length > 0) sb.Append(", ");
-                sb.Append(s);
-            }
-
-            return sb.ToString();
         }
 
         /***************************************************/
