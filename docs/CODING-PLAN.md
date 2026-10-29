@@ -459,7 +459,7 @@ this repository.
 3. **Store the credentials.** Note the App ID (or Client ID) and generate a private key (`.pem`). Add them where the workflow can
    read them: either an organisation secret/variable shared with `BHoM_PythonSchema`, or repository-level ones. Suggested
    names (reuse the names your other workflows already use if the secret exists):
-   - variable `BHOM_APP_ID`
+   - secret `BHOM_APP_ID`
    - secret `BHOM_APP_PRIVATE_KEY` (the full PEM text including the BEGIN/END lines)
 4. **Protect the secrets.** Optionally attach them to a GitHub **Environment** (for example `linked-csharp-pr`) so only the
    linked-PR job can read them, with a required reviewer if you want a human gate before anything is raised.

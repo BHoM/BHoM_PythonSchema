@@ -145,7 +145,7 @@ jobs:
         id: token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.BHOM_APP_ID }}
+          app-id: ${{ secrets.BHOM_APP_ID }}
           private-key: ${{ secrets.BHOM_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ matrix.name }}
@@ -218,7 +218,7 @@ jobs:
         id: token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.BHOM_APP_ID }}
+          app-id: ${{ secrets.BHOM_APP_ID }}
           private-key: ${{ secrets.BHOM_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ matrix.name }}
