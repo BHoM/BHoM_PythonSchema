@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj" />
     <ProjectReference Include="$(CSharpSchemaTestDir)FixtureAlpha_oM\FixtureAlpha_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
     <ProjectReference Include="$(CSharpSchemaTestDir)FixtureBeta_oM\FixtureBeta_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
+    <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration\PythonSchemaGeneration.csproj" />
   </ItemGroup>
 
   <!-- The test classes live in the CSharpSchema_Test repository, cloned next to this one (or pass -p:CSharpSchemaTestRoot=<folder>) -->

@@ -73,14 +73,14 @@ def verify_package(package: Path, manifest: Path | None = None) -> tuple[int, li
         problems += compare_manifests(load_manifest(manifest), read_package(package), allow_extra=False)
     return count, problems
 
-def make_client(token_env: str | None, offline_repo: str | None = None) -> tuple[GitHubClient, bool]:
+def make_client(token_env: str | None, offline_repos: list[str] | None = None) -> tuple[GitHubClient, bool]:
     """(client, offline). The token is read from an environment variable, so it is never on a command line.
 
-    Without a token and with an offline_repo, an empty in-memory repository stands in, for a dry run on a laptop.
+    Without a token and with offline_repos, empty in-memory repositories stand in, for a dry run on a laptop.
     """
     token = os.environ.get(token_env or "", "")
     if token:
         return RestClient(token), False
-    if offline_repo is not None:
-        return FakeGitHub({offline_repo: FakeRepository()}), True
+    if offline_repos is not None:
+        return FakeGitHub({repo: FakeRepository() for repo in offline_repos}), True
     raise ValueError(f"the environment variable {token_env} holds no token")

@@ -9,13 +9,14 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (83 tests), pytest (145 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (82 tests), pytest (156 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
 - **Golden files are reviewed generator snapshots**, not hand-written specifications. The behaviour of the spike types is pinned by the pytest suites
-  (`test_fixtures`, `test_spike`); only small, stable real types (`ProjectIdentification`, `IdKoPObject`, `GradientCenteringOptions`) have committed golden files, so a change in the
-  moving BHoM develop branch does not break the golden tests.
+  (`test_fixtures`, `test_spike`); only a small, stable real type (`GradientCenteringOptions`) has a committed golden file, so a change in the
+  moving BHoM develop branch does not break the golden tests. The dKoP types (`ProjectIdentification`, `IdKoPObject`) were dropped from the
+  real-type tests when dKoP_Toolkit left the scope; the fixture classes `ProjectLike` and `ThingIdentity` cover the same cases.
 - **Pytest suites are separate sessions** (`test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`) because the fixture and spike packages share assembly folder names such as `BHoM`.
 - **Imports:** a type outside any reference cycle is imported at the top of the module; only cyclic references use bottom-of-module imports plus `model_rebuild()`. The spike set has no cycle; the fixtures
   contain one on purpose.

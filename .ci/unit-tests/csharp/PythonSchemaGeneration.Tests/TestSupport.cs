@@ -91,7 +91,7 @@ namespace PythonSchemaGeneration.Tests
     {
         public static readonly string[] Required =
         {
-            "BHoM", "Geometry_oM", "Structure_oM", "Graphics_oM", "Acoustic_oM", "Architecture_oM", "Quantities_oM", "dKoP_oM",
+            "BHoM", "Geometry_oM", "Structure_oM", "Graphics_oM", "Acoustic_oM", "Architecture_oM", "Quantities_oM",
             "BHoM_Engine", "Reflection_Engine", "JsonSchema_Engine", "JsonSchema_oM"
         };
 
@@ -114,7 +114,7 @@ namespace PythonSchemaGeneration.Tests
 
         public static readonly string[] SpikeTypes =
         {
-            "BH.oM.dKoP.ProjectIdentification", "BH.oM.Geometry.Line", "BH.oM.Geometry.ICurve", "BH.oM.Base.BHoMObject",
+            "BH.oM.Geometry.Line", "BH.oM.Geometry.ICurve", "BH.oM.Base.BHoMObject",
             "BH.oM.Structure.Elements.Bar", "BH.oM.Graphics.Enums.GradientCenteringOptions", "BH.oM.Base.BHoMGroup`1",
             "BH.oM.Acoustic.Room", "BH.oM.Architecture.Elements.Room", "BH.oM.Graphics.Gradient", "BH.oM.Base.ComparisonConfig"
         };

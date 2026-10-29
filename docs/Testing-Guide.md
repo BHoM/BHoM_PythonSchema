@@ -130,7 +130,7 @@ A golden file is a committed copy of expected output. The test generates the out
 difference. Use `golden/` when exact text matters:
 
 - `golden/fixtures/`: the Python generated for the fixture types, and the C# manifest.
-- `golden/spike/`: a few small, stable real types (`ProjectIdentification`, `IdKoPObject`, `GradientCenteringOptions`).
+- `golden/spike/`: a small, stable real type (`GradientCenteringOptions`).
 - `golden/py2cs/`: the C# that `py2cs` writes for small example classes.
 
 When you change the generator on purpose, regenerate them with the environment variable `UPDATE_GOLDEN=1`, then **read the diff**

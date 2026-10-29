@@ -302,9 +302,13 @@ Everything is written and tested here. It has **not been run on GitHub yet**: th
 - **Tests:** `test_linked_pr.py` (branch names, a second run changing nothing, a changed PR updating the same PR, closing, dry runs,
   the REST calls and that the token never appears), `test_workflows.py` (no `push` trigger, read-only permissions, one-repository
   tokens, base-branch tooling, BHoM never written to), `test_verify.py` and `CommandLineAndBaselineTests.cs`.
-- **Differences from the plan:** the linked-PR comment on the Python PR is updated in place instead of repeated; the PR checks build
-  BHoM_Adapter and dKoP_Toolkit as well, because the real-type tests use `dKoP_oM`; `align` is part of the PR checks job, so
-  that job stays red until the linked C# PR is merged.
+- **Differences from the plan:** the linked-PR comment on the Python PR is updated in place instead of repeated; `align` is part of the
+  PR checks job, so that job stays red until the linked C# PR is merged.
+- **Changes after review (2026-10-29):**
+  - The dKoP tests were dropped, so the PR checks build only `Included-repositories.txt` and no extra repositories are declared anywhere.
+  - `CommandLine.cs` moved from the Core library into the `PythonSchemaGeneration` console project; the tests reference that project.
+  - The linked-PR workflow sets a commit status on the Python PR (`status.py`, `py2cs status`): pending, success or failure from the
+    state of the linked C# PR. An hourly run refreshes it, because nothing tells this repository when a C# PR is merged.
 
 ---
 

@@ -7,8 +7,8 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 | Workflow | When | What it does |
 |---|---|---|
 | [python-schema-generation.yml](../.github/workflows/python-schema-generation.yml) | Every Saturday at 4 AM UTC, and by hand | Clones and builds the C# repositories, generates `src/bhom_schema` from the C#, checks it, and commits it straight to `develop`. Not a pull request. If a check fails, nothing is committed |
-| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Builds the same repositories, then runs `run-all.ps1` (build, NUnit, pytest, Pyright). For a PR that changes `src/bhom_schema` it also runs `py2cs check` and `py2cs align` |
-| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | Raises, updates or closes a linked **draft** pull request in the C# repository |
+| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Builds the same repositories (`Included-repositories.txt`), then runs `run-all.ps1` (build, NUnit, pytest, Pyright). For a PR that changes `src/bhom_schema` it also runs `py2cs check` and `py2cs align` |
+| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, every hour, and by hand | Raises, updates or closes a linked **draft** pull request in the C# repository, and sets the commit status `linked C# pull request` on the Python PR |
 
 ## What each one reads and writes
 
@@ -59,6 +59,21 @@ The linked pull request can be tried without writing anything:
 3. **On GitHub, live.** Run it again with `dry_run` unticked. It pushes `python-schema/pr-<N>` to CSharpSchema_Test and opens a draft
    PR. Run it once more to see that it updates the same branch and PR. When the Python PR is closed without merging, the workflow
    closes the draft with a comment; delete the branch by hand.
+
+## The linked pull request status
+
+Nothing tells this repository when a C# pull request is merged, so `linked-csharp-pr.yml` also sets a commit status on the Python PR
+and refreshes it every hour:
+
+| Status | Meaning |
+|---|---|
+| pending | the C# draft is open: waiting for it to be merged |
+| success | the C# pull request is merged (or the Python change needs no C# change) |
+| failure | the C# pull request was closed without merging: change the Python, or close it |
+
+To stop a Python PR being merged before its C# PR, make the status `linked C# pull request` a **required check** on `develop`
+(Settings, Branches). The hourly run only reads the C# repositories with this repository's own token, so they must be public. A
+Python PR with no linked draft gets no status from the hourly run.
 
 ## The alignment check
 

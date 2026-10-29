@@ -28,6 +28,7 @@ class PullRequest:
     body: str = ""
     draft: bool = True
     state: str = "open"
+    merged: bool = False
 
 @dataclass
 class RemoteFile:
@@ -58,6 +59,10 @@ class GitHubClient(Protocol):
     def upsert_comment(self, repo: str, number: int, marker: str, body: str) -> None: ...
 
     def close_pull_request(self, repo: str, number: int) -> None: ...
+
+    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None: ...
+
+    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None: ...
 
 # ------------------------------------------------------------------------------------------------ real client
 
@@ -149,10 +154,22 @@ class RestClient:
     def close_pull_request(self, repo: str, number: int) -> None:
         self._request("PATCH", f"/repos/{repo}/pulls/{number}", {"state": "closed"})
 
+    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
+        """The newest pull request from this branch, open, closed or merged."""
+        owner = repo.split("/")[0]
+        found = self._request("GET", f"/repos/{repo}/pulls?state=all&sort=created&direction=desc&head={urllib.parse.quote(owner + ':' + head_branch, safe='')}")
+        return self._pull_request(found[0]) if found else None
+
+    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None:
+        body = {"state": state, "context": context, "description": description[:140], "target_url": url}
+        self._request("POST", f"/repos/{repo}/statuses/{sha}", body)
+
     @staticmethod
     def _pull_request(data: dict[str, Any]) -> PullRequest:
+        # The list endpoint has merged_at but not merged
+        merged = bool(data.get("merged") or data.get("merged_at"))
         return PullRequest(int(data["number"]), str(data["html_url"]), str(data["head"]["ref"]), str(data["base"]["ref"]), str(data.get("title", "")),
-                           str(data.get("body") or ""), bool(data.get("draft", False)), str(data.get("state", "open")))
+                           str(data.get("body") or ""), bool(data.get("draft", False)), str(data.get("state", "open")), merged)
 
 # ------------------------------------------------------------------------------------------------ fake client
 
@@ -164,6 +181,8 @@ class FakeRepository:
     pull_requests: list[PullRequest] = field(default_factory=lambda: [])
     labels: dict[int, list[str]] = field(default_factory=lambda: {})
     comments: dict[int, list[str]] = field(default_factory=lambda: {})
+    # (sha, context) -> (state, description, url)
+    statuses: dict[tuple[str, str], tuple[str, str, str]] = field(default_factory=lambda: {})
 
 class FakeGitHub:
     """An in-memory GitHub. `calls` records every call that changes something, so tests can check what was (not) written."""
@@ -239,3 +258,11 @@ class FakeGitHub:
         for pull in self._repo(repo).pull_requests:
             if pull.number == number:
                 pull.state = "closed"
+
+    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
+        matches = [p for p in self._repo(repo).pull_requests if p.head == head_branch]
+        return max(matches, key=lambda p: p.number) if matches else None
+
+    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None:
+        self.calls.append(("set_commit_status", repo, sha, state))
+        self._repo(repo).statuses[(sha, context)] = (state, description[:140], url)

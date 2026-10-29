@@ -30,40 +30,6 @@ def test_pyright_strict_is_clean(spike_package):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-# ---------------------------------------------------------------- ProjectIdentification
-
-def test_project_identification_defaults_and_bases():
-    ProjectIdentification = cls("dKoP_oM.ProjectIdentification")
-    IdKoPObject = cls("dKoP_oM.IdKoPObject")
-    BHoMObject = cls("BHoM.BHoMObject")
-    value = ProjectIdentification()
-    assert (value.ProjectReference, value.ProjectName, value.ProjectLocation, value.AdditionalReferences) == ("", "", "", "")
-    assert isinstance(value, IdKoPObject) and not isinstance(value, BHoMObject)
-    assert ProjectIdentification(ProjectName="Tower").ProjectName == "Tower"
-
-
-def test_project_identification_provenance():
-    assert cls("dKoP_oM.ProjectIdentification").__bhom__ == {
-        "clr_name": "BH.oM.dKoP.ProjectIdentification",
-        "namespace": "BH.oM.dKoP",
-        "assembly": "dKoP_oM",
-        "repo": "BHoM/dKoP_Toolkit",
-        "kind": "class",
-    }
-
-
-def test_interface_field_rejects_unrelated_objects():
-    IdKoPObject = cls("dKoP_oM.IdKoPObject")
-
-    class Holder(BaseModel):
-        model_config = {"arbitrary_types_allowed": True}
-        Item: IdKoPObject  # type: ignore[valid-type]
-
-    Holder(Item=cls("dKoP_oM.ProjectIdentification")())
-    with pytest.raises(ValidationError):
-        Holder(Item=cls("Geometry_oM.Point")())
-
-
 # ---------------------------------------------------------------- the other spike types
 
 def test_line_and_curve_interfaces():

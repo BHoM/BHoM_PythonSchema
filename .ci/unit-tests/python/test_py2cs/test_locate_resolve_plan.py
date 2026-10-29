@@ -51,13 +51,6 @@ def test_locate_reports_missing_types_and_ignores_build_folders(tmp_path: Path):
     assert locate(repo, info(tmp_path, "BH.oM.Demo.Ghost", "BH.oM.Demo")).path is None
 
 
-@pytest.mark.skipif(not Path("C:/Github/dKoP_Toolkit/dKoP_oM").is_dir(), reason="dKoP_Toolkit is not cloned")
-def test_real_dkop_project_identification_is_found_under_administrative_information(tmp_path: Path):
-    found = locate(Path("C:/Github/dKoP_Toolkit"), info(tmp_path, "BH.oM.dKoP.ProjectIdentification", "BH.oM.dKoP", asm="dKoP_oM", repo="BHoM/dKoP_Toolkit"))
-    assert found.path is not None
-    assert found.path.relative_to("C:/Github/dKoP_Toolkit").as_posix() == "dKoP_oM/AdministrativeInformation/ProjectIdentification.cs"
-
-
 # ---------------------------------------------------------------- place
 
 def test_place_enum_next_to_sibling_enums(tmp_path: Path):
@@ -205,30 +198,3 @@ def test_command_line_diff_resolve_and_manifest(tmp_path: Path, capsys: pytest.C
     capsys.readouterr()
     assert main(["resolve", "--root", str(tmp_path / "head" / "bhom_schema")]) == 0
     assert "BH.oM.Demo.ProjectInfo\tBHoM/Demo_Toolkit\tmarker" in capsys.readouterr().out
-
-
-@pytest.mark.skipif(not Path("C:/Github/dKoP_Toolkit/dKoP_oM").is_dir(), reason="dKoP_Toolkit is not cloned")
-def test_rehearsal_adding_a_property_to_project_identification(tmp_path: Path):
-    """The dry run planned for the real dKoP_Toolkit: a new Python property becomes a one line C# change, clone untouched."""
-    require_patcher()
-    def project_identification(root: Path, extra: list[str]) -> Path:
-        return package(root, {"dKoP_oM/IdKoPObject.py": module("IdKoPObject", "BH.oM.dKoP.IdKoPObject", "BH.oM.dKoP", "dKoP_oM", repo="BHoM/dKoP_Toolkit", kind="interface", bases="ABC",
-                                                                imports=["from abc import ABC"]),
-                              "dKoP_oM/ProjectIdentification.py": module(
-            "ProjectIdentification", "BH.oM.dKoP.ProjectIdentification", "BH.oM.dKoP", "dKoP_oM", repo="BHoM/dKoP_Toolkit", bases="SchemaModel, IdKoPObject",
-            imports=["from bhom_schema.dKoP_oM.IdKoPObject import IdKoPObject"],
-            body=["ProjectReference: str = ''", "ProjectName: str = ''", "ProjectLocation: str = ''", "AdditionalReferences: str = ''", *extra])})
-
-    clone = Path("C:/Github/dKoP_Toolkit")
-    before = tree_hash(clone / "dKoP_oM" / "AdministrativeInformation")
-    base = read_package(project_identification(tmp_path / "base", []))
-    head = read_package(project_identification(tmp_path / "head", ["ProjectNumber: str = ''"]))
-    plan = make_plan(diff_manifests(base, head), head, base, lambda r: clone, load_listing(LISTING))
-    assert plan.errors == [] and [f.clr_name for f in plan.files] == ["BH.oM.dKoP.ProjectIdentification"]
-    planned = plan.files[0]
-    assert planned.repo == "BHoM/dKoP_Toolkit" and planned.path == "dKoP_oM/AdministrativeInformation/ProjectIdentification.cs"
-    original = (clone / planned.path).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
-    added = [line for line in planned.text.splitlines() if line not in original.splitlines()]
-    assert [line.strip() for line in added if line.strip()] == ["public virtual string ProjectNumber { get; set; } = \"\";"]
-    assert tree_hash(clone / "dKoP_oM" / "AdministrativeInformation") == before
-    assert os.path.exists(clone / planned.path)

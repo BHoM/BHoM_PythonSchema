@@ -26,7 +26,7 @@ function Step($name, [scriptblock]$body) {
 Write-Host "=== Preflight" -ForegroundColor Cyan
 $assemblies = Join-Path $env:ProgramData "BHoM\Assemblies"
 $required = "BHoM", "BHoM_Engine", "Reflection_Engine", "JsonSchema_oM", "JsonSchema_Engine", "Quantities_oM",
-            "Geometry_oM", "Structure_oM", "Graphics_oM", "Acoustic_oM", "Architecture_oM", "dKoP_oM"
+            "Geometry_oM", "Structure_oM", "Graphics_oM", "Acoustic_oM", "Architecture_oM"
 $missing = $required | Where-Object { -not (Test-Path (Join-Path $assemblies "$_.dll")) }
 if ($missing) {
     Write-Host "Missing from ${assemblies}: $($missing -join ', ')" -ForegroundColor Yellow

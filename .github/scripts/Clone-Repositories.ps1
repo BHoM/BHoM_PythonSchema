@@ -1,19 +1,17 @@
 # Clones the repositories to build (read only: nothing is ever pushed to them) into one folder, and records the commit of each.
 #
-#   Clone-Repositories.ps1 -List Included-repositories.txt [-Extra BHoM/BHoM_Adapter,BHoM/dKoP_Toolkit] [-Target .repos]
+#   Clone-Repositories.ps1 -List Included-repositories.txt [-Target .repos]
 #
 # Each repository comes from its develop branch, or main, or master. <Target>/commits.txt gets one "Owner/Name <commit>" line per repository,
 # for the commit message of the generation, so anyone can reproduce it.
 param(
   [Parameter(Mandatory = $true)][string]$List,
-  [string[]]$Extra = @(),
   [string]$Target = ".repos"
 )
 
 $ErrorActionPreference = "Stop"
 
-$repositories = @(Get-Content $List | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }) + $Extra
-$repositories = $repositories | Select-Object -Unique
+$repositories = Get-Content $List | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") } | Select-Object -Unique
 
 New-Item -ItemType Directory -Force $Target | Out-Null
 $commits = @()

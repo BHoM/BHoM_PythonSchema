@@ -31,22 +31,6 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
-        public void ProjectIdentification()
-        {
-            RenderedType type = R("BH.oM.dKoP.ProjectIdentification");
-            Assert.That(type.Model.Kind, Is.EqualTo(TypeKind.Class));
-            Assert.That(Names(type.Model.Bases), Is.EqualTo("IdKoPObject"));
-            Assert.That(R("BH.oM.dKoP.IdKoPObject").Model.Kind, Is.EqualTo(TypeKind.Interface), "an interface without an I prefix");
-            Assert.That(type.Properties.Select(p => p.Name), Is.EqualTo(new[] { "ProjectReference", "ProjectName", "ProjectLocation", "AdditionalReferences" }));
-            Assert.That(type.Properties.All(p => p.HasDefault && p.Default == "''"), Is.True);
-            Assert.That(type.Model.Repo, Is.EqualTo("BHoM/dKoP_Toolkit"));
-            Assert.That(type.Model.Assembly, Is.EqualTo("dKoP_oM"));
-            Assert.That(type.Model.Namespace, Is.EqualTo("BH.oM.dKoP"));
-            Assert.That(type.Ref.RelativePath, Is.EqualTo("dKoP_oM/ProjectIdentification"), "the source folder AdministrativeInformation/ is not part of the path");
-            Assert.That(type.Text, Does.Not.Contain("\"\"\""), "no description, so no docstring");
-        }
-
-        [Test]
         public void LineAndTheCurveInterfaceChain()
         {
             Assert.That(Names(R("BH.oM.Geometry.Line").Model.Bases), Is.EqualTo("ICurve"));
@@ -116,7 +100,7 @@ namespace PythonSchemaGeneration.Tests
         [Test]
         public void StableTypesMatchGoldenFiles()
         {
-            foreach (string name in new[] { "BH.oM.dKoP.ProjectIdentification", "BH.oM.dKoP.IdKoPObject", "BH.oM.Graphics.Enums.GradientCenteringOptions" })
+            foreach (string name in new[] { "BH.oM.Graphics.Enums.GradientCenteringOptions" })
             {
                 RenderedType type = R(name);
                 GoldenAssert.Matches("spike", type.Ref.RelativePath + ".py", type.Text);

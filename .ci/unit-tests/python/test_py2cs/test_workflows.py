@@ -22,11 +22,11 @@ def lines(name: str) -> list[str]:
 def test_all_workflows_are_valid_and_have_the_expected_jobs():
     assert list(load("python-schema-generation.yml")["jobs"]) == ["generate"]
     assert list(load("pr-checks.yml")["jobs"]) == ["checks"]
-    assert list(load("linked-csharp-pr.yml")["jobs"]) == ["prepare", "repos", "raise", "close"]
+    assert list(load("linked-csharp-pr.yml")["jobs"]) == ["prepare", "repos", "raise", "close", "status", "sweep"]
 
 def test_the_weekly_generation_commit_cannot_start_the_linked_pr_workflow():
     triggers = load("linked-csharp-pr.yml")["on"]
-    assert set(triggers) == {"pull_request", "workflow_dispatch"}, "never a push trigger: the weekly commit is a push"
+    assert set(triggers) == {"pull_request", "schedule", "workflow_dispatch"}, "never a push trigger: the weekly commit is a push"
     assert triggers["pull_request"]["paths"] == ["src/bhom_schema/**"]
 
 def test_the_weekly_generation_commits_directly_and_is_not_a_pull_request():
@@ -82,3 +82,25 @@ def test_the_generation_and_the_checks_build_the_same_repositories():
     for name in ("python-schema-generation.yml", "pr-checks.yml"):
         text = (WORKFLOWS / name).read_text(encoding="utf-8")
         assert "Clone-Repositories.ps1 -List Included-repositories.txt" in text and "Build-Repositories.ps1 -List Included-repositories.txt" in text
+
+def test_the_status_jobs_write_statuses_and_nothing_else():
+    jobs = load("linked-csharp-pr.yml")["jobs"]
+    assert jobs["status"]["permissions"] == {"contents": "read", "statuses": "write"}
+    assert jobs["sweep"]["permissions"] == {"contents": "read", "pull-requests": "read", "statuses": "write"}
+    for name in ("prepare", "repos", "raise", "close"):
+        assert "statuses" not in jobs[name].get("permissions", {})
+
+    # They read the C# repositories with the workflow's own token, so no GitHub App token is made for them
+    for name in ("status", "sweep"):
+        assert not any(str(s.get("uses", "")).startswith("actions/create-github-app-token") for s in jobs[name]["steps"])
+
+def test_the_hourly_sweep_runs_only_on_the_schedule_and_the_other_jobs_never_do():
+    jobs = load("linked-csharp-pr.yml")["jobs"]
+    assert jobs["sweep"]["if"] == "github.event_name == 'schedule'"
+    assert jobs["prepare"]["if"] == "github.event_name != 'schedule'"
+    assert load("linked-csharp-pr.yml")["on"]["schedule"] == [{"cron": "17 * * * *"}]
+
+def test_a_python_pr_with_no_csharp_change_still_gets_a_status():
+    status = load("linked-csharp-pr.yml")["jobs"]["status"]
+    assert "needs.repos.outputs.any == 'false'" in status["if"]
+    assert "--no-csharp-change" in str(status["steps"])

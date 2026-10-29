@@ -39,14 +39,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      # The real-type tests also use dKoP_oM, which needs BHoM_Adapter to build
       - name: Clone the repositories
         shell: pwsh
-        run: ./.github/scripts/Clone-Repositories.ps1 -List Included-repositories.txt -Extra BHoM/BHoM_Adapter,BHoM/dKoP_Toolkit
+        run: ./.github/scripts/Clone-Repositories.ps1 -List Included-repositories.txt
 
       - name: Build the repositories in dependency order
         shell: pwsh
-        run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt -Extra BHoM/BHoM_Adapter,BHoM/dKoP_Toolkit
+        run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt
 
       - name: Create the virtual environment
         shell: pwsh

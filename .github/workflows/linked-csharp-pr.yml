@@ -3,6 +3,10 @@ name: Linked C# pull request
 # A pull request that changes the Python classes raises a linked DRAFT pull request in the repository that owns the C# classes.
 # It never raises anything for a push, so the weekly generation (a push to develop) cannot start it.
 #
+# It also sets a commit status on the Python PR, "linked C# pull request": pending while the C# draft is open, success once it is
+# merged, failure if it was closed without merging. Nothing tells this repository when a C# PR is merged, so an hourly run looks at
+# every open Python PR and updates the status. Make the status a required check on develop to stop a Python PR being merged first.
+#
 # Where C# pull requests may be raised is listed in Converted-repositories.txt. The GitHub App token is made for one repository at a
 # time, and only that repository is written to.
 
@@ -11,6 +15,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, closed]
     paths:
       - 'src/bhom_schema/**'
+  schedule:
+    - cron: '17 * * * *'  # hourly: refresh the status of open Python PRs
   workflow_dispatch:
     inputs:
       pr_number:
@@ -32,6 +38,7 @@ concurrency:
 
 jobs:
   prepare:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       eligible: ${{ steps.pr.outputs.eligible }}
@@ -230,3 +237,66 @@ jobs:
           if [ "$MERGED" = "true" ]; then flags="$flags --merged"; fi
           python -m py2cs close --repo "${{ matrix.repo }}" --python-repo "${{ github.repository }}" \
             --python-pr "${{ needs.prepare.outputs.number }}" $flags
+
+  # After the draft is raised or updated: the status of the Python PR is pending until the C# pull request is merged
+  status:
+    needs: [prepare, repos, raise]
+    # After a raise, or when the change needs no C# change at all
+    if: needs.raise.result == 'success' || (needs.repos.result == 'success' && needs.repos.outputs.any == 'false' && needs.prepare.outputs.closed == 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set the commit status
+        shell: bash
+        env:
+          PYTHONPATH: base/.ci/generation
+          PY2CS_PYTHON_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+        run: |
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="--dry-run"; fi
+          if [ "${{ needs.repos.outputs.any }}" = "false" ]; then flags="$flags --no-csharp-change"; fi
+          python -m py2cs status --python-repo "${{ github.repository }}" --python-pr "${{ needs.prepare.outputs.number }}" \
+            --sha "${{ needs.prepare.outputs.head_sha }}" --repos-file base/Converted-repositories.txt $flags
+
+  # Every hour: has the C# pull request of an open Python PR been merged (or closed) since?
+  # This only reads the C# repositories, which must be public, and writes statuses on this repository.
+  sweep:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      # The default branch, so the tooling is the trusted one
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Update the status of every open Python PR that changes the classes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: .ci/generation
+          PY2CS_PYTHON_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list --state open --limit 100 --json number,headRefOid,headRepositoryOwner,files \
+            --jq '.[] | select(.headRepositoryOwner.login == "${{ github.repository_owner }}") | select(any(.files[]; .path | startswith("src/bhom_schema/"))) | "\(.number) \(.headRefOid)"' |
+          while read -r number sha; do
+            echo "Python PR #$number"
+            python -m py2cs status --python-repo "${{ github.repository }}" --python-pr "$number" --sha "$sha" --repos-file Converted-repositories.txt
+          done
