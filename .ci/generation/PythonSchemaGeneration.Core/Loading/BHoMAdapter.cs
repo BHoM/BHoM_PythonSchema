@@ -61,14 +61,14 @@ namespace PythonSchemaGeneration.Loading
 
         /***************************************************/
 
-        [Description("Reads the BHoM version, as Major.Minor (for example 10.0), from the file version of the BHoM assembly among the loaded ones, the same value BHoM's own " +
-            "BHoMVersion gives. Returns null when BHoM.dll was not loaded. The generator writes it into _version.py, so the package version follows the BHoM release.")]
+        [Description("Reads the BHoM version, as Major.Minor (for example 10.0), from the assembly version of BHoM.dll, or of the first loaded assembly by name when BHoM.dll " +
+            "is not among them: every BHoM project sets the same AssemblyVersion, which DevOps raises. Returns null when no assembly is given. The generator writes it into " +
+            "_version.py, so the package version follows the BHoM release.")]
         public static string BHoMVersion(IEnumerable<Assembly> assemblies)
         {
-            Assembly bhom = assemblies.FirstOrDefault(a => a.GetName().Name == "BHoM");
-            string version = bhom?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
-            string[] parts = (version ?? "").Split('.');
-            return parts.Length >= 2 ? parts[0] + "." + parts[1] : null;
+            Assembly source = assemblies.FirstOrDefault(a => a.GetName().Name == "BHoM") ?? assemblies.OrderBy(a => a.GetName().Name, StringComparer.Ordinal).FirstOrDefault();
+            Version version = source?.GetName().Version;
+            return version == null ? null : version.Major + "." + version.Minor;
         }
 
         /***************************************************/

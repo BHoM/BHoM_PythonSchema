@@ -32,15 +32,16 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
-        [Description("Checks that the BHoM version is read as Major.Minor from the file version of BHoM.dll, and is null without it. Protects the package version from " +
-            "following anything but the BHoM release.")]
-        public void TheBHoMVersionIsMajorDotMinorOfTheBHoMAssembly()
+        [Description("Checks that the version is read as Major.Minor of the assembly version, from BHoM.dll when it is loaded, from another assembly otherwise, and is null " +
+            "without any. Protects the package version from following anything but the BHoM release.")]
+        public void TheVersionIsMajorDotMinorOfTheAssemblyVersion()
         {
-            string fileVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(typeof(BH.oM.Base.BHoMObject).Assembly.Location).FileVersion;
-            string[] parts = fileVersion.Split('.');
+            Version bhom = typeof(BH.oM.Base.BHoMObject).Assembly.GetName().Version;
+            Version alpha = FixtureOutput.Alpha.GetName().Version;
 
-            Assert.That(BHoMAdapter.BHoMVersion(new[] { typeof(BH.oM.Base.BHoMObject).Assembly }), Is.EqualTo(parts[0] + "." + parts[1]));
-            Assert.That(BHoMAdapter.BHoMVersion(new[] { FixtureOutput.Alpha }), Is.Null);
+            Assert.That(BHoMAdapter.BHoMVersion(new[] { FixtureOutput.Alpha, typeof(BH.oM.Base.BHoMObject).Assembly }), Is.EqualTo(bhom.Major + "." + bhom.Minor));
+            Assert.That(BHoMAdapter.BHoMVersion(new[] { FixtureOutput.Alpha }), Is.EqualTo(alpha.Major + "." + alpha.Minor));
+            Assert.That(BHoMAdapter.BHoMVersion(new System.Reflection.Assembly[0]), Is.Null);
         }
 
         /***************************************************/

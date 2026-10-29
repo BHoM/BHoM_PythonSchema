@@ -129,7 +129,7 @@ namespace PythonSchemaGeneration
         {
             if (bhomVersion == null)
             {
-                reporter.Warn("BHoM.dll was not among the loaded assemblies, so _version.py was not written");
+                reporter.Warn("No assembly was loaded, so _version.py was not written");
                 return 0;
             }
 

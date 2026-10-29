@@ -16,7 +16,7 @@ namespace PythonSchemaGeneration
 
         public List<string> TypeFilter;                     //full names of root types; their dependencies are generated too. Null generates everything.
 
-        public string ReleaseVersion;                       //Major.Minor of a release (for example 10.0): _version.py then holds the release version, and the run fails when it is not the BHoM version read
+        public string ReleaseVersion;                       //Major.Minor of a release (for example 10.0): _version.py then holds the release version, and the run fails when it is not the version read
 
         public string ManifestPath;
 

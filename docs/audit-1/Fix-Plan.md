@@ -522,7 +522,7 @@ their form.
 ## What was done in Step 6
 
 - **6.2 attribute classes:** `TypeSelector` skips every class based on `System.Attribute`.
-- **6.3 version:** the generator reads `Major.Minor` from the file version of `BHoM.dll` (`BHoMAdapter.BHoMVersion`) and, on a full run (not `--types`), writes
+- **6.3 version:** the generator reads `Major.Minor` from the assembly version of `BHoM.dll`, or of another loaded assembly when it is missing (`BHoMAdapter.BHoMVersion`; every BHoM project sets `<AssemblyVersion>`, which DevOps raises), and, on a full run (not `--types`), writes
   `bhom_schema/_version.py` with `__bhom_version__` and `__version__` (`X.Y.0.dev0`, or `X.Y.0` with `--release X.Y`). The file is only rewritten when its
   text changes. `--release` fails with exit code 1 when `X.Y` is not the version read. `pyproject.toml` takes the version from that file, `bhom_schema.__version__`
   shows it, and `py2cs` and the test helpers skip `_version.py`. The committed `_version.py` says `10.0`, the version the CI builds; the next weekly run corrects it
@@ -533,7 +533,7 @@ their form.
 - **Tests:** NUnit `VersionTests` (attribute classes, the version read, `_version.py` once, `--release` match and mismatch, no file for a partial run);
   pytest `test_notes.py` and two workflow tests. A wheel built from the repository is named `bhom_schema-10.0.0.dev0`.
 - **Not verified:** the release workflow has never run on GitHub; TestPyPI trusted publishing is not set up (an administrator does it once, see
-  [Workflows.md](../Workflows.md)); real PyPI is left for when BHoM/BHoM is in scope; the relation between a BHoM release number and the `BHoM.dll` file version is
+  [Workflows.md](../Workflows.md)); real PyPI is left for when BHoM/BHoM is in scope; the relation between a BHoM release number and the `AssemblyVersion` is
   assumed (the `--release` check stops a wrong name).
 
 ---
@@ -555,7 +555,7 @@ their form.
 |---|---|
 | Scope | Only `BHoM/CSharpSchema_Test` for now (already the case: `Converted-repositories.txt` and `--repos`). BHoM/BHoM is added later by adding it to the two repository lists |
 | What is a version for? | pip needs one, users pin and upgrade by it, and a release is a point you can name in a bug report. Nothing else: Python users do not run Versioning_Toolkit |
-| Where does the number come from? | From BHoM, not typed by hand: the generator reads the `Major.Minor` of the file version of `BHoM.dll` (the same value BHoM_Engine's `BHoMVersion()` gives, for example `10.0`) |
+| Where does the number come from? | From BHoM, not typed by hand: the generator reads the `Major.Minor` of the `AssemblyVersion` of `BHoM.dll`, or of any loaded assembly when it is missing (for example `10.0`; DevOps raises it in every project) |
 | Version in every class marker? | No |
 | Stamping `_bhomVersion` when saving JSON, a warning when loading JSON of another version, refusing unknown keys? | No. Python never writes JSON for C# to upgrade, so nothing needs them. The optional `bhom_version` field stays, so the published schemas and the classes agree, and a value that is set is written and read |
 | How are releases made? | Like BHoM_JSONSchema: `develop` is regenerated every week; at the end of a milestone a branch `vX.Y` is made, regenerated, tagged and released, and then left alone |

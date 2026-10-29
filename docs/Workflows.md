@@ -1,6 +1,6 @@
 # GitHub workflows
 
-Three workflows run the loop between this repository and the repository that owns the C# classes. For now that repository is
+Four workflows run the loop between this repository and the repository that owns the C# classes, and make releases. For now that repository is
 [BHoM/CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test), a repository made for testing. **No other repository is ever
 written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built (read only) because the generator needs them.
 
@@ -9,6 +9,53 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 | [python-schema-generation.yml](../.github/workflows/python-schema-generation.yml) | Every Saturday at 4 AM UTC, and by hand | Clones and builds the C# repositories, generates `src/bhom_schema` from the C#, checks it, and commits it straight to `develop`. Not a pull request. If a check fails, nothing is committed |
 | [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Builds the same repositories (`Included-repositories.txt`), clones BHoM_JSONSchema read only as the test oracle for the JSON, then runs `run-all.ps1` (build, NUnit, pytest, Pyright). For a PR that changes `src/bhom_schema` it also runs `py2cs check` and `py2cs align` |
 | [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, every hour, and by hand | Raises, updates or closes a linked **draft** pull request in the C# repository, and sets the commit status `linked C# pull request` on the Python PR |
+| [release.yml](../.github/workflows/release.yml) | By hand only (dry run by default) | Regenerates with `--release X.Y`, checks, builds the wheel and the release notes; when not a dry run, pushes branch `vX.Y` and tag `vX.Y.0`, creates the GitHub Release and publishes to TestPyPI. See "Making a release" |
+
+## How they fit together
+
+```
+ C# repositories (BHoM, BHoM_Engine, JSONSchema_Toolkit: read only; CSharpSchema_Test: the repository that owns the converted classes)
+       │                                                            ▲
+       │ cloned + built                                             │ draft PR "python-schema/pr-<N>"
+       ▼                                                            │
+┌──────────────────────────────┐   commit straight to develop   ┌───┴───────────────────────┐
+│ python-schema-generation.yml │ ─────────────────────────────► │      linked-csharp-pr.yml │
+│ Saturday 4 AM UTC, or manual │                                │ (see below)               │
+│ C# ──► src/bhom_schema       │                                └───────────────────────────┘
+└──────────────┬───────────────┘
+               │ develop (regenerated every week)
+               ▼
+   a person changes src/bhom_schema on a branch and opens a pull request to develop
+               │
+               ├────────────────────────────────────────────┐
+               ▼                                            ▼
+┌──────────────────────────────┐              ┌─────────────────────────────────────────────────┐
+│ pr-checks.yml                │              │ linked-csharp-pr.yml                            │
+│ on every PR to develop       │              │ on a PR that changes src/bhom_schema            │
+│ build, NUnit, pytest,        │              │                                                 │
+│ Pyright; py2cs check + align │              │ prepare ─► repos ─► raise ─► status             │
+│ (writes nothing)             │              │                    (draft C# PR, and the commit │
+└──────────────────────────────┘              │                     status on the Python PR)    │
+                                              │ PR closed: prepare ─► repos ─► close            │
+                                              │ every hour: sweep (refreshes the status of      │
+                                              │             every open Python PR)               │
+                                              └─────────────────────┬───────────────────────────┘
+                                                                    │ the C# draft is reviewed and merged in C#
+                                                                    ▼
+                                                  next weekly generation: the C# is the source of truth,
+                                                  so src/bhom_schema ends up matching the merged C#
+
+ End of a milestone, by hand:
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ release.yml  (input X.Y, dry run by default)                                                         │
+│ job build:  clone + build ─► generate --release X.Y ─► verify + Pyright ─► wheel + notes             │
+│             not a dry run: branch vX.Y, tag vX.Y.0, GitHub Release (wheel + notes)                   │
+│ job publish-testpypi (not a dry run): the wheel ─► TestPyPI, by trusted publishing                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Order in one line: **generation** (weekly) → a Python **pull request** → **pr-checks** and **linked-csharp-pr** run side by side → the C#
+draft is merged → the next **generation** brings the Python back in line → **release** (by hand) freezes it as `vX.Y`.
 
 ## What each one reads and writes
 
@@ -64,7 +111,7 @@ The linked pull request can be tried without writing anything:
 
 Run *Release* from the Actions tab at the end of a milestone, with the BHoM version as `Major.Minor` (for example `10.0`). It is a dry run
 by default: it builds the C# repositories, regenerates with `--release 10.0`, checks the result, builds the wheel and writes the release notes,
-and attaches them to the run. The generator stops the run when `10.0` is not the version of the `BHoM.dll` it read. Untick `dry_run` to:
+and attaches them to the run. The generator stops the run when `10.0` is not the assembly version it read from `BHoM.dll` (or from another assembly when that is missing). Untick `dry_run` to:
 
 1. commit the regenerated classes to a new branch `v10.0` and tag `v10.0.0` (a release is never made twice; an existing branch or tag stops the run);
 2. create a GitHub Release with the wheel and the release notes (`python -m py2cs notes`: the breaking changes first, then the added, removed and changed classes);
