@@ -1,4 +1,7 @@
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using PythonSchemaGeneration;
 using PythonSchemaGeneration.Emission;
 
@@ -25,21 +28,69 @@ namespace PythonSchemaGeneration.Tests
 
     public class GoldenTests
     {
+        //One fixture class per situation the generator must handle. Classes added to the fixture repository later are not compared, so a merged
+        //C# change does not break these tests; add a class here only when it covers a situation that no listed class covers.
+        private static readonly string[] m_PinnedClasses =
+        {
+            "FixtureAlpha_oM/Beam",
+            "FixtureAlpha_oM/Collections",
+            "FixtureAlpha_oM/CycleA",
+            "FixtureAlpha_oM/CycleB",
+            "FixtureAlpha_oM/GeometryHolder",
+            "FixtureAlpha_oM/GridHolder",
+            "FixtureAlpha_oM/ICurveLike",
+            "FixtureAlpha_oM/IElement1DLike",
+            "FixtureAlpha_oM/IGeometryLike",
+            "FixtureAlpha_oM/ILabelled",
+            "FixtureAlpha_oM/IOpeningLike_1",
+            "FixtureAlpha_oM/IPanelLike_2",
+            "FixtureAlpha_oM/ImmutableThing",
+            "FixtureAlpha_oM/LineLike",
+            "FixtureAlpha_oM/Options",
+            "FixtureAlpha_oM/PointLike",
+            "FixtureAlpha_oM/ProjectLike",
+            "FixtureAlpha_oM/Scalars",
+            "FixtureAlpha_oM/Sparse",
+            "FixtureAlpha_oM/SparseHolder",
+            "FixtureAlpha_oM/SparseParent",
+            "FixtureAlpha_oM/SupportKind",
+            "FixtureAlpha_oM/ThingIdentity",
+            "FixtureAlpha_oM/TreeLike_1",
+            "FixtureAlpha_oM/Wrapper_1",
+            "FixtureBeta_oM/Elements/UsesBoth",
+            "FixtureBeta_oM/PointLike"
+        };
+
+        /***************************************************/
+
         [Test]
-        [Description("Checks that the Python generated for every fixture type is identical to its committed golden file. Protects the exact output of the " +
-            "generator against unintended changes.")]
+        [Description("Checks that the Python generated for each pinned fixture class is identical to its committed golden file. Protects the exact output of the " +
+            "generator against unintended changes, without depending on the other classes of the fixture repository.")]
         public void FixtureOutputMatchesGoldenFiles()
         {
-            foreach (RenderedType type in FixtureOutput.Result.Types.Where(t => t.Ref.RelativePath.StartsWith("Fixture")))
+            List<RenderedType> pinned = FixtureOutput.Result.Types.Where(t => m_PinnedClasses.Contains(t.Ref.RelativePath)).ToList();
+            Assert.That(pinned.Select(t => t.Ref.RelativePath).OrderBy(x => x, StringComparer.Ordinal), Is.EqualTo(m_PinnedClasses), "every pinned class must still be generated");
+
+            foreach (RenderedType type in pinned)
                 GoldenAssert.Matches("fixtures", type.Ref.RelativePath + ".py", type.Text);
         }
 
+        /***************************************************/
+
         [Test]
-        [Description("Checks that the manifest written for the fixture run is identical to the committed golden manifest. Protects the language-neutral manifest " +
-            "that py2cs and alignment read.")]
+        [Description("Checks that the entries of the pinned fixture classes in the manifest written for the fixture run are identical to the committed golden manifest. " +
+            "Protects the language-neutral manifest that py2cs and alignment read.")]
         public void FixtureManifestMatchesGolden()
         {
-            GoldenAssert.Matches("fixtures", "manifest.json", File.ReadAllText(Path.Combine(FixtureOutput.Folder, "manifest.json")));
+            JsonNode manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureOutput.Folder, "manifest.json")));
+            JsonArray types = manifest["types"].AsArray();
+            List<JsonNode> kept = types.Where(t => m_PinnedClasses.Contains(((string)t["relativePath"]).Replace(".py", ""))).ToList();
+            types.Clear();
+            foreach (JsonNode type in kept)
+                types.Add(type.DeepClone());
+
+            string text = manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }) + '\n';
+            GoldenAssert.Matches("fixtures", "manifest.json", text);
         }
     }
 
