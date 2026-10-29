@@ -45,7 +45,7 @@ will do, and says how we will know it works.
 | How py2cs changes an existing C# file (Step 2) | **Patch member by member.** This reverses the old "suggested full-file replacement" decision in CODING-PLAN section 9. Whole files are written only for brand-new types. |
 | Where the input assemblies come from (Step 4) | **Our own build, on GitHub** (revised 2026-10-29; was: share the BHoM_JSONSchema weekly build). Our workflows clone BHoM, BHoM_Engine, JSONSchema_Toolkit and CSharpSchema_Test from GitHub and build them. BHoM_JSONSchema is not changed until our system is proven, and with far fewer projects converted to Python than to JSON, the two DLL sets may stay separate for good. |
 | Which assemblies go into the package (Step 6) | **For now, only the assemblies of the main BHoM repository**, [BHoM/BHoM](https://github.com/BHoM/BHoM) (local clone `C:\Github\BHoM`). Toolkits such as `dKoP_Toolkit` are left out for now. |
-| BHoM JSON compatibility (Step 5) | **Open.** Reasons are in Step 5; it needs your decision before Step 5 starts. |
+| BHoM JSON compatibility (Step 5) | **Proposed, needs your decision** (revised 2026-10-29): follow the rules of BHoM_JSONSchema (`_t`, interface implementers as the allowed `_t` values, enums as names). The old 5A/5B split is dropped. Reasons are in Step 5. |
 
 What the scope decision changes in the other steps:
 - Step 1: a brand-new Python class must go into an existing assembly of BHoM/BHoM; there is no `Python_Toolkit` fallback for now.
@@ -375,8 +375,9 @@ scope. **Decided: `BHoM/CSharpSchema_Test`**, a repository made for this. No BHo
 
 ## Step 5 (Issue 3): let objects with interface-typed fields be saved to JSON and loaded back
 
-> **Decision needed before this step starts.** The original plan left "BHoM JSON" out of scope. This step proposes bringing
-> it back, at least partly. Here is why.
+> **Revised 2026-10-29** after reading the documentation of BHoM_JSONSchema. The first version of this step invented its own way of
+> handling interfaces. BHoM already has a written, published way, so this step now follows it. **Decision needed before this step
+> starts:** is it right to bring BHoM JSON back into scope? The reasons are below.
 
 ### What's wrong, in plain words
 
@@ -398,51 +399,94 @@ Why:
 - The saved JSON doesn't say *which kind* of curve it was. It only contains `{"Start": ..., "End": ...}`. When loading,
   Pydantic sees "an `ICurve`" and can't know whether to build a `Line` or an `Arc`, so it gives up.
 - Every `BHoMObject` has a `Fragments` field typed with the interface `IFragment`, so describing the class as a JSON Schema
-  fails for **every** BHoM object. JSON Schemas are what web tools (for example FastAPI) and editors use to understand data.
-- BHoM's own C# JSON format solves the first problem by adding a `"_t"` entry to every object, holding the full C# class name
-  (for example `"_t": "BH.oM.Geometry.Line"`). Our Python doesn't write or read `_t`, so JSON written in Python can't be read
-  by BHoM in C#, and the other way round.
+  fails for **every** BHoM object.
+- BHoM's C# JSON adds a `"_t"` entry to every object, holding the full C# class name (for example
+  `"_t": "BH.oM.Geometry.Line"`). Our Python doesn't write or read `_t`, so JSON can't pass between Python and C#.
 
 So without this step, people can create BHoM objects in Python, but can't reliably save them, load them, or exchange them with
 C#. That is most of what "reusing the schema" means.
 
-### Two ways to do it (your choice)
+### What BHoM_JSONSchema already does (and so what this step copies)
+
+BHoM_JSONSchema is generated from the same C# classes, and its documentation describes how it handles interfaces. Its rules:
+
+| BHoM_JSONSchema rule | Meaning |
+|---|---|
+| Every class has an optional `_t` that must equal the C# class name | A plain `Line` can be written without `_t`, but when it is written it must be right |
+| An interface schema lists **every class that implements it**, as the allowed values of `_t` (for example `IPolyline`: `Polyline` or `Polygon`; `IFragment` lists about 130 classes from some 40 repositories) | The set of allowed classes is fixed when the schemas are generated |
+| A value validated as an interface **must** carry `_t` | `_t` is how the right class is picked |
+| After `_t` picks the class, the value is validated against that class only (an "if `_t` is X then X's schema" rule) | An error names the real problem (for example "Z is missing"), not a failure for every possible class |
+| Enums are written as their names: `"Centre"`. Top-level enums, and enums held in an `object` property, are written as an object `{"_t": "System.Enum", "TypeName": {...}, "Value": "Centre"}`. The schema accepts both | |
+| Every class also has an optional `_bhomVersion` text (for upgrades between BHoM versions) | |
+| The schemas must always be generated as one full package, because an interface has to know all of its implementers | A class in a repository that is not converted cannot be validated against its interface |
+
+**Is this compatible with what I first proposed? Yes, and it improves it.** The first proposal (a lookup table from `_t` to class,
+chosen when loading) is the same idea. The differences it removes:
+
+- **How the allowed classes are decided.** I had a table filled in as modules were imported. BHoM fixes the list when it generates.
+  We copy that: the generator writes the list of implementers into each interface (as text, like `generic_params`), so the
+  Python and the JSON Schema agree on exactly which classes an interface accepts.
+- **How errors read.** I had not thought about this. BHoM picks the class from `_t` first, so the message names the real problem.
+  Pydantic's "tagged union" does the same, so we get the same behaviour.
+- **Enums.** I had left open whether enums are saved by name or number. BHoM saves names. Our generated enums are numbers
+  (`None_ = 0`), so they would save as numbers and not match. They need to save as names, and load from a name or from BHoM's
+  object form.
+
+**One thing not copied: a plain Pydantic `Union` of all the implementers.** It is the closest built-in match to the JSON Schema, but
+each interface field would have to import every implementer. `IFragment` alone has about 130, in 40 repositories, and the classes
+refer to each other, which would create import cycles and a very slow import. So the implementers stay as text, and a class is
+imported only when a `_t` value names it.
+
+**The same limit applies.** An interface only accepts classes that are in the generated package. With the scope of Step 6
+(BHoM/BHoM plus the test repository), an interface such as `IFragment` accepts only its implementers in those repositories, and
+loading JSON that names another class gives a clear error ("`BH.oM.X.Y` is not in bhom_schema"). This is the same as the BHoM_JSONSchema
+warning about partial generation, and it goes away as more repositories are converted.
+
+### The decision
 
 | Option | What you get | Effort |
 |---|---|---|
-| **5A: Python only** | Python can save and load its own JSON, including interface-typed fields, and JSON Schemas work. The JSON uses `_t` but isn't promised to match C#. | Medium |
-| **5B: compatible with BHoM C#** (recommended) | Everything in 5A, and the JSON matches what BHoM's C# serialiser writes, so Python and C# can exchange files. | Larger: we must match BHoM's exact rules for enums, ids, `CustomData` and `Fragments`, and test against JSON written by C# |
+| **Stop at the current state** | Python objects can be created but not reliably saved or loaded | none |
+| **Follow the BHoM JSON Schema rules** (recommended) | Python saves and loads JSON that BHoM_JSONSchema accepts, and loads what BHoM C# writes. Interface fields, JSON Schema output and enums all work | Medium. Smaller than the old "5B", because the rules are written down and the published schemas can serve as the test |
 
-5A is a safe first stage; 5B can follow later without undoing 5A.
+The old split into 5A (Python only) and 5B (compatible with C#) is gone: following the published rules is one piece of work, and it
+is also the lower-risk one, because there is no second format to invent and maintain.
 
-### What we will do (5A first, then 5B if chosen)
+### What we will do
 
-5.1 **Record the decision** and update CODING-PLAN section 1.
+5.1 **Record the decision** and update CODING-PLAN section 1 (BHoM JSON becomes in scope, as "the JSON that BHoM_JSONSchema describes").
 
-5.2 **Add `_t` to every concrete class.** When saved, every object writes `"_t": "<full C# class name>"`. When loaded, the `_t`
-value is checked.
+5.2 **`_t` and `_bhomVersion` on every class.** Every generated class gets an optional `_t`, fixed to its C# class name, and an
+optional `_bhomVersion`. Python field names cannot start with `_`, so they are written with an alias (`_t` in the JSON) and objects
+are saved using the aliases. The reader in py2cs ignores both.
 
-5.3 **Add a lookup table in the hand-written helper folder** (`src/bhom_schema/_support`) from C# class name to Python class.
-When loading an `ICurve` field, the code reads `_t`, finds `Line` in the table, and builds a `Line`. Classes are only
-imported when they are needed, so loading one class doesn't load the whole package.
+5.3 **The implementers of an interface, written by the generator.** Each interface module gets a list of the C# names of the classes
+that implement it, from the classes the generator converts (like `generic_params`, as text, with no imports).
 
-5.4 **Teach the generator to use it.** Instead of `Curve: ICurve`, it writes something like `Curve: Polymorphic[ICurve]`
-("any class that fulfils `ICurve`, chosen by `_t`"). The same goes for lists of interface types. Saving always writes the
-real class's fields, so a subclass doesn't lose its extra fields.
+5.4 **One reusable type for interface fields.** In `src/bhom_schema/_support`, a `Polymorphic[ICurve]` type. To validate a value:
+if it is already an object of an allowed class, accept it; if it is JSON, require `_t`, check it is one of the interface's
+implementers, import that class only now, and validate against it alone. When saving, write the real class with its `_t`. The
+generator writes `Polymorphic[...]` for interface-typed and abstract-typed fields, and for lists and dictionaries of them.
 
-5.5 **Make JSON Schemas work** by describing an interface field as "one of these known classes", so `model_json_schema()`
-succeeds for every class.
+5.5 **JSON Schema output that matches BHoM_JSONSchema.** `model_json_schema()` describes a `Polymorphic` field the way BHoM does
+(`_t` required, one of the implementers, then that class's schema), so it works for every class, `BHoMObject.Fragments` included.
 
-5.6 **(5B only) Match BHoM's C# format**: check exactly what BHoM's C# serialiser writes for enums, `BHoM_Guid`, `CustomData`
-and `Fragments`, and match it.
+5.6 **Enums as names.** Generated enums save as their name (`None_` saves as `"None"`, using the renamed-members record) and load
+from a name, a number, or BHoM's object form `{"_t": "System.Enum", "TypeName": {...}, "Value": "..."}`. Check flags enums and
+the other special values (`BHoM_Guid`, `CustomData`, `FragmentSet`, `NaN`) against the published schemas and C# output before fixing
+their form.
 
-5.7 **Keep py2cs working**: it learns to ignore `_t` and to read `Polymorphic[...]` as the plain interface.
+5.7 **Keep py2cs working**: it learns to ignore `_t` and `_bhomVersion`, and to read `Polymorphic[...]` as the plain interface.
 
 ### How we'll know it works
 
-- The `Edge` example above saves and loads correctly.
+- The `Edge` example above saves and loads correctly, and a loaded `ICurve` is the right class (`Line`, not just any curve).
 - `model_json_schema()` works for every generated class.
-- (5B) A JSON file written by BHoM in C# loads in Python, and saving it again gives equivalent JSON.
+- **Conformance with BHoM_JSONSchema.** JSON saved from Python objects validates against the matching schemas of BHoM_JSONSchema (a
+  read-only clone, used only as the test, so the generator still does not depend on that repository), and an object with a missing
+  field is rejected by both with the same reason. Skipped when the clone is not there.
+- JSON written by BHoM in C# (a few recorded samples) loads in Python and saves back as equivalent JSON.
+- An error for a bad interface value names the real problem, and a `_t` that is not an implementer is refused with a clear message.
 - Loading one class doesn't import unrelated parts of the package.
 - The build and test gate passes.
 
