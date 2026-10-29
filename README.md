@@ -23,6 +23,21 @@ python -m venv .venv
 
 `run-all.ps1` starts with a preflight that reports missing assemblies. It never builds a repo for you.
 
+## Saving and loading JSON
+
+The classes read and write the JSON that [BHoM_JSONSchema](https://github.com/BHoM/BHoM_JSONSchema) describes, the same as BHoM in C#:
+
+```python
+from bhom_schema.FixtureAlpha_oM.GeometryHolder import GeometryHolder
+
+text = holder.model_dump_json()           # every object carries "_t", its C# class name
+GeometryHolder.model_validate_json(text)  # an interface field (Geometry: IGeometryLike) loads the class that "_t" names
+GeometryHolder.model_json_schema()        # the JSON Schema of the class
+```
+
+A value in an interface field needs `_t`, and only classes that are in `bhom_schema` are accepted. Enums are written by name. See
+[docs/audit-1/Fix-Plan.md](docs/audit-1/Fix-Plan.md) (step 5) for the rules and their limits.
+
 ## Changing the Python classes
 
 A change to `src/bhom_schema` in a pull request is turned into a draft C# pull request by `py2cs`. It reads the Python

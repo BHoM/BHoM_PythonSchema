@@ -156,7 +156,8 @@ cannot be imported side by side in one process.
 |---|---|---|
 | `test_py2cs/` | nothing generated | The Python to C# converter on tiny hand-built packages: reading, diff, C# emission against golden files, finding and placing files, repo resolution, the planned output, the command line. `helpers.py` has the builders (`module(...)` writes source in the generated style, `package(...)` writes it to disk). Two tests use the real `C:\Github\dKoP_Toolkit` clone and are skipped if it is missing. |
 | `test_fixtures/` | `_output/fixtures` | The generated fixture Python **behaves** correctly: every module imports, Pyright strict is clean, interface fields accept and reject the right objects, defaults are not shared, enums, generics, cycles, same-named classes. |
-| `test_spike/` | `_output/spike` | The same ideas on the real spike types. |
+| `test_spike/` | `_output/spike` | The same ideas on the real spike types. `test_json.py` also checks the JSON: round trips, a JSON Schema for every class, and (with a read-only clone of BHoM_JSONSchema next to this repository, or at `BHOM_JSONSCHEMA_ROOT`) that what Python writes validates against the published schemas |
+| `test_support/` | nothing generated | The hand-written support package alone, with small stand-in classes: `_t`, `_bhomVersion`, interface fields (`Polymorphic`), enums by name, and their JSON Schema |
 | `test_alignment/` | both outputs | Two structural checks: the Python read back by `py2cs` equals what C# reflection reported, and the drafted-then-compiled C# equals the original. |
 
 `test_fixtures` and `test_spike` also run **Pyright** on the generated package by launching it as a separate process

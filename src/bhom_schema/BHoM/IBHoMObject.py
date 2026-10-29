@@ -17,4 +17,16 @@ class IBHoMObject(IObject):
         'repo': 'BHoM/BHoM',
         'kind': 'interface',
         'properties': {'BHoM_Guid': {'type': 'System.Guid'}, 'Name': {'type': 'string'}, 'Fragments': {'type': 'BH.oM.Base.FragmentSet'}, 'Tags': {'type': 'System.Collections.Generic.HashSet<string>'}, 'CustomData': {'type': 'System.Collections.Generic.Dictionary<string, object>'}},
+        'implementers': {
+            'BH.oM.Base.BHoMObject': 'BHoM.BHoMObject',
+            'BH.oM.FixtureAlpha.Beam': 'FixtureAlpha_oM.Beam',
+            'BH.oM.FixtureAlpha.Collections': 'FixtureAlpha_oM.Collections',
+            'BH.oM.FixtureAlpha.GeometryHolder': 'FixtureAlpha_oM.GeometryHolder',
+            'BH.oM.FixtureAlpha.GridHolder': 'FixtureAlpha_oM.GridHolder',
+            'BH.oM.FixtureAlpha.ImmutableThing': 'FixtureAlpha_oM.ImmutableThing',
+            'BH.oM.FixtureAlpha.Scalars': 'FixtureAlpha_oM.Scalars',
+            'BH.oM.FixtureAlpha.SparseHolder': 'FixtureAlpha_oM.SparseHolder',
+            'BH.oM.FixtureAlpha.SparseParent': 'FixtureAlpha_oM.SparseParent',
+            'BH.oM.FixtureBeta.Elements.UsesBoth': 'FixtureBeta_oM.Elements.UsesBoth',
+        },
     }

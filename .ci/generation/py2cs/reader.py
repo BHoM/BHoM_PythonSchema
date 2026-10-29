@@ -18,8 +18,8 @@ from py2cs.model import GenericParam, Manifest, MemberInfo, PropertyInfo, TypeIn
 
 ROOT_PACKAGE = "bhom_schema"
 MODEL_BASES = {"SchemaModel", "BaseModel"}
-ENUM_BASES = {"Enum", "IntEnum", "IntFlag", "Flag"}
-FLAG_BASES = {"IntFlag", "Flag"}
+ENUM_BASES = {"Enum", "IntEnum", "IntFlag", "Flag", "BHoMEnum", "BHoMFlags"}
+FLAG_BASES = {"IntFlag", "Flag", "BHoMFlags"}
 IGNORED_BASES = MODEL_BASES | ENUM_BASES | {"ABC"}
 
 PRIMITIVES = {
@@ -384,6 +384,9 @@ class Converter:
                 raise ValueError(f"unsupported union: {ast.unparse(node)}; only 'X | None' is supported")
             if head == "Callable":
                 return "System.Delegate", False
+            if head in ("Polymorphic", "SkipJsonSchema"):
+                # Wrappers that only change how the field reads and writes JSON; for C# it is the plain type
+                return self.convert(elements[0])
             head = TYPING_ALIASES.get(head, head)
             args = [self.convert(a)[0] for a in elements]
             if head == "list":

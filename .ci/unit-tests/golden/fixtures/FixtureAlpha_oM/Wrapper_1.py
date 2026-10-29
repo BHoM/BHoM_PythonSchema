@@ -11,9 +11,10 @@ from pydantic import Field
 
 from bhom_schema.BHoM.BHoMObject import BHoMObject
 from bhom_schema.BHoM.IBHoMObject import IBHoMObject
+from bhom_schema._support import Polymorphic
 
 
-class Wrapper_1[T: IBHoMObject](BHoMObject):
+class Wrapper_1[T: Polymorphic[IBHoMObject]](BHoMObject):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Wrapper`1',
         'assembly': 'FixtureAlpha_oM',

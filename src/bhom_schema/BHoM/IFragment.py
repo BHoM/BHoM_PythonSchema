@@ -17,4 +17,5 @@ class IFragment(IObject):
         'namespace': 'BH.oM.Base',
         'repo': 'BHoM/BHoM',
         'kind': 'interface',
+        'implementers': {},
     }

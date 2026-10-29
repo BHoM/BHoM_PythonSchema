@@ -253,3 +253,59 @@ def test_check_lists_errors_and_missing_descriptions(tmp_path: Path, capsys: pyt
     capsys.readouterr()
     assert main(["check", "--root", str(head)]) == 1
     assert "error: Demo_oM/Bad.py:4: X: unsupported union" in capsys.readouterr().out
+
+def test_polymorphic_fields_and_enum_bases_of_the_generated_package_are_read(tmp_path: Path):
+    """Checks that py2cs reads what the generator now writes: `Polymorphic[X]` is the plain interface X (also in a list, an optional and a generic bound), the enum bases
+    BHoMEnum and BHoMFlags give an enum and a flags enum, and the `implementers` of a marker are ignored. Protects the Python to C# path from the JSON support.
+    """
+    pkg = demo_package(tmp_path)
+    write(pkg, "Demo_oM/ILabelled.py", """
+        from typing import Any, ClassVar
+        from bhom_schema.Demo_oM.IdentityBase import IdentityBase
+
+        class ILabelled(IdentityBase):
+            __bhom__: ClassVar[dict[str, Any]] = {
+                'clr_name': 'BH.oM.Demo.ILabelled', 'assembly': 'Demo_oM', 'namespace': 'BH.oM.Demo', 'kind': 'interface',
+                'implementers': {
+                    'BH.oM.Demo.ProjectInfo': 'Demo_oM.ProjectInfo',
+                },
+            }
+    """)
+    write(pkg, "Demo_oM/Holder_1.py", """
+        from pydantic import Field
+        from bhom_schema._support import Polymorphic, SchemaModel
+        from bhom_schema.Demo_oM.ILabelled import ILabelled
+
+        class Holder_1[T: Polymorphic[ILabelled]](SchemaModel):
+            \"\"\"Holds interface values.\"\"\"
+            One: Polymorphic[ILabelled]
+            Maybe: Polymorphic[ILabelled] | None = None
+            Many: list[Polymorphic[ILabelled]] = Field(default_factory=list)
+            Items: list[T] = Field(default_factory=list)
+    """)
+    write(pkg, "Demo_oM/Level.py", """
+        from bhom_schema._support import BHoMEnum
+
+        class Level(BHoMEnum):
+            Low = 1
+            High = 2
+    """)
+    write(pkg, "Demo_oM/Access.py", """
+        from bhom_schema._support import BHoMFlags
+
+        class Access(BHoMFlags):
+            Read = 1
+            Write = 2
+    """)
+    manifest = read_package(pkg)
+
+    holder = manifest["BH.oM.Demo.Holder`1"]
+    assert {p.name: p.clr_type for p in holder.properties} == {
+        "One": "BH.oM.Demo.ILabelled", "Maybe": "BH.oM.Demo.ILabelled", "Many": "System.Collections.Generic.List<BH.oM.Demo.ILabelled>",
+        "Items": "System.Collections.Generic.List<T>"}
+    assert holder.generic_params[0].constraints == ["BH.oM.Demo.ILabelled"]
+
+    assert manifest["BH.oM.Demo.ILabelled"].kind == "interface"
+    assert manifest["BH.oM.Demo.Level"].kind == "enum" and not manifest["BH.oM.Demo.Level"].flags
+    assert manifest["BH.oM.Demo.Access"].kind == "enum" and manifest["BH.oM.Demo.Access"].flags
+    assert [m.name for m in manifest["BH.oM.Demo.Access"].members] == ["Read", "Write"]

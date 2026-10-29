@@ -78,13 +78,16 @@ namespace PythonSchemaGeneration
             Func<Type, Type, bool> isCycleRef = CycleDetector.DetectFunction(
                 renderedTypesByModelType.Where(kv => kv.Value != null).ToDictionary(kv => kv.Key, kv => (IEnumerable<Type>)kv.Value.References));
 
+            //The interfaces list their implementers, which are exactly the types that are generated
+            HashSet<Type> generated = new HashSet<Type>(renderedTypesByModelType.Where(kv => kv.Value != null).Select(kv => kv.Key));
+
             foreach (Type type in renderedTypesByModelType.Keys.ToList())
             {
                 if (renderedTypesByModelType[type] == null)
                     continue;
 
                 Type self = type;
-                renderedTypesByModelType[type] = emitter.Render(renderedTypesByModelType[type].Model, target => !isCycleRef(self, target));
+                renderedTypesByModelType[type] = emitter.Render(renderedTypesByModelType[type].Model, target => !isCycleRef(self, target), generated);
             }
 
             result.Types = renderedTypesByModelType.Values

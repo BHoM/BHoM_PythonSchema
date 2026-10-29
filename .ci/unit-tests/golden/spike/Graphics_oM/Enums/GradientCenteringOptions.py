@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, ClassVar
 
+from bhom_schema._support import BHoMEnum
 
-class GradientCenteringOptions(Enum):
+
+class GradientCenteringOptions(BHoMEnum):
     """Either do not centre the range of the gradient, extend the range to be centred around 0, or make 0 the midpoint of the gradient while keeping UpperBound and LowerBound as the ends."""
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.Graphics.Enums.GradientCenteringOptions',

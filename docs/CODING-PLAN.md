@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (84 tests), pytest (158 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (88 tests), pytest (190 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -40,8 +40,8 @@ Where the implementation differs from the plan above:
 7. **CI is wired**: weekly schema generation, PR checks, and the automatic linked C# PR using the existing GitHub App.
 8. Everything ends with a clean **build and full test run** (repo policy).
 
-Out of scope: BHoM JSON (de)serialisation, and anything in `BHoM_JSONSchema` (the weekly JSON export stays untouched and
-independent).
+BHoM JSON is in scope since audit 1 (step 5): the classes read and write the JSON that `BHoM_JSONSchema` describes (`_t`, interface fields,
+enums by name). The weekly JSON export itself stays untouched and independent; its published schemas are only used as a test oracle.
 
 ---
 
@@ -183,8 +183,11 @@ adapter file, so replacing a reference later is a one-file change.
 - File per type: `bhom_schema/<Assembly>/<namespace path>/<Type>.py`, class names unchanged except where unavoidable
   (`Output_1`).
 - Concrete classes: Pydantic models inheriting from the support base class and from their interfaces.
-- Interfaces: plain `ABC` marker classes. Abstract classes: model + `ABC`.
-- Enums: `Enum` subclasses; `None` member emitted as `None_` with the real name kept in the metadata.
+- Interfaces: plain `ABC` marker classes. Abstract classes: model + `ABC`. Their `__bhom__` marker lists the generated classes that implement them
+  (`implementers`: C# name to module path), which are the `_t` values a field of that type accepts.
+- Fields typed with an interface or abstract class are written `Polymorphic[X]`; base classes stay plain.
+- Enums: `BHoMEnum` subclasses (`BHoMFlags` for [Flags] enums), written and read by member name; `None` member emitted as `None_` with the real name kept
+  in the metadata. Delegate fields are left out of the JSON Schema (`SkipJsonSchema`).
 - Fields: PascalCase exactly as in C#; required unless a default was found; `Field(default_factory=…)` for mutable
   defaults; typed `Annotated[...]` with `ClrType`, `Quantity`, `DisplayText` markers where applicable.
 - Docstrings and `Field(description=…)` from `[Description]`.
@@ -194,9 +197,9 @@ adapter file, so replacing a reference later is a one-file change.
 
 ### 4.3 Hand-written support package `bhom_schema/_support/`
 
-Small and stable, imported by every generated file: `SchemaModel` base class (shared `model_config`), the `ClrType`,
-`Quantity` and `DisplayText` markers, a `Color` model, and a helper that calls `model_rebuild()` safely. Written by hand
-and under test, never overwritten by the generator.
+Small and stable, imported by every generated file: `SchemaModel` base class (shared `model_config`; writes `_t`, reads and checks it, and carries
+`_bhomVersion`), `Polymorphic` (interface fields), `BHoMEnum` and `BHoMFlags` (enums by name), the `ClrType`, `Quantity` and `DisplayText` markers, and a
+`Color` model. Written by hand and under test (`test_support/`), never overwritten by the generator.
 
 ### 4.4 Python → C# (`.ci/generation/py2cs`)
 

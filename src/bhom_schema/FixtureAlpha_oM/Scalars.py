@@ -12,6 +12,7 @@ from typing import Annotated, Any, ClassVar
 from uuid import UUID
 
 from pydantic import Field
+from pydantic.json_schema import SkipJsonSchema
 
 from bhom_schema.BHoM.BHoMObject import BHoMObject
 from bhom_schema._support import ClrType, Color
@@ -35,5 +36,5 @@ class Scalars(BHoMObject):
     Letter: Annotated[str, ClrType('char')] = 'x'
     Quote: str = 'it\'s "here"'
     TypeRef: Annotated[Any | None, ClrType('System.Type')] = None
-    Callback: Annotated[Callable[..., Any] | None, ClrType('System.Func<double, double>')] = None
+    Callback: Annotated[SkipJsonSchema[Callable[..., Any]] | None, ClrType('System.Func<double, double>')] = None
     Big: float = 1.7976931348623157e+308

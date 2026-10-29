@@ -86,7 +86,7 @@ namespace PythonSchemaGeneration.Tests
         {
             RenderedType group = R("BH.oM.Base.BHoMGroup`1");
             Assert.That(group.Ref.Name, Is.EqualTo("BHoMGroup_1"));
-            Assert.That(group.Text, Does.Contain("class BHoMGroup_1[T: IBHoMObject]("));
+            Assert.That(group.Text, Does.Contain("class BHoMGroup_1[T: Polymorphic[IBHoMObject]]("));
         }
 
         [Test]

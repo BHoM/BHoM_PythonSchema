@@ -12,6 +12,7 @@ from pydantic import Field
 from bhom_schema.BHoM.BHoMObject import BHoMObject
 from bhom_schema.FixtureAlpha_oM.ICurveLike import ICurveLike
 from bhom_schema.FixtureAlpha_oM.IGeometryLike import IGeometryLike
+from bhom_schema._support import Polymorphic
 
 
 class GeometryHolder(BHoMObject):
@@ -23,5 +24,5 @@ class GeometryHolder(BHoMObject):
         'kind': 'class',
     }
 
-    Geometry: IGeometryLike | None = None
-    Curves: list[ICurveLike] = Field(default_factory=list)
+    Geometry: Polymorphic[IGeometryLike] | None = None
+    Curves: list[Polymorphic[ICurveLike]] = Field(default_factory=list)

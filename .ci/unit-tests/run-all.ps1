@@ -56,6 +56,7 @@ Step "dotnet test (Roslyn round trip)" { dotnet test $solution -c Release --no-b
 
 # ---- Python (separate sessions: the fixture and spike packages share assembly folder names such as BHoM)
 Step "pytest py2cs" { & $python -m pytest ".ci/unit-tests/python/test_py2cs" -q }
+Step "pytest support package (JSON)" { & $python -m pytest ".ci/unit-tests/python/test_support" -q }
 Step "pytest generated fixtures" { & $python -m pytest ".ci/unit-tests/python/test_fixtures" -q }
 Step "pytest generated spike types" { & $python -m pytest ".ci/unit-tests/python/test_spike" -q }
 Step "pytest alignment and round trip" { & $python -m pytest ".ci/unit-tests/python/test_alignment" -q }

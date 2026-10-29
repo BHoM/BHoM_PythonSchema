@@ -16,4 +16,8 @@ class IGeometryLike(IObject):
         'namespace': 'BH.oM.FixtureAlpha',
         'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'interface',
+        'implementers': {
+            'BH.oM.FixtureAlpha.LineLike': 'FixtureAlpha_oM.LineLike',
+            'BH.oM.FixtureAlpha.PointLike': 'FixtureAlpha_oM.PointLike',
+        },
     }

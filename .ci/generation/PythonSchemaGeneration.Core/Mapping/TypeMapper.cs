@@ -41,6 +41,9 @@ namespace PythonSchemaGeneration.Mapping
         //When true, referenced oM types are imported before the class is defined (needed for base classes)
         public bool IsSafeForEarlyImport { get; set; }
 
+        //When true, a type that is an interface or an abstract class is written as Polymorphic[...], so a field of it reads and writes JSON with _t. Not for base classes.
+        public bool WrapPolymorphic { get; set; }
+
         /***************************************************/
 
         [Description("Creates the mapper for one generated module, given the registry, reporter, the module's name tracker and the context text used in warnings. The " +
@@ -96,7 +99,8 @@ namespace PythonSchemaGeneration.Mapping
                 return new MappedType
                 {
                     DefaultClr = "System.Delegate",
-                    Expression = $"{m_NameTracker.AddStandardName("collections.abc", "Callable")}[..., {m_NameTracker.AddStandardName("typing", "Any")}]",
+                    //A delegate cannot be written to JSON, so it is left out of the JSON Schema
+                    Expression = $"{m_NameTracker.AddStandardName("pydantic.json_schema", "SkipJsonSchema")}[{m_NameTracker.AddStandardName("collections.abc", "Callable")}[..., {m_NameTracker.AddStandardName("typing", "Any")}]]",
                 };
             }
 
@@ -207,7 +211,7 @@ namespace PythonSchemaGeneration.Mapping
             bool valueType = def.IsEnum || def.IsValueType;
 
             if (!type.IsGenericType)
-                return new MappedType { Expression = local, DefaultClr = ClrNames.Format(type), IsValueType = valueType };
+                return new MappedType { Expression = Polymorphic(local, def), DefaultClr = ClrNames.Format(type), IsValueType = valueType };
 
             List<MappedType> args = type.GetGenericArguments().Select(Map).ToList();
             return new MappedType
@@ -216,6 +220,18 @@ namespace PythonSchemaGeneration.Mapping
                 DefaultClr = $"{ClrNames.BaseName(type)}<{string.Join(", ", args.Select(a => a.DefaultClr))}>",
                 IsValueType = valueType
             };
+        }
+
+        /***************************************************/
+
+        [Description("Writes the class name of an interface or abstract class as Polymorphic[Name] when the mapper is used for a field, so that field reads and writes JSON the way " +
+            "the published JSON schemas describe (with _t, choosing among the implementers listed in the interface's marker). Any other type, and every base class, stays as it is. Used by OmType.")]
+        private string Polymorphic(string local, Type definition)
+        {
+            if (!WrapPolymorphic || definition.IsEnum || definition.IsGenericTypeDefinition || !(definition.IsInterface || definition.IsAbstract))
+                return local;
+
+            return $"{m_NameTracker.AddStandardName("bhom_schema._support", "Polymorphic")}[{local}]";
         }
 
         /***************************************************/

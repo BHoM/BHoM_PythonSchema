@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, ClassVar
 
+from bhom_schema._support import BHoMEnum
 
-class SupportKind(Enum):
+
+class SupportKind(BHoMEnum):
     """Kinds of support."""
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.SupportKind',

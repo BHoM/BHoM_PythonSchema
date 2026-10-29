@@ -210,7 +210,7 @@ namespace PythonSchemaGeneration.Tests
         public void UnsupportedTypesBecomeAnyWithTheOriginalTypeKept()
         {
             string text = R(typeof(Scalars)).Text;
-            Assert.That(text, Does.Contain("Callback: Annotated[Callable[..., Any], ClrType('System.Func<double, double>')] | None = None").Or.Contain("Callback: Annotated[Callable[..., Any] | None"));
+            Assert.That(text, Does.Contain("Callback: Annotated[SkipJsonSchema[Callable[..., Any]] | None, ClrType('System.Func<double, double>')] = None"));
             Assert.That(text, Does.Contain("TypeRef: Annotated[Any, ClrType('System.Type')]").Or.Contain("TypeRef: Annotated[Any | None, ClrType('System.Type')]"));
         }
 
@@ -225,7 +225,7 @@ namespace PythonSchemaGeneration.Tests
         {
             RenderedType wrapper = R(typeof(Wrapper<>));
             Assert.That(wrapper.Ref.Name, Is.EqualTo("Wrapper_1"));
-            Assert.That(wrapper.Text, Does.Contain("class Wrapper_1[T: IBHoMObject](BHoMObject):"));
+            Assert.That(wrapper.Text, Does.Contain("class Wrapper_1[T: Polymorphic[IBHoMObject]](BHoMObject):"));
             Assert.That(wrapper.Text, Does.Contain("'clr_name': 'BH.oM.FixtureAlpha.Wrapper`1'"));
             Assert.That(wrapper.Text, Does.Contain("Items: list[T] = Field(default_factory=lambda: [])"));
         }
@@ -268,16 +268,53 @@ namespace PythonSchemaGeneration.Tests
         }
 
         [Test]
-        [Description("Checks that an enum member named None is renamed to None_ and the original name is recorded in the marker, and that flag enums become " +
-            "IntFlag. Protects enum emission and the reverse mapping used by py2cs.")]
+        [Description("Checks that fields typed with an interface are written as Polymorphic[...] (also inside lists and optionals), while base classes stay plain, so JSON " +
+            "for those fields carries _t. Protects the use of Polymorphic by the type mapper, and the base class list.")]
+        public void InterfaceTypedFieldsArePolymorphicButBasesAreNot()
+        {
+            string holder = R(typeof(GeometryHolder)).Text;
+            Assert.That(holder, Does.Contain("Geometry: Polymorphic[IGeometryLike] | None = None"));
+            Assert.That(holder, Does.Contain("Curves: list[Polymorphic[ICurveLike]] = Field(default_factory=list)"));
+            Assert.That(holder, Does.Contain("from bhom_schema._support import Polymorphic"));
+
+            string line = R(typeof(LineLike)).Text;
+            Assert.That(line, Does.Contain("class LineLike(SchemaModel, ICurveLike, ILabelled):"), "base classes are not wrapped");
+            Assert.That(line, Does.Not.Contain("Polymorphic"));
+        }
+
+        [Test]
+        [Description("Checks that an interface lists, in its marker, the generated classes that implement it as C# name to module path, that an interface with none has an " +
+            "empty list, and that a generic interface has no list. Protects what the Polymorphic type accepts when it reads JSON.")]
+        public void InterfacesListTheirImplementers()
+        {
+            string curve = R(typeof(ICurveLike)).Text;
+            Assert.That(curve, Does.Contain("'implementers': {\n            'BH.oM.FixtureAlpha.LineLike': 'FixtureAlpha_oM.LineLike',\n        },"));
+
+            Assert.That(R(typeof(ILabelled)).Text, Does.Contain("'implementers':"));
+            Assert.That(R(typeof(IOpeningLike<>)).Text, Does.Not.Contain("implementers"), "an interface with type parameters cannot be told apart by _t");
+            Assert.That(R(typeof(LineLike)).Text, Does.Not.Contain("implementers"), "a class lists nothing");
+        }
+
+        [Test]
+        [Description("Checks that generated enums derive from BHoMEnum, and flags enums from BHoMFlags, so they are written by name. Protects the enum base classes " +
+            "that the enum JSON of the support package relies on.")]
+        public void EnumsUseTheBHoMEnumBases()
+        {
+            Assert.That(R(typeof(SupportKind)).Text, Does.Contain("from bhom_schema._support import BHoMEnum"));
+            Assert.That(R(typeof(Options)).Text, Does.Contain("from bhom_schema._support import BHoMFlags"));
+        }
+
+        [Test]
+        [Description("Checks that an enum member named None is renamed to None_ and the original name is recorded in the marker, and that flag enums use the " +
+            "BHoMFlags base. Protects enum emission and the reverse mapping used by py2cs.")]
         public void EnumMemberNamedNoneIsRenamedAndRecorded()
         {
             string text = R(typeof(SupportKind)).Text;
-            Assert.That(text, Does.Contain("class SupportKind(Enum):"));
+            Assert.That(text, Does.Contain("class SupportKind(BHoMEnum):"));
             Assert.That(text, Does.Contain("    None_ = 0"));
             Assert.That(text, Does.Contain("'renamed_members': {'None_': 'None'}"));
             Assert.That(text, Does.Contain("# Fully fixed."));
-            Assert.That(R(typeof(Options)).Text, Does.Contain("class Options(IntFlag):"));
+            Assert.That(R(typeof(Options)).Text, Does.Contain("class Options(BHoMFlags):"));
         }
 
         [Test]

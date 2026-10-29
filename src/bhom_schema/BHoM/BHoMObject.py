@@ -12,7 +12,7 @@ from pydantic import Field
 
 from bhom_schema.BHoM.IBHoMObject import IBHoMObject
 from bhom_schema.BHoM.IFragment import IFragment
-from bhom_schema._support import ClrType, SchemaModel
+from bhom_schema._support import ClrType, Polymorphic, SchemaModel
 
 
 class BHoMObject(SchemaModel, IBHoMObject):
@@ -26,6 +26,6 @@ class BHoMObject(SchemaModel, IBHoMObject):
 
     BHoM_Guid: UUID = Field(default_factory=uuid4)
     Name: str = ''
-    Fragments: Annotated[list[IFragment], ClrType('BH.oM.Base.FragmentSet')] = Field(default_factory=list)
+    Fragments: Annotated[list[Polymorphic[IFragment]], ClrType('BH.oM.Base.FragmentSet')] = Field(default_factory=list)
     Tags: set[str] = Field(default_factory=set)
     CustomData: dict[str, Any] = Field(default_factory=dict)

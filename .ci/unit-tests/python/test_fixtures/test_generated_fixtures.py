@@ -113,7 +113,8 @@ def test_project_like_is_a_flat_interface_only_class():
     assert (project.ProjectReference, project.ProjectName, project.ProjectLocation, project.AdditionalReferences) == ("", "", "", "")
     assert isinstance(project, ThingIdentity)
     assert not isinstance(project, BHoMObject)
-    assert list(ProjectLike.model_fields) == ["ProjectReference", "ProjectName", "ProjectLocation", "AdditionalReferences"]
+    # bhom_version is the field of SchemaModel that holds `_bhomVersion`
+    assert list(ProjectLike.model_fields) == ["bhom_version", "ProjectReference", "ProjectName", "ProjectLocation", "AdditionalReferences"]
 
 
 def test_project_like_lives_at_the_namespace_path_not_the_source_folder():
@@ -278,3 +279,54 @@ def test_metadata_markers_are_in_the_annotation():
     assert Beam.model_fields["Span"].description == "Distance between the supports."
     count_metadata = Beam.model_fields["Count"].metadata
     assert [m.name for m in count_metadata if type(m).__name__ == "ClrType"] == ["long"]
+
+
+def test_interface_fields_round_trip_through_json_and_pick_the_class_from_the_type_tag():
+    """Checks the loop on generated classes: a GeometryHolder holding a LineLike and a PointLike is saved to JSON with `_t` and loads back with the same classes.
+
+    Protects the generator writing Polymorphic for interface fields, together with the implementers listed in the interface markers.
+    """
+    GeometryHolder, LineLike, PointLike = cls("FixtureAlpha_oM.GeometryHolder"), cls("FixtureAlpha_oM.LineLike"), cls("FixtureAlpha_oM.PointLike")
+    holder = GeometryHolder(Geometry=PointLike(X=1.0), Curves=[LineLike(Start=PointLike(X=2.0), Infinite=True)])
+    data = holder.model_dump(mode="json")
+    assert data["Geometry"]["_t"] == "BH.oM.FixtureAlpha.PointLike"
+    assert data["Curves"][0]["_t"] == "BH.oM.FixtureAlpha.LineLike" and data["Curves"][0]["Start"]["X"] == 2.0
+
+    again = GeometryHolder.model_validate_json(holder.model_dump_json())
+    assert again == holder and type(again.Geometry) is PointLike and type(again.Curves[0]) is LineLike
+
+
+def test_a_line_is_accepted_as_a_geometry_and_as_a_curve_but_a_point_is_not_a_curve():
+    """Checks the implementers lists: LineLike implements both interfaces, PointLike only IGeometryLike, so JSON naming a PointLike as a curve is refused."""
+    GeometryHolder = cls("FixtureAlpha_oM.GeometryHolder")
+    line = {"_t": "BH.oM.FixtureAlpha.LineLike"}
+    assert type(GeometryHolder.model_validate({"Geometry": line, "Curves": [line]}).Geometry).__name__ == "LineLike"
+    with pytest.raises(ValidationError, match="BH.oM.FixtureAlpha.PointLike is not a class of ICurveLike"):
+        GeometryHolder.model_validate({"Curves": [{"_t": "BH.oM.FixtureAlpha.PointLike"}]})
+
+
+def test_the_error_for_an_interface_value_names_the_real_problem():
+    """Checks that a LineLike whose `Infinite` has the wrong type reports that field, not a failure for every class the interface could be."""
+    GeometryHolder = cls("FixtureAlpha_oM.GeometryHolder")
+    with pytest.raises(ValidationError) as error:
+        GeometryHolder.model_validate({"Geometry": {"_t": "BH.oM.FixtureAlpha.LineLike", "Infinite": "maybe"}})
+    assert "Infinite" in str(error.value) and "PointLike" not in str(error.value)
+
+
+def test_every_generated_class_has_a_json_schema(fixtures_package: Any):
+    """Checks that `model_json_schema()` works for every generated class, including every BHoMObject with its interface-typed Fragments field."""
+    for name in module_names(fixtures_package):
+        generated = getattr(importlib.import_module(name), name.rsplit(".", 1)[-1])
+        if isinstance(generated, type) and issubclass(generated, BaseModel):
+            assert generated.model_json_schema(), name
+
+
+def test_generated_enums_are_written_by_name_and_read_from_names():
+    """Checks the generated enums: SupportKind saves as its member name and `None_` as "None"; the flags enum saves a combination as a name and reads "A, B" back."""
+    Holder, SupportKind, Options = cls("FixtureAlpha_oM.Beam"), cls("FixtureAlpha_oM.SupportKind"), cls("FixtureAlpha_oM.Options")
+    beam = Holder(Support=SupportKind.None_, Flags=Options.A | Options.B)
+    data = beam.model_dump(mode="json")
+    assert data["Support"] == "None" and data["Flags"] in ("A, B", "Both")
+    again = Holder.model_validate_json(beam.model_dump_json())
+    assert again.Support is SupportKind.None_ and again.Flags == Options.A | Options.B
+    assert Holder.model_validate({"Support": {"_t": "System.Enum", "Value": "None"}}).Support is SupportKind.None_

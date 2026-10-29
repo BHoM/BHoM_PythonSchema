@@ -16,4 +16,7 @@ class IImmutable(IObject):
         'namespace': 'BH.oM.Base',
         'repo': 'BHoM/BHoM',
         'kind': 'interface',
+        'implementers': {
+            'BH.oM.FixtureAlpha.ImmutableThing': 'FixtureAlpha_oM.ImmutableThing',
+        },
     }

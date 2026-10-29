@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, ClassVar
 
+from bhom_schema._support import BHoMEnum
 
-class Sparse(Enum):
+
+class Sparse(BHoMEnum):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Sparse',
         'assembly': 'FixtureAlpha_oM',

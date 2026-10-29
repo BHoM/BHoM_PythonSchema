@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from enum import IntFlag
 from typing import Any, ClassVar
 
+from bhom_schema._support import BHoMFlags
 
-class Options(IntFlag):
+
+class Options(BHoMFlags):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Options',
         'assembly': 'FixtureAlpha_oM',

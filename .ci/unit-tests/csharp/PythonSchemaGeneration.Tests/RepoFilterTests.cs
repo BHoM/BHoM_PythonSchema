@@ -60,6 +60,19 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
+        [Description("Checks that the implementers an interface lists are only the classes that are generated: a run for one repository lists no class of the repositories " +
+            "it leaves out. Protects the Polymorphic type from naming a class that is not in the package.")]
+        public void InterfacesListOnlyTheClassesThatAreGenerated()
+        {
+            GenerationResult result = Generator.Run(Options(FixtureRepo));
+            string fragment = result.Types.Single(t => t.Model.ClrName == "BH.oM.Base.IFragment").Text;
+            Assert.That(fragment, Does.Contain("'implementers': {},"), "no fragment class is generated in this run");
+
+            string curve = result.Types.Single(t => t.Model.ClrName == "BH.oM.FixtureAlpha.ICurveLike").Text;
+            Assert.That(curve, Does.Contain("'BH.oM.FixtureAlpha.LineLike'"));
+        }
+
+        [Test]
         [Description("Checks that stale files are removed only for the requested repository's assemblies, files of other repositories stay and needed base classes " +
             "are written. Protects OutputWriter in per-repository runs.")]
         public void CleanUpOnlyTouchesTheAssembliesOfTheRequestedRepository()

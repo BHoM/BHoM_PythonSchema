@@ -21,6 +21,7 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}/.ci/generation
       # The test classes are cloned into .repos, not next to this repository
       CSharpSchemaTestRoot: ${{ github.workspace }}\.repos\CSharpSchema_Test\
+      BHOM_JSONSCHEMA_ROOT: ${{ github.workspace }}\.repos\BHoM_JSONSchema
 
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +47,11 @@ jobs:
       - name: Build the repositories in dependency order
         shell: pwsh
         run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt
+
+      # The published JSON schemas are the test oracle for the JSON that Python writes. Read only; the generator does not use them.
+      - name: Clone BHoM_JSONSchema (test oracle)
+        shell: pwsh
+        run: git clone https://github.com/BHoM/BHoM_JSONSchema.git .repos/BHoM_JSONSchema --depth 1 --quiet
 
       - name: Create the virtual environment
         shell: pwsh

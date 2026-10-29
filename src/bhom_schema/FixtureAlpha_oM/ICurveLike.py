@@ -17,4 +17,7 @@ class ICurveLike(IElement1DLike, IGeometryLike):
         'namespace': 'BH.oM.FixtureAlpha',
         'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'interface',
+        'implementers': {
+            'BH.oM.FixtureAlpha.LineLike': 'FixtureAlpha_oM.LineLike',
+        },
     }

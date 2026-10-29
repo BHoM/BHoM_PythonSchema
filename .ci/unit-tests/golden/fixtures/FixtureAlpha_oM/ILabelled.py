@@ -17,4 +17,7 @@ class ILabelled(IObject):
         'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'interface',
         'properties': {'Label': {'type': 'string'}},
+        'implementers': {
+            'BH.oM.FixtureAlpha.LineLike': 'FixtureAlpha_oM.LineLike',
+        },
     }

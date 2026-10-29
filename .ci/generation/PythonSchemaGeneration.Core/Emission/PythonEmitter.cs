@@ -31,7 +31,7 @@ namespace PythonSchemaGeneration.Emission
         [Description("Renders one language-neutral type model to the text of its Python module (header, imports, class with the __bhom__ marker and fields) and "
             + "returns it with its properties and the types it references. The generator calls it for every selected type, then again with an early-import "
             + "test from the CycleDetector so imports that would form a cycle move below the class.")]
-        public RenderedType Render(TypeModel model, Func<Type, bool> isSafeForEarlyImport = null)
+        public RenderedType Render(TypeModel model, Func<Type, bool> isSafeForEarlyImport = null, ISet<Type> generatedTypes = null)
         {
             PyRef pyRef = m_TypeRegistry.Ref(model.Type);
             List<string> fieldNames = model.Properties.Select(p => Naming.Identifier(p.Name)).Concat(model.GenericParams.Select(g => g.Name)).ToList();
@@ -45,7 +45,7 @@ namespace PythonSchemaGeneration.Emission
             if (model.Description != null)
                 body.Append(Indent).Append(Docstring(model.Description)).Append('\n');
 
-            body.Append(Marker(model, tracker, baseConstraintNotes, rendered));
+            body.Append(Marker(model, tracker, baseConstraintNotes, rendered, generatedTypes));
 
             if (model.Kind == TypeKind.Enum)
                 AddEnumMembers(model, body);
@@ -70,7 +70,7 @@ namespace PythonSchemaGeneration.Emission
             TypeMapper typeMapper = new TypeMapper(m_TypeRegistry, m_Reporter, tracker, model.ClrName) { IsSafeForEarlyImport = true };
 
             if (model.Kind == TypeKind.Enum)
-                bases.Add(tracker.AddStandardName("enum", model.IsFlags ? "IntFlag" : "Enum"));
+                bases.Add(tracker.AddStandardName("bhom_schema._support", model.IsFlags ? "BHoMFlags" : "BHoMEnum"));
             else
             {
                 Type baseClass = model.Bases.FirstOrDefault(b => !b.IsInterface);
@@ -89,7 +89,7 @@ namespace PythonSchemaGeneration.Emission
             string generics = "";
             if (model.GenericParams.Count > 0)
             {
-                TypeMapper lazyMapper = new TypeMapper(m_TypeRegistry, m_Reporter, tracker, model.ClrName) { IsSafeForEarlyImport = true };
+                TypeMapper lazyMapper = new TypeMapper(m_TypeRegistry, m_Reporter, tracker, model.ClrName) { IsSafeForEarlyImport = true, WrapPolymorphic = true };
                 List<string> parts = new List<string>();
 
                 foreach (GenericParamModel param in model.GenericParams)
@@ -128,7 +128,7 @@ namespace PythonSchemaGeneration.Emission
         [Description("Builds the indented __bhom__ dictionary that records the C# name, assembly, namespace, repo, kind, generic parameters, interface members and "
             + "renamed enum members. Interface members are also added to the rendered properties; Render places the result at the top of every generated "
             + "class.")]
-        private string Marker(TypeModel model, NameTracker tracker, List<string> notes, RenderedType rendered)
+        private string Marker(TypeModel model, NameTracker tracker, List<string> notes, RenderedType rendered, ISet<Type> generatedTypes)
         {
             string any = tracker.AddStandardName("typing", "Any");
             string classVar = tracker.AddStandardName("typing", "ClassVar");
@@ -184,6 +184,12 @@ namespace PythonSchemaGeneration.Emission
                 entries.Add(new KeyValuePair<string, string>("properties", "{" + string.Join(", ", props) + "}"));
             }
 
+            if ((model.Kind == TypeKind.Interface || model.Kind == TypeKind.AbstractClass) && !model.Type.IsGenericTypeDefinition)
+            {
+                string implementers = Implementers(model, generatedTypes);
+                entries.Add(new KeyValuePair<string, string>("implementers", implementers));
+            }
+
             if (model.Kind == TypeKind.Enum)
             {
                 Dictionary<string, string> renamed = model.EnumMembers
@@ -204,6 +210,27 @@ namespace PythonSchemaGeneration.Emission
 
             sb.Append(Indent).Append("}\n");
             return sb.ToString();
+        }
+
+        /***************************************************/
+
+        [Description("Lists the classes that implement an interface or abstract class, as the dictionary text written under 'implementers' in its marker: C# class name to module path " +
+            "below bhom_schema, sorted by name. Only generated classes that are concrete and not generic are listed, so the Polymorphic type of a field accepts exactly the classes that " +
+            "exist in the package, as the published JSON schemas list the subtypes known when they were generated. Used by Marker.")]
+        private string Implementers(TypeModel model, ISet<Type> generatedTypes)
+        {
+            IEnumerable<Type> candidates = generatedTypes ?? new HashSet<Type>(m_TypeRegistry.Types);
+            List<KeyValuePair<string, string>> found = candidates
+                .Where(t => !t.IsInterface && !t.IsAbstract && !t.IsEnum && !t.IsGenericType && model.Type.IsAssignableFrom(t))
+                .OrderBy(t => t.FullName, StringComparer.Ordinal)
+                .Select(t => new KeyValuePair<string, string>(t.FullName, m_TypeRegistry.Ref(t).RelativePath.Replace('/', '.')))
+                .ToList();
+
+            if (found.Count == 0)
+                return "{}";
+
+            string inner = Indent + Indent + Indent;
+            return "{\n" + string.Concat(found.Select(kv => inner + PyLiteral.Str(kv.Key) + ": " + PyLiteral.Str(kv.Value) + ",\n")) + Indent + Indent + "}";
         }
 
         /***************************************************/
@@ -280,7 +307,7 @@ namespace PythonSchemaGeneration.Emission
         private void AddFields(TypeModel model, StringBuilder body, NameTracker tracker, RenderedType rendered)
         {
             bool first = true;
-            TypeMapper mapper = new TypeMapper(m_TypeRegistry, m_Reporter, tracker, model.ClrName);
+            TypeMapper mapper = new TypeMapper(m_TypeRegistry, m_Reporter, tracker, model.ClrName) { WrapPolymorphic = true };
             IEnumerable<string> typeParams = model.GenericParams.Select(g => g.Name);
             DefaultFormatter formatter = new DefaultFormatter(m_TypeRegistry, m_Reporter, tracker, model.ClrName, typeParams);
 
@@ -385,7 +412,7 @@ namespace PythonSchemaGeneration.Emission
             IEnumerable<ImportEntry>[] groups =
             [
                 imports.Where(i => !i.IsOm && IsStandardLib(i.Module)),
-                imports.Where(i => !i.IsOm && i.Module == "pydantic"),
+                imports.Where(i => !i.IsOm && (i.Module == "pydantic" || i.Module.StartsWith("pydantic."))),
                 imports.Where(i => (!i.IsOm && i.Module.StartsWith("bhom_schema._support")) || (i.IsOm && i.IsSafeForEarlyImport))
             ];
 

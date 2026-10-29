@@ -16,4 +16,7 @@ class ThingIdentity(IObject):
         'namespace': 'BH.oM.FixtureAlpha',
         'repo': 'BHoM/CSharpSchema_Test',
         'kind': 'interface',
+        'implementers': {
+            'BH.oM.FixtureAlpha.ProjectLike': 'FixtureAlpha_oM.ProjectLike',
+        },
     }
