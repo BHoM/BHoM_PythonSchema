@@ -207,12 +207,12 @@ def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
 
 
 def test_the_alignment_check_is_its_own_job_with_a_name_that_says_what_is_pending():
-    """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# pull request, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.
+    """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# PR, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.
 
     Protects the pull request page from showing an unexplained failure while the C# pull request is still open.
     """
     jobs = load("pr-checks.yml")["jobs"]
-    assert "linked C# pull request" in jobs["alignment"]["name"]
+    assert "linked C# PR" in jobs["alignment"]["name"]
     assert any(s.get("uses") == "./.github/actions/bhom-assemblies" for s in jobs["alignment"]["steps"])
     assert any(s.get("name") == "Explain the failure" and "GITHUB_STEP_SUMMARY" in s["run"] for s in jobs["alignment"]["steps"])
     assert not any("align" in s.get("run", "") for s in jobs["checks"]["steps"])

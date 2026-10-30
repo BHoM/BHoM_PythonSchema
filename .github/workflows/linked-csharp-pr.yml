@@ -1,4 +1,4 @@
-name: Linked C# pull request
+name: C# PR
 
 # A pull request that changes the Python classes raises a linked DRAFT pull request in the repository that owns the C# classes.
 # It never raises anything for a push, so the weekly generation (a push to develop) cannot start it.
@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   linked:
-    name: raise or update the C# draft
+    name: Raise or update draft
     runs-on: ubuntu-latest
     permissions:
       contents: read

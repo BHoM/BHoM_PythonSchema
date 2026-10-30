@@ -129,14 +129,14 @@ Goal: a class that nothing else uses, written from scratch.
 
 | Where | What you should see |
 |---|---|
-| **PR checks / checks** on the Python PR | Build, NUnit, pytest and Pyright pass. `py2cs check` passes |
-| **PR checks / C# alignment** on the Python PR | **Fails until the linked C# PR is merged**, with an explanation in the job summary: it compares the Python with what the C# `develop` generates. That failure is the proof that the two are not in step yet |
-| **Linked C# pull request / raise or update the C# draft** | Green. The step *Which repositories does the change touch?* names `BHoM/CSharpSchema_Test`; *Push the branch and open or update the draft pull request* pushes `python-schema/pr-<N>` and opens a **draft** PR |
+| **PR / Build and tests** on the Python PR | Build, NUnit, pytest and Pyright pass. `py2cs check` passes |
+| **PR / C# alignment** on the Python PR | **Fails until the linked C# PR is merged**, with an explanation in the job summary: it compares the Python with what the C# `develop` generates. That failure is the proof that the two are not in step yet |
+| **C# PR / Raise or update draft** | Green. The step *Which repositories does the change touch?* names `BHoM/CSharpSchema_Test`; *Push the branch and open or update the draft pull request* pushes `python-schema/pr-<N>` and opens a **draft** PR |
 | The C# draft PR | The files and lines in the table at the top of the exercise, a link back to the Python PR, labels, and nothing else changed. Open the diff and read it as a C# reviewer would. Check that it builds |
 | Comment on the Python PR | `Draft C# pull request: <link>`, written once and updated in place on later pushes |
 | The Python PR after a push | Pushing again updates the same branch and the same draft; no second PR |
 
-To try the flow before relying on the automatic run, start *Linked C# pull request* by hand with the Python PR number: with `dry_run` ticked it
+To try the flow before relying on the automatic run, start *C# PR* by hand with the Python PR number: with `dry_run` ticked it
 prints what it would do and proves the App token; unticked it does it.
 
 ## Closing the loop (every exercise)

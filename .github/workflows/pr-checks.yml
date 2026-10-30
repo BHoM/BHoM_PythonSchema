@@ -1,4 +1,4 @@
-name: PR checks
+name: PR
 
 on:
   pull_request:
@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   checks:
+    name: Build and tests
     runs-on: windows-latest
     env:
       # Real-type tests fail instead of being skipped when an assembly is missing
@@ -73,7 +74,7 @@ jobs:
   # Its own job, so that the pull request page names what is pending. The Python PR is a proposal: this only passes once the linked C# pull
   # request is merged, because the assemblies built here come from the C# develop branches. After that merge, re-run this job.
   alignment:
-    name: C# alignment (fails until the linked C# pull request is merged)
+    name: C# alignment (fails until the linked C# PR is merged)
     runs-on: windows-latest
     env:
       PYTHONPATH: ${{ github.workspace }}/.ci/generation
@@ -137,7 +138,7 @@ jobs:
 
           The classes changed in this pull request are compared with the Python that the generator writes from the **merged C#**. They differ, which usually means the linked C# pull request is not merged yet.
 
-          1. Open the linked draft pull request (the commit status `linked C# pull request` links it) and merge it in the C# repository.
+          1. Open the linked draft pull request (the comment on this pull request links it) and merge it in the C# repository.
           2. Re-run this job. It should then pass.
 
           If the C# is already merged and it still fails, the differences are listed in the log of the step `py2cs align`: either the C# review changed the class (copy that change into the Python), or the generator and py2cs disagree (a bug to fix in this repository).

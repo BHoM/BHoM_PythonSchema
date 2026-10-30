@@ -7,8 +7,8 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 | Workflow | When | What it does |
 |---|---|---|
 | [python-schema-generation.yml](../.github/workflows/python-schema-generation.yml) | Every Saturday at 4 AM UTC, and by hand | Clones and builds the C# repositories, generates `src/bhom_schema` from the C#, checks it, and commits it straight to `develop`. Not a pull request. If a check fails, nothing is committed |
-| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Two jobs. **checks**: installs the built assemblies of the repositories in `Included-repositories.txt` (the shared action `.github/actions/bhom-assemblies` caches them under the current commit of each repository, so unchanged repositories are not rebuilt), clones BHoM_JSONSchema read only as the test oracle for the JSON, runs `run-all.ps1` (build, NUnit, pytest, Pyright) and, for a PR that changes `src/bhom_schema`, `py2cs check`. **C# alignment (fails until the linked C# pull request is merged)**: for such a PR, builds the generator and runs `py2cs align`; when it fails it explains in the job summary that the linked C# pull request has to be merged first, then the job re-run |
-| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | One job, **raise or update the C# draft**: finds the C# repositories the change touches, raises or updates a linked **draft** pull request in each, and comments on the Python PR with its link. The shared action `.github/actions/linked-pr-context` does the finding |
+| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Two jobs. **Build and tests**: installs the built assemblies of the repositories in `Included-repositories.txt` (the shared action `.github/actions/bhom-assemblies` caches them under the current commit of each repository, so unchanged repositories are not rebuilt), clones BHoM_JSONSchema read only as the test oracle for the JSON, runs `run-all.ps1` (build, NUnit, pytest, Pyright) and, for a PR that changes `src/bhom_schema`, `py2cs check`. **C# alignment (fails until the linked C# PR is merged)**: for such a PR, builds the generator and runs `py2cs align`; when it fails it explains in the job summary that the linked C# pull request has to be merged first, then the job re-run |
+| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | One job, **Raise or update draft**: finds the C# repositories the change touches, raises or updates a linked **draft** pull request in each, and comments on the Python PR with its link. The shared action `.github/actions/linked-pr-context` does the finding |
 | [linked-csharp-pr-close.yml](../.github/workflows/linked-csharp-pr-close.yml) | A Python pull request that changes `src/bhom_schema` is closed, and by hand | Closes the linked C# draft with a comment when the Python PR was closed unmerged, or only comments when it was merged. A separate workflow so that nothing of it shows on an open pull request |
 | [release.yml](../.github/workflows/release.yml) | By hand only (dry run by default) | Regenerates with `--release X.Y`, checks, builds the wheel and the release notes; when not a dry run, pushes branch `vX.Y` and tag `vX.Y.0`, creates the GitHub Release and publishes to TestPyPI. See "Making a release" |
 
@@ -34,7 +34,7 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 │ pr-checks.yml                │              │ linked-csharp-pr.yml                            │
 │ on every PR to develop       │              │ on a PR that changes src/bhom_schema            │
 │ build, NUnit, pytest,        │              │                                                 │
-│ Pyright; py2cs check;        │              │ one job: raise or update the C# draft, and set  │
+│ Pyright; py2cs check;        │              │ one job: raise or update the draft, and add     │
 │ C# alignment (own job)       │              │ a comment on the Python PR with its link        │
 │ (writes nothing)             │              │                                                 │
 └──────────────────────────────┘              │ PR closed:  linked-csharp-pr-close.yml          │
@@ -103,7 +103,7 @@ The linked pull request can be tried without writing anything:
 
    Without a token the dry run is offline: it prints the branch, the files, the PR title and the labels, and never calls GitHub. It
    does not write into the clone.
-2. **On GitHub, dry run.** Open a Python PR, then run *Linked C# pull request* with its number and `dry_run` ticked (the default). It
+2. **On GitHub, dry run.** Open a Python PR, then run *C# PR* with its number and `dry_run` ticked (the default). It
    makes the App token for `CSharpSchema_Test` only, which proves the installation and permissions, and prints what it would do.
 3. **On GitHub, live.** Run it again with `dry_run` unticked. It pushes `python-schema/pr-<N>` to CSharpSchema_Test and opens a draft
    PR. Run it once more to see that it updates the same branch and PR. When the Python PR is closed without merging, the workflow
@@ -131,7 +131,7 @@ Real PyPI is added the same way when BHoM/BHoM is in scope. The branch `v10.0` i
 A Python PR is a proposal: it is ready once its linked C# pull request is merged. The **C# alignment** job of `pr-checks.yml` is the check for
 that. It fails until the Python equals what the C# `develop` generates, and passes after. Nothing tells this repository when a C# PR is merged,
 so after the merge **re-run that job by hand** (Re-run jobs on the PR page). The comment that `linked-csharp-pr.yml` leaves on the Python PR links
-the C# draft. To stop a Python PR being merged first, make **PR checks / C# alignment** a required check on `develop` (Settings, Branches).
+the C# draft. To stop a Python PR being merged first, make **PR / C# alignment** a required check on `develop` (Settings, Branches).
 
 ## The alignment check
 
