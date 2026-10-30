@@ -199,3 +199,19 @@ def test_the_release_workflow_stores_no_secret_and_nothing_is_published_in_a_dry
     assert workflow["jobs"]["publish-testpypi"]["if"] == "${{ !inputs.dry_run }}"
     publishing = [s for s in workflow["jobs"]["build"]["steps"] if "git push" in s.get("run", "") or "gh release" in s.get("run", "")]
     assert publishing and all(s["if"] == "${{ !inputs.dry_run }}" for s in publishing)
+
+
+def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
+    """Checks that pr-checks caches the built BHoM assemblies under a key made from the current commits, builds only on a cache miss, and saves the cache right after the build.
+
+    Protects the speed of the PR checks from a change that rebuilds every time, and the cache from becoming stale.
+    """
+    steps = load("pr-checks.yml")["jobs"]["checks"]["steps"]
+    by_name = {s.get("name", s.get("uses", "")): s for s in steps}
+    restore = by_name["Restore the built BHoM assemblies"]
+    assert restore["with"]["key"] == "${{ steps.commits.outputs.key }}"
+    for name in ("Clone the repositories", "Build the repositories in dependency order", "Save the built BHoM assemblies"):
+        assert by_name[name]["if"] == "steps.assemblies.outputs.cache-hit != 'true'"
+    assert "git ls-remote" in by_name["Find the current commit of each repository"]["run"]
+    order = [s.get("name", "") for s in steps]
+    assert order.index("Build the repositories in dependency order") < order.index("Save the built BHoM assemblies") < order.index("Build and test")
