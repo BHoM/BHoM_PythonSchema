@@ -149,8 +149,12 @@ rule: a Python PR is a proposal and is only merged after its C# PR. After the C#
 
 - The App token is made for one repository at a time and passed only to the step that needs it, through the environment. It is never
   printed, and error messages never contain it.
-- The tooling that holds the token (`py2cs` and the patcher) is taken from the **base** branch, so a pull request cannot change the
-  code that runs with the token.
+- The tooling (`py2cs` and the patcher) is taken from the **pull request**, so a fix to it works on the same pull request. That means
+  anybody who can push a branch to this repository can run code with the App token, which they could already do by editing the workflow
+  file itself; forks get nothing. What keeps this safe is the repository's own access: only trusted people have write access, the App
+  token is made for one repository at a time, and the `develop` branch of every C# repository is protected, so the App can open pull requests
+  but not push to `develop` (see "Protect the develop branch of the C# repository" in [Testing-On-GitHub.md](Testing-On-GitHub.md)).
+  The Python before the change, and the list of repositories a C# pull request may be raised in, still come from the base branch.
 - A pull request from a fork gets no linked pull request, because forks never receive the secrets.
 - The linked-PR workflow has no `push` trigger, so the weekly generation commit can never start it.
 - `.ci/generation/warnings-baseline.txt` lists the known kinds of generator warning. A new kind fails the weekly run, which means a

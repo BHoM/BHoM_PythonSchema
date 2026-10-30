@@ -91,13 +91,15 @@ def test_tokens_only_reach_the_steps_that_need_them():
     plan_step = next(s for s in jobs["raise"]["steps"] if s.get("name") == "Plan the C# changes")
     assert "PY2CS_CSHARP_TOKEN" not in plan_step.get("env", {}), "planning does not need the token"
 
-def test_the_tooling_that_holds_the_token_comes_from_the_base_branch():
-    """Checks that the linked-PR workflow runs py2cs from the base branch checkout, not from the PR head.
+def test_the_tooling_comes_from_the_pull_request_and_the_allowed_repositories_from_the_base():
+    """Checks that the linked-PR workflow runs py2cs and the patcher from the PR head checkout, and reads the list of repositories a C# pull request may be raised in from the base.
 
-    Protects the token from code that a PR could change.
+    Protects the choice that a fix to the tooling works on its own pull request, and the list of where the App may write from being changed by that pull request.
     """
     text = (WORKFLOWS / "linked-csharp-pr.yml").read_text(encoding="utf-8")
-    assert "PYTHONPATH: base/.ci/generation" in text and "head/.ci/generation" not in text
+    assert "PYTHONPATH: head/.ci/generation" in text and "PYTHONPATH: base/.ci/generation" not in text
+    assert "PY2CS_PATCHER: head/.ci/generation/" in text
+    assert "base/Converted-repositories.txt" in text and "head/Converted-repositories.txt" not in text
 
 def test_fork_pull_requests_get_no_linked_pull_request():
     """Checks that the linked-PR workflow marks pull requests from forks as not eligible and that the repos job requires eligibility.

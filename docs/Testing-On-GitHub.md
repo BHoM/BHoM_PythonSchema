@@ -18,6 +18,18 @@ This procedure has not been run yet. Part 0 is done once; the three exercises ca
 CSharpSchema_Test with *Contents* and *Pull requests* write access, the secrets `BHOM_APP_ID` and `BHOM_APP_PRIVATE_KEY`, and the
 App (or `github-actions[bot]`) allowed to push to `develop` if it is protected. CSharpSchema_Test must be public.
 
+**Protect the `develop` branch of the C# repository (once per C# repository).** The tooling of the linked PR runs from the Python pull
+request, with a token that has *Contents: write*. Protecting `develop` means that token can open pull requests but never push to `develop`.
+In CSharpSchema_Test: Settings, Rules, Rulesets, New ruleset, New branch ruleset:
+
+1. Name it `Protect develop`, set *Enforcement status* to **Active**, and leave the *Bypass list* empty (the App must not be on it).
+2. Under *Target branches*, Add target, Include by pattern, `develop`.
+3. Tick **Restrict deletions**, **Block force pushes** and **Require a pull request before merging** (required approvals can be 0 for this test repository).
+4. Create. Then check it: a direct `git push origin develop` from a clone must be refused, while merging a pull request still works.
+
+(The older equivalent is Settings, Branches, Add branch protection rule, branch name pattern `develop`, with *Require a pull request before
+merging* ticked. The real BHoM repositories already have this.)
+
 **Check the starting point.**
 
 1. Run *Python schema generation* from the Actions tab (branch `develop`, `dry_run` ticked). It must be green. Open the attached
