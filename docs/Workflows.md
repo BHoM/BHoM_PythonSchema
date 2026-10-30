@@ -1,14 +1,16 @@
 # GitHub workflows
 
-Four workflows run the loop between this repository and the repository that owns the C# classes, and make releases. For now that repository is
+These workflows run the loop between this repository and the repository that owns the C# classes, and make releases. For now that repository is
 [BHoM/CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test), a repository made for testing. **No other repository is ever
 written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built (read only) because the generator needs them.
 
 | Workflow | When | What it does |
 |---|---|---|
 | [python-schema-generation.yml](../.github/workflows/python-schema-generation.yml) | Every Saturday at 4 AM UTC, and by hand | Clones and builds the C# repositories, generates `src/bhom_schema` from the C#, checks it, and commits it straight to `develop`. Not a pull request. If a check fails, nothing is committed |
-| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Builds the same repositories (`Included-repositories.txt`; the built assemblies are cached under the current commit of each repository, so unchanged repositories are not rebuilt), clones BHoM_JSONSchema read only as the test oracle for the JSON, then runs `run-all.ps1` (build, NUnit, pytest, Pyright). For a PR that changes `src/bhom_schema` it also runs `py2cs check` and `py2cs align` |
-| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, every hour, and by hand | Raises, updates or closes a linked **draft** pull request in the C# repository, and sets the commit status `linked C# pull request` on the Python PR |
+| [pr-checks.yml](../.github/workflows/pr-checks.yml) | Every pull request to `develop` | Two jobs. **checks**: installs the built assemblies of the repositories in `Included-repositories.txt` (the shared action `.github/actions/bhom-assemblies` caches them under the current commit of each repository, so unchanged repositories are not rebuilt), clones BHoM_JSONSchema read only as the test oracle for the JSON, runs `run-all.ps1` (build, NUnit, pytest, Pyright) and, for a PR that changes `src/bhom_schema`, `py2cs check`. **C# alignment (fails until the linked C# pull request is merged)**: for such a PR, builds the generator and runs `py2cs align`; when it fails it explains in the job summary that the linked C# pull request has to be merged first, then the job re-run |
+| [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | One job, **raise or update the C# draft**: finds the C# repositories the change touches, raises or updates a linked **draft** pull request in each, and sets the commit status `linked C# pull request` on the Python PR. The shared action `.github/actions/linked-pr-context` does the finding |
+| [linked-csharp-pr-close.yml](../.github/workflows/linked-csharp-pr-close.yml) | A Python pull request that changes `src/bhom_schema` is closed, and by hand | Closes the linked C# draft with a comment when the Python PR was closed unmerged, or only comments when it was merged. A separate workflow so that nothing of it shows on an open pull request |
+| [linked-csharp-pr-sweep.yml](../.github/workflows/linked-csharp-pr-sweep.yml) | Every hour, and by hand | Refreshes the commit status `linked C# pull request` of every open Python PR that changes the classes. A schedule only, so nothing of it shows on a pull request |
 | [release.yml](../.github/workflows/release.yml) | By hand only (dry run by default) | Regenerates with `--release X.Y`, checks, builds the wheel and the release notes; when not a dry run, pushes branch `vX.Y` and tag `vX.Y.0`, creates the GitHub Release and publishes to TestPyPI. See "Making a release" |
 
 ## How they fit together
@@ -33,12 +35,13 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 │ pr-checks.yml                │              │ linked-csharp-pr.yml                            │
 │ on every PR to develop       │              │ on a PR that changes src/bhom_schema            │
 │ build, NUnit, pytest,        │              │                                                 │
-│ Pyright; py2cs check + align │              │ prepare ─► repos ─► raise ─► status             │
-│ (writes nothing)             │              │                    (draft C# PR, and the commit │
-└──────────────────────────────┘              │                     status on the Python PR)    │
-                                              │ PR closed: prepare ─► repos ─► close            │
-                                              │ every hour: sweep (refreshes the status of      │
-                                              │             every open Python PR)               │
+│ Pyright; py2cs check;        │              │ one job: raise or update the C# draft, and set  │
+│ C# alignment (own job)       │              │ the commit status on the Python PR              │
+│ (writes nothing)             │              │                                                 │
+└──────────────────────────────┘              │ PR closed:  linked-csharp-pr-close.yml          │
+                                              │ every hour: linked-csharp-pr-sweep.yml          │
+                                              │             (refreshes the status of every      │
+                                              │             open Python PR)                     │
                                               └─────────────────────┬───────────────────────────┘
                                                                     │ the C# draft is reviewed and merged in C#
                                                                     ▼
@@ -127,7 +130,7 @@ Real PyPI is added the same way when BHoM/BHoM is in scope. The branch `v10.0` i
 ## The linked pull request status
 
 Nothing tells this repository when a C# pull request is merged, so `linked-csharp-pr.yml` also sets a commit status on the Python PR
-and refreshes it every hour:
+and `linked-csharp-pr-sweep.yml` refreshes it every hour:
 
 | Status | Meaning |
 |---|---|

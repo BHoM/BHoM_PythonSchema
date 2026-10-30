@@ -1,0 +1,116 @@
+name: Linked pull request context
+description: >
+  Finds out about the Python pull request (its number, commits, whether it is closed, and whether it comes from a fork), checks out its base and head,
+  and lists the C# repositories the change touches. Used by the linked C# pull request workflows.
+
+inputs:
+  pr-number:
+    description: Number of the Python pull request for a manual run; leave empty for a pull_request event
+    required: false
+    default: ''
+
+outputs:
+  number:
+    description: The pull request number
+    value: ${{ steps.pr.outputs.number }}
+  url:
+    description: The pull request address
+    value: ${{ steps.pr.outputs.url }}
+  merged:
+    description: true when the pull request was merged
+    value: ${{ steps.pr.outputs.merged }}
+  open:
+    description: true for a pull request of this repository (not a fork) that is not closed
+    value: ${{ steps.gate.outputs.open }}
+  raise:
+    description: true when it is open and the change touches a C# repository
+    value: ${{ steps.gate.outputs.raise }}
+  close:
+    description: true when it is closed and the change touches a C# repository
+    value: ${{ steps.gate.outputs.close }}
+  repos:
+    description: The C# repositories touched, as a JSON list of Owner/Name
+    value: ${{ steps.repos.outputs.repos }}
+  names:
+    description: The same repositories as a comma-separated list of names, for the App token
+    value: ${{ steps.repos.outputs.names }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find out about the pull request
+      id: pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EVENT: ${{ github.event_name }}
+        INPUT_NUMBER: ${{ inputs.pr-number }}
+      run: |
+        if [ "$EVENT" = "workflow_dispatch" ]; then
+          data=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$INPUT_NUMBER")
+        else
+          data=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}")
+        fi
+
+        # Forks never receive the App secrets, so a pull request from a fork gets no linked C# pull request
+        if [ "$(echo "$data" | jq -r '.head.repo.full_name')" != "$GITHUB_REPOSITORY" ]; then
+          echo "eligible=false" >> "$GITHUB_OUTPUT"
+          echo "The pull request is from a fork: no linked C# pull request."
+          exit 0
+        fi
+
+        {
+          echo "eligible=true"
+          echo "number=$(echo "$data" | jq -r '.number')"
+          echo "url=$(echo "$data" | jq -r '.html_url')"
+          echo "base_sha=$(echo "$data" | jq -r '.base.sha')"
+          echo "head_sha=$(echo "$data" | jq -r '.head.sha')"
+          echo "closed=$([ "$(echo "$data" | jq -r '.state')" = closed ] && echo true || echo false)"
+          echo "merged=$(echo "$data" | jq -r '.merged')"
+        } >> "$GITHUB_OUTPUT"
+
+    # The tooling (py2cs, the patcher) comes from the pull request, so a fix to it works on the same pull request. The Python before the change
+    # and the list of repositories a C# pull request may be raised in come from the base branch.
+    - uses: actions/checkout@v4
+      if: steps.pr.outputs.eligible == 'true'
+      with:
+        ref: ${{ steps.pr.outputs.base_sha }}
+        path: base
+
+    - uses: actions/checkout@v4
+      if: steps.pr.outputs.eligible == 'true'
+      with:
+        ref: ${{ steps.pr.outputs.head_sha }}
+        path: head
+
+    - uses: actions/setup-python@v5
+      if: steps.pr.outputs.eligible == 'true'
+      with:
+        python-version: '3.12'
+
+    - name: Which repositories does the change touch?
+      id: repos
+      if: steps.pr.outputs.eligible == 'true'
+      shell: bash
+      env:
+        PYTHONPATH: head/.ci/generation
+      run: |
+        repos=$(python -m py2cs repos --base-root base/src/bhom_schema --head-root head/src/bhom_schema --allowed-repos base/Converted-repositories.txt)
+        echo "Repositories: $repos"
+        echo "repos=$repos" >> "$GITHUB_OUTPUT"
+        echo "names=$(echo "$repos" | jq -r 'map(split("/")[1]) | join(",")')" >> "$GITHUB_OUTPUT"
+        echo "any=$([ "$repos" != "[]" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+    - name: What is to be done?
+      id: gate
+      shell: bash
+      env:
+        ELIGIBLE: ${{ steps.pr.outputs.eligible }}
+        CLOSED: ${{ steps.pr.outputs.closed }}
+        ANY: ${{ steps.repos.outputs.any }}
+      run: |
+        {
+          echo "open=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = false ] && echo true || echo false)"
+          echo "raise=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = false ] && [ "$ANY" = true ] && echo true || echo false)"
+          echo "close=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = true ] && [ "$ANY" = true ] && echo true || echo false)"
+        } >> "$GITHUB_OUTPUT"
