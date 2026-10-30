@@ -1,0 +1,71 @@
+name: Linked C# pull request (close)
+
+# When the Python pull request is closed: unmerged closes the linked C# draft with a comment, merged only comments on it.
+# A separate workflow from linked-csharp-pr.yml, so that nothing of it shows on a pull request that is still open.
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - 'src/bhom_schema/**'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Number of the Python pull request (it must be closed)
+        required: true
+        type: string
+      dry_run:
+        description: List what would be done, change nothing (the App token is still made, which proves the installation)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# The same group as linked-csharp-pr.yml: closing the pull request cancels a raise that is still running
+concurrency:
+  group: linked-csharp-pr-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  close:
+    name: close the C# draft
+    runs-on: ubuntu-latest
+    steps:
+      # The repository itself, only to reach the shared action below
+      - uses: actions/checkout@v4
+
+      - name: Find the pull request and the C# repositories it touches
+        id: ctx
+        uses: ./.github/actions/linked-pr-context
+        with:
+          pr-number: ${{ inputs.pr_number }}
+
+      - name: Make a token for the C# repositories touched
+        id: token
+        if: steps.ctx.outputs.close == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BHOM_APP_ID }}
+          private-key: ${{ secrets.BHOM_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.ctx.outputs.names }}
+
+      # Unmerged: the linked draft is closed with a comment. Merged: only a comment.
+      - name: Close or comment on the linked pull request
+        if: steps.ctx.outputs.close == 'true'
+        shell: bash
+        env:
+          PYTHONPATH: head/.ci/generation
+          PY2CS_CSHARP_TOKEN: ${{ steps.token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MERGED: ${{ steps.ctx.outputs.merged }}
+          REPOS: ${{ steps.ctx.outputs.repos }}
+        run: |
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="$flags --dry-run"; fi
+          if [ "$MERGED" = "true" ]; then flags="$flags --merged"; fi
+          for repo in $(echo "$REPOS" | jq -r '.[]'); do
+            python -m py2cs close --repo "$repo" --python-repo "${{ github.repository }}" \
+              --python-pr "${{ steps.ctx.outputs.number }}" $flags
+          done

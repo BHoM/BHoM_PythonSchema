@@ -131,7 +131,7 @@ Goal: a class that nothing else uses, written from scratch.
 |---|---|
 | **PR checks / checks** on the Python PR | Build, NUnit, pytest and Pyright pass. `py2cs check` passes |
 | **PR checks / C# alignment** on the Python PR | **Fails until the linked C# PR is merged**, with an explanation in the job summary: it compares the Python with what the C# `develop` generates. That failure is the proof that the two are not in step yet |
-| **linked-csharp-pr**, `prepare`, `repos`, `raise` | Green. The log of `repos` names `BHoM/CSharpSchema_Test`; `raise` pushes `python-schema/pr-<N>` and opens a **draft** PR |
+| **Linked C# pull request / raise or update the C# draft** | Green. The step *Which repositories does the change touch?* names `BHoM/CSharpSchema_Test`; *Push the branch and open or update the draft pull request* pushes `python-schema/pr-<N>` and opens a **draft** PR |
 | The C# draft PR | The files and lines in the table at the top of the exercise, a link back to the Python PR, labels, and nothing else changed. Open the diff and read it as a C# reviewer would. Check that it builds |
 | Commit status on the Python PR | `linked C# pull request`: pending while the draft is open |
 | The Python PR after a push | Pushing again updates the same branch and the same draft; no second PR |

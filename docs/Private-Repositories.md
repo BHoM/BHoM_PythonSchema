@@ -8,9 +8,9 @@ repositories, for example the ones in the BuroHappoldEngineering organisation, a
 
 | Part | Why it fails |
 |---|---|
-| Hourly sweep in `linked-csharp-pr.yml` | It reads the C# pull requests with this repository's `GITHUB_TOKEN`, which can only read this repository and public repositories |
+| Hourly sweep in `linked-csharp-pr-sweep.yml` | It reads the C# pull requests with this repository's `GITHUB_TOKEN`, which can only read this repository and public repositories |
 | `.github/scripts/Clone-Repositories.ps1` | It clones anonymously over HTTPS |
-| The token step in `linked-csharp-pr.yml` | It passes `owner: ${{ github.repository_owner }}`, so it only works for C# repositories in the same organisation as this one. Repositories in another organisation fail even without the sweep |
+| The token steps in `linked-csharp-pr.yml` and `linked-csharp-pr-close.yml` | It passes `owner: ${{ github.repository_owner }}`, so it only works for C# repositories in the same organisation as this one. Repositories in another organisation fail even without the sweep |
 | Public logs and artifacts | This repository is public, so its Actions logs and uploaded artifacts are public. The weekly generation uploads a report and a manifest that list class names, warnings and build output. Private code built or generated here would be exposed |
 | `src/bhom_schema` | Classes generated from a private repository and committed here would be public |
 
@@ -69,7 +69,7 @@ BHoM/BHoM.
 
 These places assume public repositories in one organisation, and would change:
 
-- `.github/workflows/linked-csharp-pr.yml`: `owner: ${{ github.repository_owner }}` in both token steps, and the `sweep` job.
+- `.github/workflows/linked-csharp-pr.yml` and `linked-csharp-pr-close.yml`: `owner: ${{ github.repository_owner }}` in the token steps, and `linked-csharp-pr-sweep.yml`.
 - `.github/scripts/Clone-Repositories.ps1`: anonymous `git clone`.
 - `.github/workflows/python-schema-generation.yml`: uploads the report and manifest as a public artifact.
 - `Converted-repositories.txt` and `Included-repositories.txt`: one list each, for one deployment.
