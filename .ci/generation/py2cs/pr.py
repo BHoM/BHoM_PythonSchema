@@ -45,7 +45,7 @@ class PrResult:
     pull_request: PullRequest | None = None
 
 def branch_name(number: int) -> str:
-    """Returns the branch python-schema/pr-<N> that holds the C# draft for Python pull request N. `pr`, `close` and `status` all derive the branch from it.
+    """Returns the branch python-schema/pr-<N> that holds the C# draft for Python pull request N. `pr` and `close` both derive the branch from it.
     """
     return f"{BRANCH_PREFIX}{number}"
 

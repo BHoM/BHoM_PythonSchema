@@ -78,7 +78,7 @@ def verify_package(package: Path, manifest: Path | None = None) -> tuple[int, li
     return count, problems
 
 def make_client(token_env: str | None, offline_repos: list[str] | None = None) -> tuple[GitHubClient, bool]:
-    """Creates the GitHub client for the `pr`, `close` and `status` commands from a token held in an environment variable, and says whether it is an offline stand-in.
+    """Creates the GitHub client for the `pr` and `close` commands from a token held in an environment variable, and says whether it is an offline stand-in.
 
     The token is never on a command line. Without a token and with offline_repos, a MockGitHub with empty repositories stands in, so a dry run on a laptop prints what would be done without calling GitHub.
     """

@@ -1,4 +1,4 @@
-name: Linked C# pull request (close)
+name: C# PR (close)
 
 # When the Python pull request is closed: unmerged closes the linked C# draft with a comment, merged only comments on it.
 # A separate workflow from linked-csharp-pr.yml, so that nothing of it shows on a pull request that is still open.
@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   close:
-    name: close the C# draft
+    name: Close draft
     runs-on: ubuntu-latest
     steps:
       # The repository itself, only to reach the shared action below

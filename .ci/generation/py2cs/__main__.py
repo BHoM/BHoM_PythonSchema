@@ -1,4 +1,4 @@
-"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | status | verify | drafts | resolve | notes"""
+"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | verify | drafts | resolve | notes"""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from py2cs.notes import render_notes
 from py2cs.patch import FilePatch, PatchResult, run_patcher
 from py2cs.plan import Patcher, make_plan
 from py2cs.pr import PythonPr, close_linked, raise_pr
-from py2cs.status import update_status
 from py2cs.reader import ReadErrors, read_package
 from py2cs.report import render_report
 from py2cs.resolve import ResolveError, load_listing, resolve_repo
@@ -90,15 +89,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--token-env", default="PY2CS_CSHARP_TOKEN")
     p.add_argument("--dry-run", action="store_true")
 
-    p = sub.add_parser("status", help="set the commit status of a Python PR to whether its linked C# pull request is merged")
-    p.add_argument("--python-repo", required=True)
-    p.add_argument("--python-pr", required=True, type=int)
-    p.add_argument("--sha", required=True, help="head commit of the Python pull request")
-    p.add_argument("--no-csharp-change", action="store_true", help="the Python pull request needs no C# change: the status is success")
-    p.add_argument("--repos-file", required=True, type=Path, help="text file with the repositories C# pull requests are raised in")
-    p.add_argument("--token-env", default="PY2CS_PYTHON_TOKEN", help="environment variable with a token that can read the C# repositories and write statuses here")
-    p.add_argument("--dry-run", action="store_true")
-
     p = sub.add_parser("verify", help="every module of a generated package imports, and it reads back as the C# manifest says")
     p.add_argument("--package", required=True, type=Path)
     p.add_argument("--manifest", type=Path)
@@ -132,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 def run(args: argparse.Namespace) -> int:
-    """Dispatcher of the commands: runs the command named in the arguments (check, manifest, diff, align, repos, plan, pr, close, status, verify, drafts or resolve), prints its result and returns the exit code.
+    """Dispatcher of the commands: runs the command named in the arguments (check, manifest, diff, align, repos, plan, pr, close, verify, drafts or resolve), prints its result and returns the exit code.
 
     Each branch wires the py2cs modules together for one workflow step; unknown commands return 2.
     """
@@ -251,18 +241,6 @@ def run(args: argparse.Namespace) -> int:
         outcome = close_linked(client, args.repo, PythonPr(args.python_repo, args.python_pr), args.merged, args.dry_run)
         for action in outcome.actions:
             print(("would " if args.dry_run else "") + str(action))
-        return 0
-
-    if args.command == "status":
-        repos = list(load_allowed(args.repos_file))
-        client, offline = make_client(args.token_env, repos if args.dry_run else None)
-        if offline:
-            print("no token: offline dry run, nothing is read from or written to GitHub")
-        status = update_status(client, client, repos, args.python_repo, args.python_pr, args.sha, args.dry_run, args.no_csharp_change)
-        if status is None:
-            print(f"{args.python_repo}#{args.python_pr} has no linked C# pull request: no status")
-        else:
-            print(("would set " if args.dry_run else "set ") + f"the status {status.state}: {status.description}")
         return 0
 
     if args.command == "verify":

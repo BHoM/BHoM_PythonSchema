@@ -36,10 +36,9 @@ def test_all_workflows_are_valid_and_have_the_expected_jobs():
     assert list(load("pr-checks.yml")["jobs"]) == ["checks", "alignment"]
     assert list(load("linked-csharp-pr.yml")["jobs"]) == ["linked"], "one job, so the pull request page shows one line"
     assert list(load("linked-csharp-pr-close.yml")["jobs"]) == ["close"]
-    assert list(load("linked-csharp-pr-sweep.yml")["jobs"]) == ["sweep"]
 
 def test_the_weekly_generation_commit_cannot_start_the_linked_pr_workflow():
-    """Checks that none of the linked-PR workflows has a push trigger, that they run for pull requests only on src/bhom_schema paths, and that only the close workflow reacts to a closed pull request.
+    """Checks that neither linked-PR workflow has a push or schedule trigger, that they run for pull requests only on src/bhom_schema paths, and that only the close workflow reacts to a closed pull request.
 
     Protects against the weekly generation commit, which is a push, starting a linked C# PR, and the open pull request page from showing jobs that only matter on closing.
     """
@@ -52,9 +51,7 @@ def test_the_weekly_generation_commit_cannot_start_the_linked_pr_workflow():
     assert set(closed) == {"pull_request", "workflow_dispatch"}
     assert closed["pull_request"]["types"] == ["closed"] and closed["pull_request"]["paths"] == ["src/bhom_schema/**"]
 
-    swept = load("linked-csharp-pr-sweep.yml")["on"]
-    assert set(swept) == {"schedule", "workflow_dispatch"}
-    assert swept["schedule"] == [{"cron": "17 * * * *"}]
+    assert "schedule" not in raised and "schedule" not in closed, "nothing polls: the C# alignment is re-run by hand after the C# merge"
 
 
 def test_the_weekly_generation_commits_directly_and_is_not_a_pull_request():
@@ -73,10 +70,10 @@ def test_workflows_start_with_read_only_permissions_and_raise_them_per_job():
 
     Protects the token permissions of the workflows.
     """
-    for name in ("linked-csharp-pr.yml", "linked-csharp-pr-close.yml", "linked-csharp-pr-sweep.yml", "pr-checks.yml"):
+    for name in ("linked-csharp-pr.yml", "linked-csharp-pr-close.yml", "pr-checks.yml"):
         assert load(name)["permissions"] == {"contents": "read"}, name
 
-    assert load("linked-csharp-pr.yml")["jobs"]["linked"]["permissions"] == {"contents": "read", "pull-requests": "write", "statuses": "write"}
+    assert load("linked-csharp-pr.yml")["jobs"]["linked"]["permissions"] == {"contents": "read", "pull-requests": "write"}
     assert "permissions" not in load("linked-csharp-pr-close.yml")["jobs"]["close"]
 
 
@@ -132,12 +129,9 @@ def test_fork_pull_requests_get_no_linked_pull_request():
 
     for name, job, gate in (("linked-csharp-pr.yml", "linked", "raise"), ("linked-csharp-pr-close.yml", "close", "close")):
         for step in load(name)["jobs"][job]["steps"]:
-            if step.get("id") == "ctx" or str(step.get("uses", "")).startswith("actions/checkout") or step.get("name") == "Set the commit status":
+            if step.get("id") == "ctx" or str(step.get("uses", "")).startswith("actions/checkout"):
                 continue
             assert f"steps.ctx.outputs.{gate} == 'true'" in step["if"], step.get("name")
-
-    status = next(s for s in load("linked-csharp-pr.yml")["jobs"]["linked"]["steps"] if s.get("name") == "Set the commit status")
-    assert status["if"] == "steps.ctx.outputs.open == 'true'"
 
 
 def test_the_main_bhom_repository_is_never_written_to():
@@ -165,42 +159,6 @@ def test_the_generation_and_the_checks_build_the_same_repositories():
     for path in (WORKFLOWS / "python-schema-generation.yml", WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml"):
         text = path.read_text(encoding="utf-8")
         assert "Clone-Repositories.ps1 -List Included-repositories.txt" in text and "Build-Repositories.ps1 -List Included-repositories.txt" in text
-
-def test_the_status_jobs_write_statuses_and_nothing_else():
-    """Checks that the linked job and the sweep job get statuses write permission, the close job does not, and that no App token is made for the sweep.
-
-    Protects the permissions of the status part of the linked-PR workflows.
-    """
-    assert load("linked-csharp-pr.yml")["jobs"]["linked"]["permissions"]["statuses"] == "write"
-    sweep = load("linked-csharp-pr-sweep.yml")["jobs"]["sweep"]
-    assert sweep["permissions"] == {"contents": "read", "pull-requests": "read", "statuses": "write"}
-    assert "statuses" not in load("linked-csharp-pr-close.yml")["jobs"]["close"].get("permissions", {})
-
-    # The sweep reads the C# repositories with the workflow's own token, so no GitHub App token is made for it
-    assert not any(str(s.get("uses", "")).startswith("actions/create-github-app-token") for s in sweep["steps"])
-
-
-def test_the_hourly_sweep_is_its_own_workflow_and_no_other_workflow_runs_on_a_schedule_for_it():
-    """Checks that the hourly sweep lives in its own workflow, which has the cron 17 * * * * and no pull_request trigger, and that the other linked-PR workflows have no schedule.
-
-    Protects the pull request page from showing the sweep, and the hourly refresh from running the raise or close steps.
-    """
-    assert load("linked-csharp-pr-sweep.yml")["on"]["schedule"] == [{"cron": "17 * * * *"}]
-    assert "pull_request" not in load("linked-csharp-pr-sweep.yml")["on"]
-    assert "schedule" not in load("linked-csharp-pr.yml")["on"] and "schedule" not in load("linked-csharp-pr-close.yml")["on"]
-
-
-def test_a_python_pr_with_no_csharp_change_still_gets_a_status():
-    """Checks that the linked job sets the status for every open pull request of this repository, also when no repository is affected, and passes --no-csharp-change then.
-
-    Protects the required status from staying pending on a Python PR that needs no C# change.
-    """
-    steps = load("linked-csharp-pr.yml")["jobs"]["linked"]["steps"]
-    status = next(s for s in steps if s.get("name") == "Set the commit status")
-    assert status["if"] == "steps.ctx.outputs.open == 'true'"
-    assert "--no-csharp-change" in status["run"]
-
-
 
 def test_the_release_workflow_is_manual_and_only_the_publish_job_gets_an_identity_token():
     """Checks that the release workflow starts only by hand, that contents are read-only by default, and that only the TestPyPI job can ask for an identity token.
@@ -249,12 +207,12 @@ def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
 
 
 def test_the_alignment_check_is_its_own_job_with_a_name_that_says_what_is_pending():
-    """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# pull request, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.
+    """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# PR, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.
 
     Protects the pull request page from showing an unexplained failure while the C# pull request is still open.
     """
     jobs = load("pr-checks.yml")["jobs"]
-    assert "linked C# pull request" in jobs["alignment"]["name"]
+    assert "linked C# PR" in jobs["alignment"]["name"]
     assert any(s.get("uses") == "./.github/actions/bhom-assemblies" for s in jobs["alignment"]["steps"])
     assert any(s.get("name") == "Explain the failure" and "GITHUB_STEP_SUMMARY" in s["run"] for s in jobs["alignment"]["steps"])
     assert not any("align" in s.get("run", "") for s in jobs["checks"]["steps"])

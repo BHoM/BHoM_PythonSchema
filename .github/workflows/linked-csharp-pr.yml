@@ -1,12 +1,10 @@
-name: Linked C# pull request
+name: C# PR
 
 # A pull request that changes the Python classes raises a linked DRAFT pull request in the repository that owns the C# classes.
 # It never raises anything for a push, so the weekly generation (a push to develop) cannot start it.
 #
-# It also sets a commit status on the Python PR, "linked C# pull request": pending while the C# draft is open, success once it is
-# merged, failure if it was closed without merging. Nothing tells this repository when a C# PR is merged, so an hourly run
-# (linked-csharp-pr-sweep.yml) looks at every open Python PR and updates the status. Make the status a required check on develop to stop a
-# Python PR being merged first. Closing the Python PR is handled by linked-csharp-pr-close.yml.
+# The comment it leaves on the Python PR links the draft. A Python PR is only ready once its C# PR is merged: the "C# alignment" job of
+# pr-checks.yml fails until then, and is re-run by hand after the merge. Closing the Python PR is handled by linked-csharp-pr-close.yml.
 #
 # Where C# pull requests may be raised is listed in Converted-repositories.txt. The GitHub App token is made only for the repositories the
 # change touches, which are always listed there.
@@ -37,12 +35,11 @@ concurrency:
 
 jobs:
   linked:
-    name: raise or update the C# draft
+    name: Raise or update draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-      statuses: write
     steps:
       # The repository itself, only to reach the shared action below
       - uses: actions/checkout@v4
@@ -121,19 +118,3 @@ jobs:
               --python-repo "${{ github.repository }}" --python-pr "${{ steps.ctx.outputs.number }}" \
               --python-url "${{ steps.ctx.outputs.url }}" $flags
           done
-
-      # After the draft is raised or updated, or when the change needs no C# change at all: pending until the C# pull request is merged
-      - name: Set the commit status
-        if: steps.ctx.outputs.open == 'true'
-        shell: bash
-        env:
-          PYTHONPATH: head/.ci/generation
-          PY2CS_PYTHON_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          RAISED: ${{ steps.ctx.outputs.raise }}
-        run: |
-          flags=""
-          if [ "$DRY_RUN" = "true" ]; then flags="--dry-run"; fi
-          if [ "$RAISED" != "true" ]; then flags="$flags --no-csharp-change"; fi
-          python -m py2cs status --python-repo "${{ github.repository }}" --python-pr "${{ steps.ctx.outputs.number }}" \
-            --sha "$(git -C head rev-parse HEAD)" --repos-file base/Converted-repositories.txt $flags
