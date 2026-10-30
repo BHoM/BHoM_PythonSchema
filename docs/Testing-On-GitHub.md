@@ -129,7 +129,8 @@ Goal: a class that nothing else uses, written from scratch.
 
 | Where | What you should see |
 |---|---|
-| **pr-checks** on the Python PR | Build, NUnit, pytest and Pyright pass. `py2cs check` passes. `py2cs align` **fails until the linked C# PR is merged**: it compares the Python with what the C# `develop` generates. That failure is the proof that the two are not in step yet |
+| **PR checks / checks** on the Python PR | Build, NUnit, pytest and Pyright pass. `py2cs check` passes |
+| **PR checks / C# alignment** on the Python PR | **Fails until the linked C# PR is merged**, with an explanation in the job summary: it compares the Python with what the C# `develop` generates. That failure is the proof that the two are not in step yet |
 | **linked-csharp-pr**, `prepare`, `repos`, `raise` | Green. The log of `repos` names `BHoM/CSharpSchema_Test`; `raise` pushes `python-schema/pr-<N>` and opens a **draft** PR |
 | The C# draft PR | The files and lines in the table at the top of the exercise, a link back to the Python PR, labels, and nothing else changed. Open the diff and read it as a C# reviewer would. Check that it builds |
 | Commit status on the Python PR | `linked C# pull request`: pending while the draft is open |
@@ -142,7 +143,7 @@ prints what it would do and proves the App token; unticked it does it.
 
 1. In CSharpSchema_Test, review the draft, fix anything wrong **in C#** (the C# is the source of truth), mark it ready and merge it.
 2. Back on the Python PR: within the hour the status becomes `success` (or start *Linked C# pull request* by hand to refresh it now).
-3. Re-run **pr-checks**. `py2cs align` must now pass: the Python generated from the merged C# equals the Python in the PR.
+3. Re-run **C# alignment**. It must now pass: the Python generated from the merged C# equals the Python in the PR.
    If it still fails, the message lists what differs; either the C# review changed something (copy the change into the Python)
    or the generator and `py2cs` disagree (a bug to fix in this repository).
    The NUnit tests and their golden files use their own test classes (`.ci/unit-tests/csharp/Fixtures`), so a merged

@@ -33,7 +33,7 @@ def test_all_workflows_are_valid_and_have_the_expected_jobs():
     Protects the generation, PR checks and linked C# PR workflows from broken edits.
     """
     assert list(load("python-schema-generation.yml")["jobs"]) == ["generate"]
-    assert list(load("pr-checks.yml")["jobs"]) == ["checks"]
+    assert list(load("pr-checks.yml")["jobs"]) == ["checks", "alignment"]
     assert list(load("linked-csharp-pr.yml")["jobs"]) == ["prepare", "repos", "raise", "close", "status", "sweep"]
 
 def test_the_weekly_generation_commit_cannot_start_the_linked_pr_workflow():
@@ -133,8 +133,8 @@ def test_the_generation_and_the_checks_build_the_same_repositories():
 
     Protects align, which compares the PR with what the generator would write.
     """
-    for name in ("python-schema-generation.yml", "pr-checks.yml"):
-        text = (WORKFLOWS / name).read_text(encoding="utf-8")
+    for path in (WORKFLOWS / "python-schema-generation.yml", WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml"):
+        text = path.read_text(encoding="utf-8")
         assert "Clone-Repositories.ps1 -List Included-repositories.txt" in text and "Build-Repositories.ps1 -List Included-repositories.txt" in text
 
 def test_the_status_jobs_write_statuses_and_nothing_else():
@@ -202,11 +202,12 @@ def test_the_release_workflow_stores_no_secret_and_nothing_is_published_in_a_dry
 
 
 def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
-    """Checks that pr-checks caches the built BHoM assemblies under a key made from the current commits, builds only on a cache miss, and saves the cache right after the build.
+    """Checks that the shared assemblies action caches the built BHoM assemblies under a key made from the current commits, builds only on a cache miss, and saves the cache right after the build.
 
     Protects the speed of the PR checks from a change that rebuilds every time, and the cache from becoming stale.
     """
-    steps = load("pr-checks.yml")["jobs"]["checks"]["steps"]
+    action = yaml.safe_load((WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml").read_text(encoding="utf-8"))
+    steps = action["runs"]["steps"]
     by_name = {s.get("name", s.get("uses", "")): s for s in steps}
     restore = by_name["Restore the built BHoM assemblies"]
     assert restore["with"]["key"] == "${{ steps.commits.outputs.key }}"
@@ -214,4 +215,17 @@ def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
         assert by_name[name]["if"] == "steps.assemblies.outputs.cache-hit != 'true'"
     assert "git ls-remote" in by_name["Find the current commit of each repository"]["run"]
     order = [s.get("name", "") for s in steps]
-    assert order.index("Build the repositories in dependency order") < order.index("Save the built BHoM assemblies") < order.index("Build and test")
+    assert order.index("Build the repositories in dependency order") < order.index("Save the built BHoM assemblies")
+
+
+def test_the_alignment_check_is_its_own_job_with_a_name_that_says_what_is_pending():
+    """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# pull request, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.
+
+    Protects the pull request page from showing an unexplained failure while the C# pull request is still open.
+    """
+    jobs = load("pr-checks.yml")["jobs"]
+    assert "linked C# pull request" in jobs["alignment"]["name"]
+    assert any(s.get("uses") == "./.github/actions/bhom-assemblies" for s in jobs["alignment"]["steps"])
+    assert any(s.get("name") == "Explain the failure" and "GITHUB_STEP_SUMMARY" in s["run"] for s in jobs["alignment"]["steps"])
+    assert not any("align" in s.get("run", "") for s in jobs["checks"]["steps"])
+    assert any("py2cs check" in s.get("run", "") for s in jobs["checks"]["steps"])
