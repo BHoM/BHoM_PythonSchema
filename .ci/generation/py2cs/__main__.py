@@ -218,6 +218,10 @@ def run(args: argparse.Namespace) -> int:
         (args.out / "reports").mkdir(exist_ok=True)
         for repo in plan.repos():
             (args.out / "reports" / (repo.replace("/", "__") + ".md")).write_text(render_report(plan, args.python_pr, repo), encoding="utf-8")
+        for message in plan.existing:
+            print(f"note: {message}; nothing to raise (py2cs align compares it with the Python)")
+        for message in plan.errors:
+            print(f"error: {message}")
         print(f"{len(plan.files)} files planned in {len(plan.repos())} repositories, {len(plan.errors)} problems")
         return 1 if plan.errors else 0
 

@@ -37,6 +37,8 @@ class Plan:
     files: list[PlannedFile] = field(default_factory=lambda: [])
     removed: list[tuple[str, str]] = field(default_factory=lambda: [])    # (repo or "?", clr name)
     errors: list[str] = field(default_factory=lambda: [])
+    # New in Python, but the C# already declares them (the C# pull request was merged): nothing to raise, `align` compares them
+    existing: list[str] = field(default_factory=lambda: [])
 
     def repos(self) -> list[str]:
         """Returns the sorted repositories that have a planned file or a removed type with a known repository. `plan` writes one report per repository and `pr` raises one pull request per repository.
@@ -97,7 +99,7 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
         if found.path is not None:
             relative = found.path.relative_to(root).as_posix()
             if change.kind == "added":
-                plan.errors.append(f"{change.clr_name}: the type is new in Python, but {relative} in {repo} already declares {info.simple_name}; compare them by hand")
+                plan.existing.append(f"{change.clr_name}: {relative} in {repo} already declares {info.simple_name}")
                 continue
             patch = build_patch(found.path, base[change.clr_name], info, head)
             if found.note:

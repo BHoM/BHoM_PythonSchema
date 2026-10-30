@@ -226,6 +226,23 @@ def test_plan_for_a_modified_new_and_removed_type(tmp_path: Path):
     assert "## BHoM/Demo_Toolkit" in report and "property added: string ProjectNumber" in report and "BH.oM.Demo.Mode" in report
 
 
+def test_a_new_python_class_that_the_csharp_already_declares_is_not_an_error(tmp_path: Path):
+    """Checks that make_plan lists a class that is new in Python but already declared in the C# clone as existing, with no error and no planned file.
+
+    Protects a Python pull request whose linked C# pull request is merged from failing when it is pushed to again.
+    """
+    clones = tmp_path / "clones"
+    repo = csharp_tree(clones)
+    base = read_package(demo_package(tmp_path / "base"))
+    head_root = demo_package(tmp_path / "head")
+    (head_root / "Demo_oM" / "Door.py").write_text(module("Door", "BH.oM.Demo.Elements.Door", "BH.oM.Demo.Elements", "Demo_oM", body=["X: float = 0.0"]), encoding="utf-8")
+    head = read_package(head_root)
+
+    plan = make_plan(diff_manifests(base, head), head, base, lambda r: repo, {"BHoM/Demo_Toolkit": ["Demo_oM"]})
+    assert plan.errors == [] and plan.files == []
+    assert len(plan.existing) == 1 and plan.existing[0].startswith("BH.oM.Demo.Elements.Door: ")
+
+
 def test_plan_reports_problems_instead_of_guessing(tmp_path: Path):
     """Checks that make_plan reports an error when there is no checkout of the repository or when it is not in the listing, and plans no files.
 
