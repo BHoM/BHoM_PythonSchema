@@ -77,8 +77,8 @@ Someone with admin rights on the organisation does this once.
 1. **A GitHub App** that can push a branch and open pull requests. Permissions: *Contents: read and write*, *Pull requests: read and
    write*, *Metadata: read*. Install it on **BHoM_PythonSchema and CSharpSchema_Test only**. A repository outside the installation
    cannot get a token, so the App cannot write to it.
-2. **Credentials** in this repository (Settings, Secrets and variables, Actions): variable `BHOM_APP_ID` and secret
-   `BHOM_APP_PRIVATE_KEY` (the whole `.pem` text). If the App already exists for other workflows, reuse its names.
+2. **Credentials** in this repository (Settings, Secrets and variables, Actions): secrets `BHOM_APP_ID` and
+   `BHOM_APP_PRIVATE_KEY` (the whole `.pem` text). The organisation may already hold both under these names for other workflows; a repository secret overrides it.
 3. **`develop` must accept the weekly commit.** The generation pushes to `develop` with the workflow's own token. If `develop` is
    protected and requires pull requests, allow `github-actions[bot]` (or the App) to bypass that rule.
 4. **Actions** are enabled, and the default workflow permissions can stay read-only: each workflow asks for what it needs.

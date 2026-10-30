@@ -45,7 +45,7 @@ def test_a_package_that_differs_from_the_csharp_manifest_fails(tmp_path: Path):
     """
     package = tmp_path / "bhom_schema"
     shutil.copytree(require_output("fixtures"), package)
-    (package / "FixtureAlpha_oM" / "Beam.py").unlink()
+    (package / "FixtureAlpha_oM" / "Scalars.py").unlink()
 
     _, problems = verify_package(package, OUTPUT / "fixtures" / "manifest.json")
-    assert "BH.oM.FixtureAlpha.Beam: missing" in problems
+    assert "BH.oM.FixtureAlpha.Scalars: missing" in problems

@@ -132,7 +132,7 @@ yet, or fails it when the `CI` environment variable is `true`. That is the Pytho
 A golden file is a committed copy of expected output. The test generates the output, compares it with the file, and fails on any
 difference. Use `golden/` when exact text matters:
 
-- `golden/fixtures/`: the Python generated for the fixture types, and the C# manifest.
+- `golden/fixtures/`: the Python generated for a pinned list of fixture classes (one per situation, listed in `GoldenTests.m_PinnedClasses`), and their entries of the C# manifest. Classes added to CSharpSchema_Test later are not compared, so a merged C# change never needs a golden update; add a class to the list only for a situation no listed class covers.
 - `golden/spike/`: a small, stable real type (`GradientCenteringOptions`).
 - `golden/py2cs/`: the C# that `py2cs` writes for small example classes.
 
