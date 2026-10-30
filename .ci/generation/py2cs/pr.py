@@ -81,13 +81,14 @@ def raise_pr(client: GitHubClient, plan_dir: Path, repo: str, python_pr: PythonP
 
     branch = branch_name(python_pr.number)
     base = client.default_branch(repo)
-    if client.branch_sha(repo, branch) is None:
-        # The base already has every planned file (the C# pull request was merged): there is nothing to propose, and GitHub refuses a pull request with no commits
-        differing = [e for e in files if getattr(client.get_file(repo, base, e["path"]), "content", None) != (plan_folder(plan_dir, repo) / e["path"]).read_bytes()]
-        if not differing:
-            result.actions.append(Action("skip", repo, f"{base} already has the planned files, nothing to raise"))
-            return result
+    # The base already has every planned file (the C# pull request was merged) and no draft is open: there is nothing to propose, and GitHub
+    # refuses a pull request with no commits, whether or not the branch exists
+    in_sync = all((found := client.get_file(repo, base, e["path"])) is not None and found.content == (plan_folder(plan_dir, repo) / e["path"]).read_bytes() for e in files)
+    if in_sync and client.find_pull_request(repo, branch) is None:
+        result.actions.append(Action("skip", repo, f"{base} already has the planned files, nothing to raise"))
+        return result
 
+    if client.branch_sha(repo, branch) is None:
         base_sha = client.branch_sha(repo, base)
         if base_sha is None:
             raise ValueError(f"{repo} has no branch {base}")

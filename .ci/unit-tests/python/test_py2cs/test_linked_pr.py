@@ -95,7 +95,7 @@ def test_running_again_changes_nothing(tmp_path: Path):
     assert any(a.kind == "unchanged" for a in again.actions)
 
 def test_nothing_is_raised_when_the_base_already_has_the_planned_files(tmp_path: Path):
-    """Checks that raise_pr skips, creating no branch and no pull request, when the default branch already holds every planned file with the same content.
+    """Checks that raise_pr skips, creating no branch and no pull request, when the default branch already holds every planned file with the same content and no draft is open, also when an empty branch is left over.
 
     Protects a pushed-to Python PR whose C# pull request was merged and its branch deleted: GitHub refuses a pull request with no commits.
     """
@@ -107,6 +107,11 @@ def test_nothing_is_raised_when_the_base_already_has_the_planned_files(tmp_path:
     result = raise_pr(remote, plan, REPO, PR, python_client=remote)
     assert remote.calls == []
     assert [a.kind for a in result.actions] == ["skip"]
+
+    # An empty branch left by an earlier run changes nothing: still no pull request
+    remote.repositories[REPO].branches[branch_name(7)] = "sha-0"
+    assert [a.kind for a in raise_pr(remote, plan, REPO, PR, python_client=remote).actions] == ["skip"]
+    assert remote.calls == []
 
 
 def test_a_changed_python_pr_updates_the_same_branch_and_pr(tmp_path: Path):
