@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
 FOLDERS = [REPO / ".ci", REPO / "src"]
-SKIPPED = {"_output", ".venv", "__pycache__", "bin", "obj", ".vs", "TestResults", "golden"}
+SKIPPED = {"_output", ".venv", "__pycache__", "bin", "obj", ".vs", "TestResults", "golden", "Fixtures"}
 
 def python_files() -> list[Path]:
     """Finds the Python files of the repository that are written by hand or by the converters' own tools."""

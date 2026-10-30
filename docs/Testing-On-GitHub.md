@@ -18,6 +18,18 @@ This procedure has not been run yet. Part 0 is done once; the three exercises ca
 CSharpSchema_Test with *Contents* and *Pull requests* write access, the secrets `BHOM_APP_ID` and `BHOM_APP_PRIVATE_KEY`, and the
 App (or `github-actions[bot]`) allowed to push to `develop` if it is protected. CSharpSchema_Test must be public.
 
+**Protect the `develop` branch of the C# repository (once per C# repository).** The tooling of the linked PR runs from the Python pull
+request, with a token that has *Contents: write*. Protecting `develop` means that token can open pull requests but never push to `develop`.
+In CSharpSchema_Test: Settings, Rules, Rulesets, New ruleset, New branch ruleset:
+
+1. Name it `Protect develop`, set *Enforcement status* to **Active**, and leave the *Bypass list* empty (the App must not be on it).
+2. Under *Target branches*, Add target, Include by pattern, `develop`.
+3. Tick **Restrict deletions**, **Block force pushes** and **Require a pull request before merging** (required approvals can be 0 for this test repository).
+4. Create. Then check it: a direct `git push origin develop` from a clone must be refused, while merging a pull request still works.
+
+(The older equivalent is Settings, Branches, Add branch protection rule, branch name pattern `develop`, with *Require a pull request before
+merging* ticked. The real BHoM repositories already have this.)
+
 **Check the starting point.**
 
 1. Run *Python schema generation* from the Actions tab (branch `develop`, `dry_run` ticked). It must be green. Open the attached
@@ -133,8 +145,8 @@ prints what it would do and proves the App token; unticked it does it.
 3. Re-run **pr-checks**. `py2cs align` must now pass: the Python generated from the merged C# equals the Python in the PR.
    If it still fails, the message lists what differs; either the C# review changed something (copy the change into the Python)
    or the generator and `py2cs` disagree (a bug to fix in this repository).
-   The NUnit golden files cover a pinned list of fixture classes only, so a class merged into CSharpSchema_Test does not break them and no golden
-   update is needed. A test that deletes a fixture class file must pick a class that no other fixture imports.
+   The NUnit tests and their golden files use their own test classes (`.ci/unit-tests/csharp/Fixtures`), so a merged
+   C# change never needs a golden update. A test that deletes a fixture class file must pick a class that no other fixture imports.
 4. Merge the Python PR.
 5. Run *Python schema generation* live (or wait for Saturday). Expected: `No changes: the Python already matches the C#`.
    If it commits, the commit shows exactly how the generated Python differs from what was written by hand (often only formatting or

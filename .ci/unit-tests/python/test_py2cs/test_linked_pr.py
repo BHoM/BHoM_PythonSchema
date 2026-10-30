@@ -94,6 +94,26 @@ def test_running_again_changes_nothing(tmp_path: Path):
     assert len(remote.repositories[PYTHON_REPO].comments[7]) == 1, "the comment is updated, not repeated"
     assert any(a.kind == "unchanged" for a in again.actions)
 
+def test_nothing_is_raised_when_the_base_already_has_the_planned_files(tmp_path: Path):
+    """Checks that raise_pr skips, creating no branch and no pull request, when the default branch already holds every planned file with the same content and no draft is open, also when an empty branch is left over.
+
+    Protects a pushed-to Python PR whose C# pull request was merged and its branch deleted: GitHub refuses a pull request with no commits.
+    """
+    plan = written_plan(tmp_path)
+    remote = mock_github(REPO)
+    for path in (plan / REPO.replace("/", "__")).rglob("*.cs"):
+        remote.repositories[REPO].files[("develop", path.relative_to(plan / REPO.replace("/", "__")).as_posix())] = path.read_bytes()
+
+    result = raise_pr(remote, plan, REPO, PR, python_client=remote)
+    assert remote.calls == []
+    assert [a.kind for a in result.actions] == ["skip"]
+
+    # An empty branch left by an earlier run changes nothing: still no pull request
+    remote.repositories[REPO].branches[branch_name(7)] = "sha-0"
+    assert [a.kind for a in raise_pr(remote, plan, REPO, PR, python_client=remote).actions] == ["skip"]
+    assert remote.calls == []
+
+
 def test_a_changed_python_pr_updates_the_same_branch_and_pr(tmp_path: Path):
     """Checks that a changed plan updates the same branch and the same draft PR instead of opening another.
 

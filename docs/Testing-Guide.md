@@ -32,7 +32,7 @@ So the C# tests are not only checks; they **produce the input** the Python tests
 |---|---|
 | `run-all.ps1` | Runs every stage in the right order. Use this unless you are working on one part. |
 | `csharp/PythonSchemaGeneration.Tests/` | The NUnit tests (44 tests). |
-| (not in this repository) | The fake oM assemblies `FixtureAlpha_oM` and `FixtureBeta_oM` live in the [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) repository, which must be cloned next to this one (or set `CSharpSchemaTestRoot`). See section 3. |
+| `csharp/Fixtures/` | The fake oM assemblies `FixtureAlpha_oM` and `FixtureBeta_oM`: the test classes of the generator, in this repository. They started as a copy of [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) and are separate from it: that repository is where the loop is rehearsed, and changes there never reach these tests. Their assembly `Description` names CSharpSchema_Test on purpose, because the generator reads the owning repository from it. See section 3. |
 | `python/` | The pytest tests (about 73 test cases) in four folders: `test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`. |
 | `python/support.py` | Shared helpers for the pytest folders. |
 | `golden/` | Committed "expected output" files. See section 6. |
@@ -43,7 +43,7 @@ So the C# tests are not only checks; they **produce the input** the Python tests
 
 | Tier | Input | Needs | Where |
 |---|---|---|---|
-| **Fixtures** | `FixtureAlpha_oM` and `FixtureBeta_oM` in the CSharpSchema_Test repository, small assemblies written for the tests. Each type is there to provoke one situation: an enum member named `None`, an interface chain, a generic, a same-named type in two assemblies, a reference cycle, and so on. | Only `BHoM.dll` | Run anywhere |
+| **Fixtures** | `FixtureAlpha_oM` and `FixtureBeta_oM` in `csharp/Fixtures`, small assemblies written for the tests. Each type is there to provoke one situation: an enum member named `None`, an interface chain, a generic, a same-named type in two assemblies, a reference cycle, and so on. | Only `BHoM.dll` | Run anywhere |
 | **Real types** | The actual BHoM oM, for example `ProjectIdentification`, `Line` and `Bar`. | The BHoM assemblies installed in `%ProgramData%\BHoM\Assemblies` | Ignored locally if missing; fail in CI |
 
 The fixtures exist so the logic can be tested precisely and without depending on whatever the BHoM `develop` branch looks like
@@ -132,7 +132,7 @@ yet, or fails it when the `CI` environment variable is `true`. That is the Pytho
 A golden file is a committed copy of expected output. The test generates the output, compares it with the file, and fails on any
 difference. Use `golden/` when exact text matters:
 
-- `golden/fixtures/`: the Python generated for a pinned list of fixture classes (one per situation, listed in `GoldenTests.m_PinnedClasses`), and their entries of the C# manifest. Classes added to CSharpSchema_Test later are not compared, so a merged C# change never needs a golden update; add a class to the list only for a situation no listed class covers.
+- `golden/fixtures/`: the Python generated for eight fixture classes, one per output shape (a class with many field kinds, a reference cycle, an interface, a get-only class, a flags enum, a plain enum, a generic, a same-named class in another assembly). The list is `GoldenTests.m_PinnedClasses`; add a class only for a shape no listed class shows. The manifest has no golden file: the alignment tests cover it.
 - `golden/spike/`: a small, stable real type (`GradientCenteringOptions`).
 - `golden/py2cs/`: the C# that `py2cs` writes for small example classes.
 
@@ -207,7 +207,7 @@ Almost every test follows **arrange, act, assert**. When a test fails, the repor
 
 | You changed | Add the test in |
 |---|---|
-| How a C# type becomes Python text | `FixtureExtractionTests.cs` (add a type to `FixtureAlpha_oM` in CSharpSchema_Test if you need a new situation, then regenerate the golden files) |
+| How a C# type becomes Python text | `FixtureExtractionTests.cs` (add a type to `FixtureAlpha_oM` in `csharp/Fixtures` if you need a new situation, then regenerate the golden files) |
 | Behaviour of the generated Python classes | `test_fixtures/test_generated_fixtures.py` |
 | Something specific to a real BHoM type | `RealTypeTests.cs` and `test_spike/` |
 | The Python to C# converter | `test_py2cs/` |

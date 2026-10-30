@@ -93,7 +93,8 @@ jobs:
       matrix: ${{ steps.repos.outputs.matrix }}
       any: ${{ steps.repos.outputs.any }}
     steps:
-      # The tooling comes from the base branch, so a pull request cannot change the code that holds the App token
+      # The tooling (py2cs, the patcher) comes from the pull request, so a fix to it works on the same pull request. The Python before the change
+      # and the list of repositories a C# pull request may be raised in come from the base branch.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.base_sha }}
@@ -112,7 +113,7 @@ jobs:
         id: repos
         shell: bash
         env:
-          PYTHONPATH: base/.ci/generation
+          PYTHONPATH: head/.ci/generation
         run: |
           repos=$(python -m py2cs repos --base-root base/src/bhom_schema --head-root head/src/bhom_schema --allowed-repos base/Converted-repositories.txt)
           echo "Repositories: $repos"
@@ -167,13 +168,13 @@ jobs:
           python-version: '3.12'
 
       - name: Build the C# patcher
-        run: dotnet build base/.ci/generation/PythonSchemaGeneration.Patcher/PythonSchemaGeneration.Patcher.csproj -c Release --nologo
+        run: dotnet build head/.ci/generation/PythonSchemaGeneration.Patcher/PythonSchemaGeneration.Patcher.csproj -c Release --nologo
 
       - name: Plan the C# changes
         shell: bash
         env:
-          PYTHONPATH: base/.ci/generation
-          PY2CS_PATCHER: base/.ci/generation/PythonSchemaGeneration.Patcher/bin/Release/net8.0/PythonSchemaGeneration.Patcher.dll
+          PYTHONPATH: head/.ci/generation
+          PY2CS_PATCHER: head/.ci/generation/PythonSchemaGeneration.Patcher/bin/Release/net8.0/PythonSchemaGeneration.Patcher.dll
         run: |
           python -m py2cs plan \
             --base-root base/src/bhom_schema --head-root head/src/bhom_schema \
@@ -186,7 +187,7 @@ jobs:
       - name: Push the branch and open or update the draft pull request
         shell: bash
         env:
-          PYTHONPATH: base/.ci/generation
+          PYTHONPATH: head/.ci/generation
           PY2CS_CSHARP_TOKEN: ${{ steps.token.outputs.token }}
           PY2CS_PYTHON_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
@@ -210,6 +211,11 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: base
 
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: head
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -227,7 +233,7 @@ jobs:
       - name: Close or comment on the linked pull request
         shell: bash
         env:
-          PYTHONPATH: base/.ci/generation
+          PYTHONPATH: head/.ci/generation
           PY2CS_CSHARP_TOKEN: ${{ steps.token.outputs.token }}
           DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
           MERGED: ${{ needs.prepare.outputs.merged }}
@@ -253,6 +259,11 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: base
 
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: head
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -260,7 +271,7 @@ jobs:
       - name: Set the commit status
         shell: bash
         env:
-          PYTHONPATH: base/.ci/generation
+          PYTHONPATH: head/.ci/generation
           PY2CS_PYTHON_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
         run: |

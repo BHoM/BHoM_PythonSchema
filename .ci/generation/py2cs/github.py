@@ -136,7 +136,9 @@ class RestClient:
         if status >= 400:
             message = ""
             try:
-                message = str(json.loads(content).get("message", ""))
+                data = json.loads(content)
+                details = "; ".join(str(e.get("message") or e.get("code") or e) if isinstance(e, dict) else str(e) for e in data.get("errors", []))
+                message = str(data.get("message", "")) + (f" ({details})" if details else "")
             except ValueError:
                 pass
             raise GitHubError(f"GitHub {method} {path} failed with {status}: {message}")

@@ -19,8 +19,6 @@ jobs:
       # Real-type tests fail instead of being skipped when an assembly is missing
       CI: 'true'
       PYTHONPATH: ${{ github.workspace }}/.ci/generation
-      # The test classes are cloned into .repos, not next to this repository
-      CSharpSchemaTestRoot: ${{ github.workspace }}\.repos\CSharpSchema_Test\
       BHOM_JSONSCHEMA_ROOT: ${{ github.workspace }}\.repos\BHoM_JSONSchema
 
     steps:
