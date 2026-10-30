@@ -78,3 +78,5 @@ dist/
 .ci/unit-tests/_output/
 .ci/unit-tests/**/TestResults/
 /.claude
+# Read-only clones made by the scripts
+.repos/

@@ -3,11 +3,6 @@
   <Import Project="..\..\..\BHoMReferences.props" />
 
   <PropertyGroup>
-    <CSharpSchemaTestRoot Condition="'$(CSharpSchemaTestRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..', '..', '..', 'CSharpSchema_Test'))</CSharpSchemaTestRoot>
-    <CSharpSchemaTestDir>$([MSBuild]::EnsureTrailingSlash('$(CSharpSchemaTestRoot)'))</CSharpSchemaTestDir>
-  </PropertyGroup>
-
-  <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
@@ -30,14 +25,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Core\PythonSchemaGeneration.Core.csproj" />
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration.Patcher\PythonSchemaGeneration.Patcher.csproj" />
-    <ProjectReference Include="$(CSharpSchemaTestDir)FixtureAlpha_oM\FixtureAlpha_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
-    <ProjectReference Include="$(CSharpSchemaTestDir)FixtureBeta_oM\FixtureBeta_oM.csproj" AdditionalProperties="SkipAssemblyCopy=true" />
+    <ProjectReference Include="..\Fixtures\FixtureAlpha_oM\FixtureAlpha_oM.csproj" />
+    <ProjectReference Include="..\Fixtures\FixtureBeta_oM\FixtureBeta_oM.csproj" />
     <ProjectReference Include="..\..\..\generation\PythonSchemaGeneration\PythonSchemaGeneration.csproj" />
   </ItemGroup>
 
-  <!-- The test classes live in the CSharpSchema_Test repository, cloned next to this one (or pass -p:CSharpSchemaTestRoot=<folder>) -->
-  <Target Name="CheckCSharpSchemaTest" BeforeTargets="BeforeBuild">
-    <Error Condition="!Exists('$(CSharpSchemaTestDir)FixtureAlpha_oM\FixtureAlpha_oM.csproj')" Text="CSharpSchema_Test was not found at $(CSharpSchemaTestDir). Clone https://github.com/BHoM/CSharpSchema_Test next to this repository, or pass -p:CSharpSchemaTestRoot=&lt;folder&gt;." />
-  </Target>
 
 </Project>

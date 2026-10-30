@@ -8,7 +8,7 @@ namespace PythonSchemaGeneration.Tests
     {
         /***************************************************/
 
-        private static readonly string[] m_Skipped = { "obj", "bin", ".vs", "_output", "TestResults", "golden" };
+        private static readonly string[] m_Skipped = { "obj", "bin", ".vs", "_output", "TestResults", "golden", "Fixtures" };
 
         /***************************************************/
 

@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (93 tests), pytest (195 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (92 tests), pytest (195 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
@@ -69,7 +69,7 @@ BHoM_PythonSchema/
 │  └─ unit-tests/
 │     ├─ csharp/
 │     │  ├─ PythonSchemaGeneration.Tests/     NUnit tests
-│     │  └─ (FixtureAlpha_oM, FixtureBeta_oM: moved to the CSharpSchema_Test repository, cloned next to this one)
+│     │  └─ Fixtures/ (FixtureAlpha_oM, FixtureBeta_oM: the generator's test classes)
 │     ├─ python/                              pytest tests (converters, PR raiser, generated package)
 │     ├─ golden/                              hand-written expected .py / .cs / report outputs
 │     ├─ github-fixtures/                     recorded repository listings and API replies for offline tests

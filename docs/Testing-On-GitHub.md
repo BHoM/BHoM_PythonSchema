@@ -133,8 +133,8 @@ prints what it would do and proves the App token; unticked it does it.
 3. Re-run **pr-checks**. `py2cs align` must now pass: the Python generated from the merged C# equals the Python in the PR.
    If it still fails, the message lists what differs; either the C# review changed something (copy the change into the Python)
    or the generator and `py2cs` disagree (a bug to fix in this repository).
-   The NUnit golden files cover a pinned list of fixture classes only, so a class merged into CSharpSchema_Test does not break them and no golden
-   update is needed. A test that deletes a fixture class file must pick a class that no other fixture imports.
+   The NUnit tests and their golden files use their own test classes (`.ci/unit-tests/csharp/Fixtures`), so a merged
+   C# change never needs a golden update. A test that deletes a fixture class file must pick a class that no other fixture imports.
 4. Merge the Python PR.
 5. Run *Python schema generation* live (or wait for Saturday). Expected: `No changes: the Python already matches the C#`.
    If it commits, the commit shows exactly how the generated Python differs from what was written by hand (often only formatting or
