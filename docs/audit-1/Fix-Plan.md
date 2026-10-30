@@ -603,6 +603,10 @@ someone changes it to 2027, and **every** generated file changes at once, which 
 year range out of generated Python files, or read it from one setting that is changed on purpose in its own PR. C# files must
 still follow the BHoM copyright rule.
 
+**Done.** The header of a generated Python file is now `# Copyright (c) the respective contributors. All rights reserved.`, with no year, so
+a new year changes nothing. The files already in `src/bhom_schema` and the golden files were changed once to match (a one-line change in
+each). The C# files that `py2cs` drafts keep their year range, as the BHoM copyright rule asks. A test checks that no generated header has a year.
+
 7.2 **Old folders left behind.** When a run doesn't include an assembly at all (for example because its build failed), its old
 Python files stay, and nobody is told. Fix: a full run lists every assembly folder it didn't generate; the weekly job can also
 delete them with a new option, `--clean-missing-assemblies`.

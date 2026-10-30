@@ -382,5 +382,17 @@ namespace PythonSchemaGeneration.Tests
             Assert.That(R(typeof(PointLike)).Text, Does.Not.Contain("model_rebuild"), "types outside a cycle do not need a rebuild");
             Assert.That(FixtureOutput.Result.CyclicTypes, Is.EqualTo(2));
         }
+
+        [Test]
+        [Description("Checks that the header of every generated file names the copyright holder without a year range. Protects the weekly generation from rewriting " +
+            "every file when the year changes.")]
+        public void GeneratedHeadersHaveNoYear()
+        {
+            foreach (RenderedType type in FixtureOutput.Result.Types)
+            {
+                string copyright = type.Text.Split('\n')[1];
+                Assert.That(copyright, Is.EqualTo("# Copyright (c) the respective contributors. All rights reserved."), type.Ref.RelativePath);
+            }
+        }
     }
 }
