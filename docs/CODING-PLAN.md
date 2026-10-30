@@ -9,7 +9,7 @@ taken so far (section 9).
 
 ## Implementation status (phases 0 to 6 done, 7 and 8 not started)
 
-Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (92 tests), pytest (197 tests) and Pyright.
+Run `.ci/unit-tests/run-all.ps1`; it builds, generates, drafts, round-trips, runs NUnit (92 tests), pytest (198 tests) and Pyright.
 
 Where the implementation differs from the plan above:
 
