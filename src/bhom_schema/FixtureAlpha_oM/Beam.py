@@ -31,3 +31,4 @@ class Beam(BHoMObject):
     Start: PointLike | None = None
     Count: Annotated[int, ClrType('long')] = 3
     Small: Annotated[float, ClrType('float')] = 0.5
+    Material: str = Field(default='Steel', description='Name of the material.')
