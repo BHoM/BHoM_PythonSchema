@@ -19,9 +19,6 @@ outputs:
   merged:
     description: true when the pull request was merged
     value: ${{ steps.pr.outputs.merged }}
-  open:
-    description: true for a pull request of this repository (not a fork) that is not closed
-    value: ${{ steps.gate.outputs.open }}
   raise:
     description: true when it is open and the change touches a C# repository
     value: ${{ steps.gate.outputs.raise }}
@@ -110,7 +107,6 @@ runs:
         ANY: ${{ steps.repos.outputs.any }}
       run: |
         {
-          echo "open=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = false ] && echo true || echo false)"
           echo "raise=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = false ] && [ "$ANY" = true ] && echo true || echo false)"
           echo "close=$([ "$ELIGIBLE" = true ] && [ "$CLOSED" = true ] && [ "$ANY" = true ] && echo true || echo false)"
         } >> "$GITHUB_OUTPUT"

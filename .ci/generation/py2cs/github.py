@@ -28,7 +28,6 @@ class PullRequest:
     body: str = ""
     draft: bool = True
     state: str = "open"
-    merged: bool = False
 
 @dataclass
 class RemoteFile:
@@ -77,14 +76,6 @@ class GitHubClient(Protocol):
 
     def close_pull_request(self, repo: str, number: int) -> None:
         """Contract: closes a pull request without merging it. `close` calls it on the linked C# draft when its Python PR is closed unmerged."""
-
-    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
-        """Contract: returns the newest pull request from the branch whatever its state (open, closed or merged), or None. `status` uses it to see whether the linked C# pull request is merged.
-        """
-
-    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None:
-        """Contract: sets a commit status (state, context, description, link) on a commit of the repository. `status` uses it to publish the state of the linked C# pull request on the Python PR.
-        """
 
 # ------------------------------------------------------------------------------------------------ real client
 
@@ -210,31 +201,11 @@ class RestClient:
         """
         self._request("PATCH", f"/repos/{repo}/pulls/{number}", {"state": "closed"})
 
-    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
-        """Looks up the newest pull request from the branch, open, closed or merged, or returns None.
-
-        Used by `status` to find out whether the linked C# pull request is merged.
-        """
-        owner = repo.split("/")[0]
-        found = self._request("GET", f"/repos/{repo}/pulls?state=all&sort=created&direction=desc&head={urllib.parse.quote(owner + ':' + head_branch, safe='')}")
-        return self._pull_request(found[0]) if found else None
-
-    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None:
-        """Posts a commit status to the GitHub statuses API, cutting the description to the 140 characters GitHub allows. Used by `status` to show the state of the linked C# pull request on the Python PR.
-        """
-        body = {"state": state, "context": context, "description": description[:140], "target_url": url}
-        self._request("POST", f"/repos/{repo}/statuses/{sha}", body)
-
     @staticmethod
     def _pull_request(data: dict[str, Any]) -> PullRequest:
-        # The list endpoint has merged_at but not merged
-        """Converts a pull request object from the GitHub API into a PullRequest.
-
-        It treats a pull request with merged_at as merged, because the list endpoints do not return the merged flag.
-        """
-        merged = bool(data.get("merged") or data.get("merged_at"))
+        """Converts a pull request object from the GitHub API into a PullRequest. Used by every client method that returns one."""
         return PullRequest(int(data["number"]), str(data["html_url"]), str(data["head"]["ref"]), str(data["base"]["ref"]), str(data.get("title", "")),
-                           str(data.get("body") or ""), bool(data.get("draft", False)), str(data.get("state", "open")), merged)
+                           str(data.get("body") or ""), bool(data.get("draft", False)), str(data.get("state", "open")))
 
 # ------------------------------------------------------------------------------------------------ mock client
 
@@ -246,8 +217,6 @@ class MockRepository:
     pull_requests: list[PullRequest] = field(default_factory=lambda: [])
     labels: dict[int, list[str]] = field(default_factory=lambda: {})
     comments: dict[int, list[str]] = field(default_factory=lambda: {})
-    # (sha, context) -> (state, description, url)
-    statuses: dict[tuple[str, str], tuple[str, str, str]] = field(default_factory=lambda: {})
 
 class MockGitHub:
     """An in-memory GitHub. `calls` records every call that changes something, so tests can check what was (not) written."""
@@ -342,15 +311,3 @@ class MockGitHub:
         for pull in self._repo(repo).pull_requests:
             if pull.number == number:
                 pull.state = "closed"
-
-    def find_linked_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
-        """Returns the newest pull request (highest number) from the branch whatever its state, or None. Stands in for GitHub in tests and offline dry runs.
-        """
-        matches = [p for p in self._repo(repo).pull_requests if p.head == head_branch]
-        return max(matches, key=lambda p: p.number) if matches else None
-
-    def set_commit_status(self, repo: str, sha: str, state: str, context: str, description: str, url: str) -> None:
-        """Stores the status for the sha and context, cutting the description to 140 characters, and logs the call. Stands in for GitHub in tests and offline dry runs.
-        """
-        self.calls.append(("set_commit_status", repo, sha, state))
-        self._repo(repo).statuses[(sha, context)] = (state, description[:140], url)

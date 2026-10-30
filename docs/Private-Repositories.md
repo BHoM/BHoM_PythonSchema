@@ -8,9 +8,8 @@ repositories, for example the ones in the BuroHappoldEngineering organisation, a
 
 | Part | Why it fails |
 |---|---|
-| Hourly sweep in `linked-csharp-pr-sweep.yml` | It reads the C# pull requests with this repository's `GITHUB_TOKEN`, which can only read this repository and public repositories |
 | `.github/scripts/Clone-Repositories.ps1` | It clones anonymously over HTTPS |
-| The token steps in `linked-csharp-pr.yml` and `linked-csharp-pr-close.yml` | It passes `owner: ${{ github.repository_owner }}`, so it only works for C# repositories in the same organisation as this one. Repositories in another organisation fail even without the sweep |
+| The token steps in `linked-csharp-pr.yml` and `linked-csharp-pr-close.yml` | It passes `owner: ${{ github.repository_owner }}`, so it only works for C# repositories in the same organisation as this one. Repositories in another organisation fail |
 | Public logs and artifacts | This repository is public, so its Actions logs and uploaded artifacts are public. The weekly generation uploads a report and a manifest that list class names, warnings and build output. Private code built or generated here would be exposed |
 | `src/bhom_schema` | Classes generated from a private repository and committed here would be public |
 
@@ -41,10 +40,10 @@ This applies to every deployment, because each one reads and writes C# repositor
 
 | Option | How it works | Pros | Cons |
 |---|---|---|---|
-| 1. One GitHub App, matrix per repository | Take the owner from each repository's `Owner/Name`. Make one token per repository in a matrix leg. The sweep becomes a matrix plus one final job that combines the results into a single status | Same GitHub-maintained action. No new secrets in the C# repositories. Small change | The App must be installed in both organisations, and its visibility must be "Any account" (a private App can only be installed in its own organisation). The sweep is more complex |
+| 1. One GitHub App, matrix per repository | Take the owner from each repository's `Owner/Name`. Make one token per repository in a matrix leg. | Same GitHub-maintained action. No new secrets in the C# repositories. Small change | The App must be installed in both organisations, and its visibility must be "Any account" (a private App can only be installed in its own organisation). |
 | 2. One App per organisation | Same as 1, with one App in BHoM and one in BuroHappoldEngineering. Each deployment holds the secrets of its own App | Strongest separation: nothing crosses organisations. Natural with option B | Two Apps to set up and maintain |
-| 3. `py2cs` makes the tokens itself | `py2cs` signs a JWT with the App key and asks GitHub for an installation token per repository. The sweep stays one simple loop | One step, any number of owners | Needs a JWT/crypto library, and the code that holds the private key grows. Best avoided |
-| 4. The C# repositories report their own state | A workflow in each C# repository, on pull request merge or close, sets the status on the Python PR | Event-driven: no hourly polling, no cross-organisation reads | Needs a workflow and secrets in every C# repository. The public repositories, BHoM/BHoM in particular, cannot be changed yet |
+| 3. `py2cs` makes the tokens itself | `py2cs` signs a JWT with the App key and asks GitHub for an installation token per repository. | One step, any number of owners | Needs a JWT/crypto library, and the code that holds the private key grows. Best avoided |
+| 4. The C# repositories report their own state | A workflow in each C# repository, on pull request merge or close, tells the Python PR (for example by re-running its alignment check) | Event-driven: no manual re-run, no cross-organisation reads | Needs a workflow and secrets in every C# repository. The public repositories, BHoM/BHoM in particular, cannot be changed yet |
 | 5. A personal access token or bot account | One long-lived token that can read the repositories | Simplest | Tied to a person or account, long-lived, and hard to scope across two organisations. Not recommended |
 
 ## Recommendation
@@ -54,11 +53,10 @@ This applies to every deployment, because each one reads and writes C# repositor
 3. In both cases:
    - take the owner from each repository's `Owner/Name`;
    - make the cloning script use a token for private repositories;
-   - make the sweep a per-repository matrix with one final job;
    - keep uploaded artifacts and verbose logs out of any deployment that handles private code.
 
-Token option 4 is a good later addition for private repositories, because their owners control them. It cannot replace the sweep for
-BHoM/BHoM.
+Token option 4 is a good later addition for private repositories, because their owners control them. The public BHoM/BHoM cannot have a
+workflow added yet.
 
 ## Questions to settle before any code
 
@@ -69,7 +67,7 @@ BHoM/BHoM.
 
 These places assume public repositories in one organisation, and would change:
 
-- `.github/workflows/linked-csharp-pr.yml` and `linked-csharp-pr-close.yml`: `owner: ${{ github.repository_owner }}` in the token steps, and `linked-csharp-pr-sweep.yml`.
+- `.github/workflows/linked-csharp-pr.yml` and `linked-csharp-pr-close.yml`: `owner: ${{ github.repository_owner }}` in the token steps.
 - `.github/scripts/Clone-Repositories.ps1`: anonymous `git clone`.
 - `.github/workflows/python-schema-generation.yml`: uploads the report and manifest as a public artifact.
 - `Converted-repositories.txt` and `Included-repositories.txt`: one list each, for one deployment.
