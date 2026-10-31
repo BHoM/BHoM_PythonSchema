@@ -20,7 +20,9 @@ class IBHoMObject(IObject):
         'implementers': {
             'BH.oM.Base.BHoMObject': 'BHoM.BHoMObject',
             'BH.oM.FixtureAlpha.Beam': 'FixtureAlpha_oM.Beam',
+            'BH.oM.FixtureAlpha.BeamPair': 'FixtureAlpha_oM.BeamPair',
             'BH.oM.FixtureAlpha.Collections': 'FixtureAlpha_oM.Collections',
+            'BH.oM.FixtureAlpha.Column': 'FixtureAlpha_oM.Column',
             'BH.oM.FixtureAlpha.GeometryHolder': 'FixtureAlpha_oM.GeometryHolder',
             'BH.oM.FixtureAlpha.GridHolder': 'FixtureAlpha_oM.GridHolder',
             'BH.oM.FixtureAlpha.ImmutableThing': 'FixtureAlpha_oM.ImmutableThing',

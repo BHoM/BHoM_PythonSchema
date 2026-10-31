@@ -18,7 +18,9 @@ class IObject(ABC):
         'implementers': {
             'BH.oM.Base.BHoMObject': 'BHoM.BHoMObject',
             'BH.oM.FixtureAlpha.Beam': 'FixtureAlpha_oM.Beam',
+            'BH.oM.FixtureAlpha.BeamPair': 'FixtureAlpha_oM.BeamPair',
             'BH.oM.FixtureAlpha.Collections': 'FixtureAlpha_oM.Collections',
+            'BH.oM.FixtureAlpha.Column': 'FixtureAlpha_oM.Column',
             'BH.oM.FixtureAlpha.CycleA': 'FixtureAlpha_oM.CycleA',
             'BH.oM.FixtureAlpha.CycleB': 'FixtureAlpha_oM.CycleB',
             'BH.oM.FixtureAlpha.GeometryHolder': 'FixtureAlpha_oM.GeometryHolder',
