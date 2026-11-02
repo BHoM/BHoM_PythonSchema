@@ -1,0 +1,73 @@
+name: Build cache
+
+# Saves the build cache of the C# repositories on develop, where every pull request can read it. A cache saved by a pull request run is only
+# visible to that pull request, so after a PR run this checks whether develop already has the current state, and builds it from develop when not.
+# It never uses what the pull request built: the refresh clones and builds the C# repositories itself, with the code on develop.
+
+on:
+  workflow_run:
+    workflows: [PR]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The running refresh finishes, and a newer pending one replaces an older pending one
+concurrency:
+  group: build-cache
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Does develop need a refresh?
+    # Never for a pull request from a fork, and only for develop when started by hand
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      refresh: ${{ steps.lookup.outputs.refresh }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      # The plan is made for the Windows build. Its state prefix leaves out the build tools, which only the Windows runner knows
+      - name: Plan the build
+        id: plan
+        shell: pwsh
+        run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt -Plan -OS Windows -ToolsVersion ubuntu
+
+      - name: Look for the current state on develop
+        id: lookup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE_PREFIX: ${{ steps.plan.outputs.state-prefix }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          $found = gh cache list --repo $env:GITHUB_REPOSITORY --ref refs/heads/develop --key $env:STATE_PREFIX --json key --jq '.[].key'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $refresh = $env:MANUAL -eq "true" -or -not $found
+          Write-Host $(if ($found) { "develop has: $found" } else { "develop has no entry starting with $env:STATE_PREFIX" })
+          "refresh=$("$refresh".ToLower())" >> $env:GITHUB_OUTPUT
+
+  refresh:
+    name: Build and save on develop
+    needs: gate
+    if: needs.gate.outputs.refresh == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Install the built BHoM assemblies
+        uses: ./.github/actions/bhom-assemblies

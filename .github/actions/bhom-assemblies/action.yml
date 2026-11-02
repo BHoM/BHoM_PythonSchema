@@ -1,60 +1,56 @@
 name: Built BHoM assemblies
 description: >
-  Installs the built assemblies of the repositories in Included-repositories.txt into C:\ProgramData\BHoM\Assemblies, from a cache when none of them
-  has a new commit, otherwise by cloning and building them (and saving the cache).
+  Installs the built assemblies of the repositories in Included-repositories.txt into C:\ProgramData\BHoM, building only the repositories whose
+  commit, or whose dependencies' commits, changed since the build cache was saved.
+
+inputs:
+  no-cache:
+    description: Ignore the build cache and build every repository
+    default: 'false'
+
+outputs:
+  built:
+    description: The names of the repositories that were built, separated by commas (empty when all came from the cache)
+    value: ${{ steps.build.outputs.built }}
 
 runs:
   using: composite
   steps:
-    # The built assemblies only change when one of the cloned repositories does, so they are cached under the current commit of each
-    # repository (the same branch choice as Clone-Repositories.ps1). A new commit anywhere gives a new key, so the cache is never stale.
-    - name: Find the current commit of each repository
-      id: commits
-      shell: pwsh
-      run: |
-        $lines = foreach ($repository in (Get-Content Included-repositories.txt | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })) {
-          $commit = ""
-          foreach ($branch in "develop", "main", "master") {
-            $found = git ls-remote "https://github.com/$repository.git" "refs/heads/$branch"
-            if ($found) { $commit = ($found -split "\s+")[0]; break }
-          }
-
-          if (-not $commit) { throw "Could not find a develop, main or master branch of $repository" }
-          "$repository $commit"
-        }
-
-        $text = $lines -join "`n"
-        Write-Host $text
-        $hash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text))).Replace("-", "").ToLower()
-        "key=bhom-assemblies-v1-$hash" >> $env:GITHUB_OUTPUT
-
-    - name: Restore the built BHoM assemblies
-      id: assemblies
-      uses: actions/cache/restore@v4
-      with:
-        path: C:\ProgramData\BHoM\Assemblies
-        key: ${{ steps.commits.outputs.key }}
-
+    # Before the plan, because the MSBuild version is part of the keys
     - uses: microsoft/setup-msbuild@v2
-      if: steps.assemblies.outputs.cache-hit != 'true'
 
     - uses: NuGet/setup-nuget@v2
-      if: steps.assemblies.outputs.cache-hit != 'true'
 
-    - name: Clone the repositories
-      if: steps.assemblies.outputs.cache-hit != 'true'
+    # The current commit and dependencies of each repository give it a key; the plan is saved so the build uses the same commits
+    - name: Plan the build
+      id: plan
       shell: pwsh
-      run: ./.github/scripts/Clone-Repositories.ps1 -List Included-repositories.txt
+      run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt -Plan -PlanFile "$env:RUNNER_TEMP/build-plan.json"
+
+    # The exact key means nothing changed; otherwise the most recent folder gives the entries that are still current
+    - name: Restore the build cache
+      if: inputs.no-cache != 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: .build-cache
+        key: ${{ steps.plan.outputs.key }}
+        restore-keys: ${{ steps.plan.outputs.prefix }}
 
     - name: Build the repositories in dependency order
-      if: steps.assemblies.outputs.cache-hit != 'true'
+      id: build
       shell: pwsh
-      run: ./.github/scripts/Build-Repositories.ps1 -List Included-repositories.txt
+      env:
+        NO_CACHE: ${{ inputs.no-cache }}
+      run: |
+        $arguments = @{ List = "Included-repositories.txt"; PlanFile = "$env:RUNNER_TEMP/build-plan.json"; CacheFolder = ".build-cache" }
+        if ($env:NO_CACHE -eq "true") { $arguments.NoCache = $true }
+
+        ./.github/scripts/Build-Repositories.ps1 @arguments
 
     # Saved right after the build, so a failure later in the job does not lose it
-    - name: Save the built BHoM assemblies
-      if: steps.assemblies.outputs.cache-hit != 'true'
+    - name: Save the build cache
+      if: steps.build.outputs.added != ''
       uses: actions/cache/save@v4
       with:
-        path: C:\ProgramData\BHoM\Assemblies
-        key: ${{ steps.commits.outputs.key }}
+        path: .build-cache
+        key: ${{ steps.plan.outputs.key }}
