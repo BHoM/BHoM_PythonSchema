@@ -138,6 +138,12 @@ function Get-ToolsVersion {
   $versions -join ", "
 }
 
+# Hosted runners in the middle of an image rollout differ in patch versions, so only MSBuild major.minor and the SDK feature band count
+function Get-ToolsName([string]$tools) {
+  $tools = $tools -replace "msbuild (\d+\.\d+)[\d.]*", 'msbuild $1'
+  $tools -replace "dotnet (\d+\.\d+\.\d)\d*[^\s,]*", 'dotnet $1xx'
+}
+
 function New-BuildPlan {
   $commits = @{}
   if ($CommitsFile) {
@@ -159,6 +165,8 @@ function New-BuildPlan {
 
   $tools = $ToolsVersion
   if (-not $tools) { $tools = Get-ToolsVersion }
+
+  $tools = Get-ToolsName $tools
 
   # Line endings depend on the checkout, so they are not part of the hash
   $toolsHash = Get-Hash "$tools|$((Get-Content $buildScript -Raw).Replace("`r`n", "`n"))"
@@ -282,6 +290,8 @@ $buildPlan.repositories | ForEach-Object {
   [pscustomobject]@{ Repository = $_.repository; Commit = $_.commit.Substring(0, 10); Entry = $_.entry; Cache = $cache }
 } | Format-Table -AutoSize | Out-String | Write-Host
 Write-Host "Cache key: $($buildPlan.cacheKey) (tools: $($buildPlan.tools))"
+if ($env:ImageOS) { Write-Host "Runner image: $env:ImageOS $env:ImageVersion" }
+
 
 if ($Plan) {
   if ($PlanFile) { $buildPlan | ConvertTo-Json -Depth 5 | Set-Content $PlanFile -Encoding utf8 }

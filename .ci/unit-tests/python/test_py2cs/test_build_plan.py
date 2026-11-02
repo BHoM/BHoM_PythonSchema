@@ -97,6 +97,26 @@ def test_the_salt_the_os_and_the_tools_change_every_key(tmp_path: Path):
     assert base["cacheKey"].startswith(base["statePrefix"]) and base["statePrefix"].startswith(base["cachePrefix"])
     assert base["cachePrefix"] == "bhom-build-cache-v1-Windows-"
 
+def test_only_the_msbuild_major_minor_and_the_sdk_feature_band_change_the_keys(tmp_path: Path):
+    """Checks that a new patch version of MSBuild or of the .NET SDK keeps every key, while a new MSBuild minor version or SDK feature band changes them.
+
+    Protects the cache from a full rebuild whenever a re-run lands on a runner whose image is a patch ahead or behind.
+    """
+    cases = {
+        "base": "msbuild 18.11.1.51303, dotnet 10.0.402",
+        "patch": "msbuild 18.11.2.10001, dotnet 10.0.405",
+        "msbuild": "msbuild 18.12.0.1, dotnet 10.0.402",
+        "band": "msbuild 18.11.1.51303, dotnet 10.0.300",
+    }
+    built = {}
+    for name, tools in cases.items():
+        (tmp_path / name).mkdir()
+        built[name] = plan(tmp_path / name, tools=tools)
+    assert built["base"]["tools"] == "msbuild 18.11, dotnet 10.0.4xx"
+    assert built["patch"]["cacheKey"] == built["base"]["cacheKey"]
+    assert built["msbuild"]["cacheKey"] != built["base"]["cacheKey"]
+    assert built["band"]["cacheKey"] != built["base"]["cacheKey"]
+
 @pytest.mark.skipif(sys.platform != "win32", reason="the restore copies with robocopy")
 def test_a_run_with_every_entry_cached_copies_them_clones_nothing_and_prunes_old_entries(tmp_path: Path):
     """Checks that when the folder holds every planned entry, the build copies them into the installation in build order, clones and builds nothing, deletes the entries of other keys, and writes commits.txt.

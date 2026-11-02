@@ -44,8 +44,10 @@ key(R)    = sha256( source(R) | tools )
 - `commit(R)` is the head of `develop` (else `main`, else `master`), the same choice as `Clone-Repositories.ps1`, read with `git ls-remote`.
 - Because `source(D)` is part of `source(R)`, a change in a dependency changes every key that depends on it, and nothing else. This is the table of the
   earlier notes: a `CSharpSchema_Test` commit rebuilds one repository, a `BHoM_Engine` commit rebuilds it and `JSONSchema_Toolkit`, a `BHoM` commit rebuilds all.
-- `tools` is the hash of `.github/workflows/build.ps1` and the output of `msbuild -version`. A change to how the repositories are built, or a new
-  MSBuild on the runner image, then gives new keys without anybody having to remember it. The tools are kept out of `source(R)` because only
+- `tools` is the hash of `.github/workflows/build.ps1`, the MSBuild major.minor version and the .NET SDK feature band (`10.0.4xx`). A change to
+  how the repositories are built, or a new MSBuild on the runner image, then gives new keys without anybody having to remember it. Patch versions
+  are left out: during an image rollout two attempts of the same run can land on runners a patch apart, which with exact versions rebuilt
+  everything on a re-run. The plan logs the runner image next to the tools. The tools are kept out of `source(R)` because only
   the Windows runner knows them, and the refresh gate runs on ubuntu (see "Refreshing `develop`").
 - The leading `v1` is a manual salt: bump it to throw every cache away, for example after a change to the cache scripts themselves.
 - Only the dependencies that are in the list count. A dependency through a repository that is not listed (A depends on an unlisted X, which depends on
