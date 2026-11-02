@@ -138,6 +138,7 @@ namespace PythonSchemaGeneration.Tests
             string text = R(typeof(Scalars)).Text;
             Assert.That(text, Does.Contain("Created: datetime = Field(default_factory=datetime.now)"));
             Assert.That(text, Does.Contain("Fixed: datetime = datetime(2020, 1, 2, 3, 4, 5, 0)"));
+            Assert.That(text, Does.Contain("Stamp: Annotated[datetime, ClrType('System.DateTimeOffset')]"), "a DateTimeOffset keeps its C# type in the ClrType marker");
             Assert.That(text, Does.Contain("Key: UUID = UUID(int=0)"));
             Assert.That(text, Does.Contain("Cost: Decimal = Decimal('1.5')"));
             Assert.That(text, Does.Contain("Colour: Color = Field(default_factory=Color)"));
@@ -381,6 +382,18 @@ namespace PythonSchemaGeneration.Tests
             Assert.That(a.IndexOf("from bhom_schema.FixtureAlpha_oM.CycleB import CycleB"), Is.GreaterThan(a.IndexOf("class CycleA")));
             Assert.That(R(typeof(PointLike)).Text, Does.Not.Contain("model_rebuild"), "types outside a cycle do not need a rebuild");
             Assert.That(FixtureOutput.Result.CyclicTypes, Is.EqualTo(2));
+        }
+
+        [Test]
+        [Description("Checks that the header of every generated file names the copyright holder without a year range. Protects the weekly generation from rewriting " +
+            "every file when the year changes.")]
+        public void GeneratedHeadersHaveNoYear()
+        {
+            foreach (RenderedType type in FixtureOutput.Result.Types)
+            {
+                string copyright = type.Text.Split('\n')[1];
+                Assert.That(copyright, Is.EqualTo("# Copyright (c) the respective contributors. All rights reserved."), type.Ref.RelativePath);
+            }
         }
     }
 }

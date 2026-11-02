@@ -106,9 +106,12 @@ namespace PythonSchemaGeneration
             {
                 result.FilesWritten = OutputWriter.Write(options.OutputFolder, result.Types, options.TypeFilter == null, reporter, repoAssemblies);
 
-                //A partial run (--types) does not say what the package is, so it leaves the version file alone
+                //A partial run (--types) does not say what the package is, so it leaves the version file and the other folders alone
                 if (options.TypeFilter == null)
+                {
                     result.FilesWritten += WriteVersionFile(options.OutputFolder, result.BHoMVersion, options.ReleaseVersion != null, reporter);
+                    HandleMissingAssemblyFolders(options, result, reporter);
+                }
             }
 
             if (options.ManifestPath != null)
@@ -118,6 +121,25 @@ namespace PythonSchemaGeneration
                 File.WriteAllText(options.ReportPath, Report(result), new System.Text.UTF8Encoding(false));
 
             return result;
+        }
+
+        /***************************************************/
+
+        [Description("Warns about every assembly folder of the package that this full run did not generate (for example because its build failed), or deletes it with " +
+            "--clean-missing-assemblies. Run calls it after the classes are written; the warning is a new kind for the baseline, so the weekly run fails loudly.")]
+        private static void HandleMissingAssemblyFolders(GenerationOptions options, GenerationResult result, Reporter reporter)
+        {
+            foreach (string folder in OutputWriter.MissingAssemblyFolders(options.OutputFolder, result.Types, options.Repos))
+            {
+                if (options.CleanMissingAssemblies)
+                {
+                    Directory.Delete(Path.Combine(options.OutputFolder, folder), true);
+                    reporter.Info($"Deleted the assembly folder {folder}, which this run did not generate");
+                    result.FilesWritten++;
+                }
+                else
+                    reporter.Warn($"assembly folder {folder} was not generated in this run, its old Python files are kept (use --clean-missing-assemblies to delete them)");
+            }
         }
 
         /***************************************************/

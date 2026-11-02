@@ -18,6 +18,8 @@ namespace PythonSchemaGeneration
 
         public string ReleaseVersion;                       //Major.Minor of a release (for example 10.0): _version.py then holds the release version, and the run fails when it is not the version read
 
+        public bool CleanMissingAssemblies;                 //delete the assembly folders of the package that a full run did not generate, instead of only listing them
+
         public string ManifestPath;
 
         public string ReportPath;

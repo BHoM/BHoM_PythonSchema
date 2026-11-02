@@ -217,3 +217,14 @@ def test_the_alignment_check_is_its_own_job_with_a_name_that_says_what_is_pendin
     assert any(s.get("name") == "Explain the failure" and "GITHUB_STEP_SUMMARY" in s["run"] for s in jobs["alignment"]["steps"])
     assert not any("align" in s.get("run", "") for s in jobs["checks"]["steps"])
     assert any("py2cs check" in s.get("run", "") for s in jobs["checks"]["steps"])
+
+
+def test_the_included_repositories_file_is_tidy():
+    """Checks that Included-repositories.txt does not misspell dKoP_Toolkit as dKop_Toolkit and ends with a newline, so that no tool skips its last line.
+
+    Protects the list that the generation and the PR checks clone and build from.
+    """
+    text = (REPO / "Included-repositories.txt").read_bytes().decode("utf-8")
+    assert text.endswith("\n")
+    assert "dKop" not in text, "the repository is spelt dKoP_Toolkit"
+    assert all(name == name.strip() for name in text.splitlines())

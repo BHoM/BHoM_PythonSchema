@@ -7,10 +7,13 @@ namespace PythonSchemaGeneration
     {
         /***************************************************/
 
-        private static readonly string[] m_Known = { "output", "assemblies", "org", "repos", "types", "manifest", "report", "baseline-warnings", "write-baseline", "release" };
+        private static readonly string[] m_Known = { "output", "assemblies", "org", "repos", "types", "manifest", "report", "baseline-warnings", "write-baseline", "release", "clean-missing-assemblies" };
+
+        //Options that stand alone, without a value
+        private static readonly string[] m_Flags = { "clean-missing-assemblies" };
 
         public const string Usage = "Usage: PythonSchemaGeneration --output <bhom_schema folder> [--assemblies <folder>] [--org BHoM,Other] [--repos BHoM/BHoM,BHoM/Other_Toolkit] "
-            + "[--types A,B] [--manifest <file>] [--report <file>] [--baseline-warnings <file>] [--write-baseline <file>] [--release <Major.Minor>]";
+            + "[--types A,B] [--manifest <file>] [--report <file>] [--baseline-warnings <file>] [--write-baseline <file>] [--release <Major.Minor>] [--clean-missing-assemblies]";
 
         public GenerationOptions Options { get; private set; }
 
@@ -39,6 +42,12 @@ namespace PythonSchemaGeneration
                 if (!m_Known.Contains(name))
                     return result.Fail($"Unknown option --{name}.");
 
+                if (m_Flags.Contains(name))
+                {
+                    arguments[name] = "true";
+                    continue;
+                }
+
                 if (i + 1 >= args.Length || args[i + 1].StartsWith("--"))
                     return result.Fail($"Option --{name} needs a value.");
 
@@ -66,6 +75,7 @@ namespace PythonSchemaGeneration
                 result.Options.TypeFilter = Split(types);
 
             result.Options.ReleaseVersion = arguments.GetValueOrDefault("release");
+            result.Options.CleanMissingAssemblies = arguments.ContainsKey("clean-missing-assemblies");
             result.BaselinePath = arguments.GetValueOrDefault("baseline-warnings");
             result.WriteBaselinePath = arguments.GetValueOrDefault("write-baseline");
             return result;

@@ -80,6 +80,7 @@ namespace BH.oM.FixtureAlpha
     {
         public virtual DateTime Created { get; set; } = DateTime.Now;
         public virtual DateTime Fixed { get; set; } = new DateTime(2020, 1, 2, 3, 4, 5);
+        public virtual DateTimeOffset Stamp { get; set; } = new DateTimeOffset(2020, 1, 2, 3, 4, 5, TimeSpan.Zero);
         public virtual Guid Key { get; set; } = Guid.Empty;
         public virtual decimal Cost { get; set; } = 1.5m;
         public virtual Color Colour { get; set; } = Color.Empty;

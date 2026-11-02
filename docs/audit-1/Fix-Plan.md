@@ -603,18 +603,37 @@ someone changes it to 2027, and **every** generated file changes at once, which 
 year range out of generated Python files, or read it from one setting that is changed on purpose in its own PR. C# files must
 still follow the BHoM copyright rule.
 
+**Done.** The header of a generated Python file is now `# Copyright (c) the respective contributors. All rights reserved.`, with no year, so
+a new year changes nothing. The files already in `src/bhom_schema` and the golden files were changed once to match (a one-line change in
+each). The C# files that `py2cs` drafts keep their year range, as the BHoM copyright rule asks. A test checks that no generated header has a year.
+
 7.2 **Old folders left behind.** When a run doesn't include an assembly at all (for example because its build failed), its old
 Python files stay, and nobody is told. Fix: a full run lists every assembly folder it didn't generate; the weekly job can also
 delete them with a new option, `--clean-missing-assemblies`.
 
+**Done.** After a full run (not `--types`) the generator warns `assembly folder X was not generated in this run, its old Python files are kept`
+for every assembly folder of the package that it did not write. With `--repos`, only the folders whose files name one of those repositories count
+(read from the `repo` marker), so the folders of other repositories are never listed or touched. `_support` and other folders starting with `_` or `.` are
+ignored. The warning is a new kind for the baseline, so the weekly run fails loudly. `--clean-missing-assemblies` deletes the folders instead. It is not turned on in
+the weekly workflow, because a failed build would then delete a whole assembly's Python.
+
 7.3 **Two classes with the same file name.** On Windows, file names ignore upper and lower case, so `Panel` and `PANEL` would land
 in the same file. Today one class is dropped with only a warning. Fix: make it an error that stops the run.
+
+**Done.** `OutputWriter` collects every clash and stops the run with `InvalidOperationException` naming both classes and the file (exit code 1),
+before anything is written. If the real BHoM has such a pair, the weekly run now fails until one class is renamed.
 
 7.4 **`DateTimeOffset` turns into `DateTime`.** C# has two date types; both become Python `datetime`, and on the way back the
 difference is lost. Fix: remember the original C# type in the field's `ClrType` marker.
 
+**Done (it already worked).** The emitter already wrote `ClrType('System.DateTimeOffset')` because the property's C# type differs from the default for
+`datetime`. I added a `DateTimeOffset` field to the test classes and a test that the marker is there. The alignment and round trip tests pass with it (the drafted C#
+is `DateTimeOffset`, with the default converted from `DateTime`).
+
 7.5 **`Included-repositories.txt`**: it spells the dKoP repository `dKop_Toolkit` and the file doesn't end with a newline, which
 makes some tools skip the last line. Fix both. (This file is copied from the JSON repository; keep it in line with theirs.)
+
+**Done (already the case).** The file lists no dKoP repository any more and ends with a newline. A test now keeps it that way.
 
 ### How we'll know it works
 
