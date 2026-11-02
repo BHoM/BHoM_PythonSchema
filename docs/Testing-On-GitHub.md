@@ -9,7 +9,8 @@ A procedure for proving, on GitHub, the whole loop between this repository and [
 | B. Update a class | a property of `Beam` (added, then changed or removed) | the lines of that property change in the existing file; breaking changes are labelled |
 | C. Add a class | a new class and its file | one new file in the right folder and namespace |
 
-This procedure has not been run yet. Part 0 is done once; the three exercises can be done in any order. How each workflow works is in
+Separately, "Testing the build cache" proves that the PR checks build only the C# repositories that changed. This procedure has not been run
+yet. Part 0 is done once; the three exercises can be done in any order. How each workflow works is in
 [Workflows.md](Workflows.md); the Python authoring rules are checked by `py2cs check`.
 
 ## Part 0: before the first exercise
@@ -155,6 +156,71 @@ prints what it would do and proves the App token; unticked it does it.
 
 A pull request that is closed without merging closes its draft with a comment; delete the `python-schema/pr-<N>` branch in C# by hand.
 
+## Testing the build cache
+
+The PR checks keep a build cache with one entry per C# repository (see [Per-Repository-Build-Cache-Plan.md](Per-Repository-Build-Cache-Plan.md)).
+These tests prove that a repository is built only when its commit, or a dependency's commit, changed, and that `develop` shares the build
+with every pull request.
+
+**Part D1 can run from the `ImproveCaching` pull request before it is merged. Part D2 needs it merged into `develop` first.** A pull request runs
+the `pr-checks.yml` of its own branch, so D1 tests the new action as it is. `build-cache.yml` is different: GitHub starts a `workflow_run`
+workflow, and lists a workflow under *Run workflow*, only from the default branch, so before the merge it never runs. And only a run on
+`develop` can save the cache that every pull request reads.
+
+### Where to look
+
+| Where | What it tells you |
+|---|---|
+| Step *Plan the build* of the job | The commit and entry name of each repository, and the cache key |
+| Step *Restore the build cache* | `Cache restored from key: <key>`; when that key differs from the planned key it was a prefix hit, an earlier state. `Cache not found` means nothing could be restored |
+| Step *Build the repositories in dependency order* | The same table with `hit` or `miss` per repository, then `Restoring <name> from the cache...` for a hit, `Cloning <repo> at <commit>...` and `Building <name>...` for a miss, `Deleting the old entry <entry>`, and finally `Built: <names>` or `Built: nothing` |
+| Step *Save the build cache* | Skipped when nothing was built |
+| Actions tab, *Caches* (under Management) | Each `bhom-build-cache-v1-Windows-...` entry and its branch: `refs/pull/<N>/merge` for a pull request, `refs/heads/develop` for `develop` |
+
+### Part D1: on the `ImproveCaching` pull request (before merging)
+
+1. **First run, everything is built.** Open the pull request from `ImproveCaching` to `develop`. In **PR / Build and tests**: the restore
+   says `Cache not found` (the old `bhom-assemblies-v1-...` entries do not match the new prefix), the build clones the four repositories at
+   the commits of the plan and ends with `Built: BHoM, BHoM_Engine, JSONSchema_Toolkit, CSharpSchema_Test`, and the save runs. Every test
+   passes, which shows that the assemblies installed this way are the ones the tests need. *Caches* shows one new entry on `refs/pull/<N>/merge`.
+2. **The alignment job waits.** **PR / C# alignment** starts only once **Build and tests** has finished. This pull request does not change
+   `src/bhom_schema`, so its steps are skipped; D2 step 5 tests it with a build.
+3. **A re-run builds nothing.** Re-run all jobs. The restore names the planned key exactly, the build table says `hit` for all four, the log
+   has four `Restoring ... from the cache...` lines and `Built: nothing`, and the save is skipped. Note how long *Build the repositories* takes
+   compared with step 1.
+4. **One changed repository is built alone.** Make a commit on `develop` of CSharpSchema_Test (for example merge the C# draft of an exercise,
+   or a small pull request there), then re-run the jobs. The table says `miss` for CSharpSchema_Test and `hit` for the others, the log ends with
+   `Built: CSharpSchema_Test`, the old entry of CSharpSchema_Test is deleted, and the save runs under a new key.
+   If BHoM_Engine or BHoM changed upstream in the meantime, that repository and the ones that depend on it are built too. Compare the commits
+   in the table with the repositories to check it.
+5. **Nothing runs on `develop` yet.** No *Build cache* run appears in the Actions tab. That is expected before the merge.
+
+### Part D2: after merging into `develop`
+
+1. **Fill the `develop` cache by hand.** Actions, *Build cache*, Run workflow, branch `develop`. The gate prints `develop has no entry
+   starting with bhom-build-cache-v1-Windows-...`, then **Build and save on develop** builds the four repositories (`develop` cannot read
+   a pull request's cache) and saves. *Caches* shows an entry on `refs/heads/develop`.
+2. **Try a manual run from another branch.** Run *Build cache* from `ImproveCaching` or any other branch: both jobs are skipped, so
+   nothing but `develop` can write to the `develop` cache.
+3. **A new pull request builds nothing.** Open a new pull request that changes `src/bhom_schema` (Exercise A is a good one). Its first run
+   restores the exact key from `develop` and logs `Built: nothing` in **Build and tests**, and **C# alignment** logs `Built: nothing` too.
+4. **No refresh when `develop` is up to date.** When that PR run completes, *Build cache* starts by itself. The gate prints `develop has:
+   <key>` and the refresh job is skipped.
+5. **One changed repository is built once, then shared.** Make a commit on `develop` of CSharpSchema_Test (closing the loop of an exercise does
+   this), then push to the pull request or re-run its jobs.
+   - **Build and tests** builds only CSharpSchema_Test.
+   - **C# alignment** waits for it and logs `Built: nothing`, because it restores what the first job just saved. Without the wait it would
+     have built CSharpSchema_Test a second time.
+   - The *Build cache* run that follows finds no entry for the new state on `develop`. Its refresh builds only CSharpSchema_Test, from the
+     `develop` entries of the others, and saves on `develop`.
+   - Open, or re-run, a second pull request. It restores that `develop` entry and builds nothing.
+6. **The C# alignment still runs when a test fails** (optional). Push a commit that makes one pytest test fail. **Build and tests** fails,
+   and **C# alignment** still runs.
+7. **A fork gets no refresh** (optional, needs a fork). A pull request from a fork runs the PR checks with its own cache, and the *Build cache*
+   run that follows skips both jobs.
+8. **Switching the cache off** (optional). On a branch, give the action `with: no-cache: 'true'` in `pr-checks.yml`. The restore and save are
+   skipped, and every repository is built, as before this cache. Do not merge that change.
+
 ## If something goes wrong
 
 | Symptom | Likely cause |
@@ -165,6 +231,11 @@ A pull request that is closed without merging closes its draft with a comment; d
 | the draft changes more than the lines you changed | report it: that is a bug in the patcher, with the file and your Python diff |
 | `py2cs align` still fails after the C# merge | the C# `develop` clone in the workflow is older than the merge, or the C# review changed the class; read the listed differences |
 | the weekly run commits after everything merged | the generator writes the class differently from what `py2cs` drafted: look at the commit |
+| *Build cache* never runs after a PR run | `build-cache.yml` is not on `develop` yet, or the PR workflow was renamed (the trigger names `PR`) |
+| the gate fails on `gh cache list` | the `gh` of the ubuntu runner is too old for `--ref`; the log shows the error |
+| every pull request builds everything | `develop` has no entry, or one made with other build tools after an MSBuild update on the runner: run *Build cache* by hand on `develop` |
+| `Building <name> failed` | the C# of that repository does not build at its planned commit. The run stops so a failed build never becomes an entry |
+| tests fail after a restore but pass with `no-cache` | a wrong entry: bump `-Salt` (the `v1`) in `Build-Repositories.ps1` to throw every cache away, and report it with both logs |
 
 ## Record the result
 

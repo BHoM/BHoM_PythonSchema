@@ -36,36 +36,43 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 │ on every PR to develop       │              │ on a PR that changes src/bhom_schema            │
 │ build, NUnit, pytest,        │              │                                                 │
 │ Pyright; py2cs check;        │              │ one job: raise or update the draft, and add     │
-│ C# alignment (own job)       │              │ a comment on the Python PR with its link        │
-│ (writes nothing)             │              │                                                 │
-└──────────────────────────────┘              │ PR closed:  linked-csharp-pr-close.yml          │
-                                              │                                                 │
-                                              │                                                 │
-                                              │                                                 │
-                                              └─────────────────────┬───────────────────────────┘
-                                                                    │ the C# draft is reviewed and merged in C#
-                                                                    ▼
-                                                  next weekly generation: the C# is the source of truth,
-                                                  so src/bhom_schema ends up matching the merged C#
+│ C# alignment (own job,       │              │ a comment on the Python PR with its link        │
+│ after the tests)             │              │                                                 │
+│ writes only the build cache  │              │ PR closed:  linked-csharp-pr-close.yml          │
+│ of its own PR                │              │                                                 │
+└──────────────┬───────────────┘              │                                                 │
+               │ when the run completes       │                                                 │
+               ▼                              └─────────────────────┬───────────────────────────┘
+┌──────────────────────────────┐                                    │ the C# draft is reviewed and merged in C#
+│ build-cache.yml              │                                    ▼
+│ gate (ubuntu): is the        │                  next weekly generation: the C# is the source of truth,
+│ current state on develop?    │                  so src/bhom_schema ends up matching the merged C#
+│ if not, refresh (windows):   │
+│ build from develop and save  │
+│ the cache on develop, where  │
+│ every PR can read it         │
+└──────────────────────────────┘
 
  End of a milestone, by hand:
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ release.yml  (input X.Y, dry run by default)                                                         │
 │ job build:  clone + build ─► generate --release X.Y ─► verify + Pyright ─► wheel + notes             │
 │             not a dry run: branch vX.Y, tag vX.Y.0, GitHub Release (wheel + notes)                   │
-│ job publish-testpypi (not a dry run): the wheel ─► TestPyPI, by trusted publishing                    │
+│ job publish-testpypi (not a dry run): the wheel ─► TestPyPI, by trusted publishing                   │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 Order in one line: **generation** (weekly) → a Python **pull request** → **pr-checks** and **linked-csharp-pr** run side by side → the C#
-draft is merged → the next **generation** brings the Python back in line → **release** (by hand) freezes it as `vX.Y`.
+draft is merged → the next **generation** brings the Python back in line → **release** (by hand) freezes it as `vX.Y`. After each
+**pr-checks** run, **build-cache** saves the built C# repositories on `develop` when they changed, so the next pull request does not build them.
 
 ## What each one reads and writes
 
 | | Reads | Writes |
 |---|---|---|
 | Generation | `Included-repositories.txt` (what to build), `Converted-repositories.txt` (what to convert), `.ci/generation/warnings-baseline.txt` | `src/bhom_schema` on `develop` |
-| PR checks | the same | nothing |
+| PR checks | the same, and the build cache of its pull request or of `develop` | the build cache of its own pull request, which no other pull request sees |
+| Build cache | `Included-repositories.txt`, the `dependencies.txt` of each C# repository, and the caches of `develop` | the build cache on `develop` |
 | Linked C# PR | `Converted-repositories.txt` | a branch `python-schema/pr-<N>` and a draft PR in the C# repository, and one comment on the Python PR |
 
 `Converted-repositories.txt` is also the list of repositories a C# pull request may be raised in. A Python class names its own
