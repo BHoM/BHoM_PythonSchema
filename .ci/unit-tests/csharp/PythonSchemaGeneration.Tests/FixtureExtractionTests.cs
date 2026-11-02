@@ -138,6 +138,7 @@ namespace PythonSchemaGeneration.Tests
             string text = R(typeof(Scalars)).Text;
             Assert.That(text, Does.Contain("Created: datetime = Field(default_factory=datetime.now)"));
             Assert.That(text, Does.Contain("Fixed: datetime = datetime(2020, 1, 2, 3, 4, 5, 0)"));
+            Assert.That(text, Does.Contain("Stamp: Annotated[datetime, ClrType('System.DateTimeOffset')]"), "a DateTimeOffset keeps its C# type in the ClrType marker");
             Assert.That(text, Does.Contain("Key: UUID = UUID(int=0)"));
             Assert.That(text, Does.Contain("Cost: Decimal = Decimal('1.5')"));
             Assert.That(text, Does.Contain("Colour: Color = Field(default_factory=Color)"));

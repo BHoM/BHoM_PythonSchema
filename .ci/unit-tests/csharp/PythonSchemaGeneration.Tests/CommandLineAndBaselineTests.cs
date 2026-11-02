@@ -34,6 +34,18 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Test]
+        [Description("Checks that --clean-missing-assemblies is a flag that needs no value, may stand anywhere, and is off when it is not given. Protects the option that " +
+            "deletes the assembly folders a full run did not generate.")]
+        public void CleanMissingAssembliesIsAFlag()
+        {
+            Assert.That(CommandLine.Parse(new[] { "--output", "out" }).Options.CleanMissingAssemblies, Is.False);
+            Assert.That(CommandLine.Parse(new[] { "--output", "out", "--clean-missing-assemblies" }).Options.CleanMissingAssemblies, Is.True);
+            Assert.That(CommandLine.Parse(new[] { "--clean-missing-assemblies", "--output", "out", "--repos", "BHoM/A" }).Options.Repos, Is.EqualTo(new[] { "BHoM/A" }));
+        }
+
+        /***************************************************/
+
         [TestCase(new[] { "--output", "o", "--repo", "BHoM/A" }, "Unknown option --repo")]
         [TestCase(new[] { "--output", "o", "--types" }, "--types needs a value")]
         [TestCase(new[] { "--output", "--types", "A" }, "--output needs a value")]
