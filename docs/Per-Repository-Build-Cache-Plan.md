@@ -1,6 +1,6 @@
 # Plan: a build cache per repository
 
-Status: **planned, not implemented.** It replaces the "two groups" recommendation of [Build-Cache-Plan.md](Build-Cache-Plan.md), which stays as the
+Status: **implemented**, except the later step 7 (generation). It replaces the "two groups" recommendation of [Build-Cache-Plan.md](Build-Cache-Plan.md), which stays as the
 background (where the time goes, what exists today).
 
 ## Goal
@@ -37,14 +37,16 @@ It is adopted in steps (see "Where it is used"): `pr-checks.yml` first, `python-
 ### 1. One key per repository
 
 ```
-key(R) = sha256( "v1" | runner OS | tools | R | commit(R) | sorted [ key(D) for D in dependencies(R) that are in the list ] )
+source(R) = sha256( "v1" | runner OS | R | commit(R) | sorted [ source(D) for D in dependencies(R) that are in the list ] )
+key(R)    = sha256( source(R) | tools )
 ```
 
 - `commit(R)` is the head of `develop` (else `main`, else `master`), the same choice as `Clone-Repositories.ps1`, read with `git ls-remote`.
-- Because `key(D)` is part of `key(R)`, a change in a dependency changes every key that depends on it, and nothing else. This is the table of the
+- Because `source(D)` is part of `source(R)`, a change in a dependency changes every key that depends on it, and nothing else. This is the table of the
   earlier notes: a `CSharpSchema_Test` commit rebuilds one repository, a `BHoM_Engine` commit rebuilds it and `JSONSchema_Toolkit`, a `BHoM` commit rebuilds all.
 - `tools` is the hash of `.github/workflows/build.ps1` and the output of `msbuild -version`. A change to how the repositories are built, or a new
-  MSBuild on the runner image, then gives new keys without anybody having to remember it.
+  MSBuild on the runner image, then gives new keys without anybody having to remember it. The tools are kept out of `source(R)` because only
+  the Windows runner knows them, and the refresh gate runs on ubuntu (see "Refreshing `develop`").
 - The leading `v1` is a manual salt: bump it to throw every cache away, for example after a change to the cache scripts themselves.
 - Only the dependencies that are in the list count. A dependency through a repository that is not listed (A depends on an unlisted X, which depends on
   a listed B) is not seen, so `key(A)` ignores B. `Build-Repositories.ps1` has the same limitation today.
@@ -79,7 +81,7 @@ a list-driven design. Instead the entries live together in one folder, `.build-c
 
 | Step | Key |
 |---|---|
-| Restore | exact key `bhom-build-cache-v1-<OS>-<hash of all repository keys>`; if that misses, `restore-keys` prefix `bhom-build-cache-v1-<OS>-`, which brings the most recent folder in scope |
+| Restore | exact key `bhom-build-cache-v1-<OS>-<state>-<tools>`, where `<state>` hashes every `source(R)` and `<tools>` the tools; if that misses, `restore-keys` prefix `bhom-build-cache-v1-<OS>-`, which brings the most recent folder in scope |
 | Save | the exact key above, only when it was not an exact hit and an entry was added |
 
 - An exact hit means nothing changed: nothing is built and nothing is saved.
@@ -91,12 +93,13 @@ a list-driven design. Instead the entries live together in one folder, `.build-c
 ### 5. The run, in order
 
 1. **Plan:** read the list, the commits and the dependencies, compute every key, order the repositories (existing topological order). Print a table of
-   repository, commit, key, hit or miss. A `-Plan` mode stops here; it needs no Windows tools beyond `msbuild -version`, which it can take as a parameter,
-   so it also runs on ubuntu.
+   repository, commit, entry, hit or miss. A `-Plan` mode stops here and writes the plan to a file, which the build then reads, so the build uses
+   the commits the key was made from. It takes the OS and the tools as parameters, so it also runs on ubuntu.
 2. **Restore** the folder (exact key, then prefix).
 3. **For each repository in order:** on a hit, copy its entry. On a miss, clone it at the planned commit (`git init`, `git fetch --depth 1 origin <commit>`,
    `git checkout FETCH_HEAD`; GitHub allows fetching a commit by its hash), snapshot, build, snapshot, copy the difference into the folder. Cloning the
-   planned commit instead of the branch head means a push during the run cannot make the build differ from its key.
+   planned commit instead of the branch head means a push during the run cannot make the build differ from its key. A build that fails stops the
+   run, so a failed build never becomes an entry.
 4. **Write** `.repos/commits.txt` from the plan, in the same format as `Clone-Repositories.ps1`.
 5. **Save** the folder under the exact key when something was built.
 
@@ -110,7 +113,7 @@ only when `develop` does not have it yet:
 | Part | Detail |
 |---|---|
 | Trigger | `workflow_run` when the `PR` workflow completes, plus `workflow_dispatch`. A `workflow_run` workflow runs on the default branch, so what it saves is visible to every PR |
-| Job 1, `gate` (ubuntu, a few seconds, `actions: read`) | Continues only if the PR comes from this repository, not a fork (`github.event.workflow_run.head_repository.full_name`). Then runs `-Plan` and looks for the exact key on `develop` (`gh cache list --ref refs/heads/develop --key <key>`). Continues only if it is not there |
+| Job 1, `gate` (ubuntu, a few seconds, `actions: read`) | Continues only if the PR comes from this repository, not a fork (`github.event.workflow_run.head_repository.full_name`), or for a manual run on `develop`. Then runs `-Plan` for Windows and looks for the state prefix `bhom-build-cache-v1-Windows-<state>-` on `develop` (`gh cache list --ref refs/heads/develop --key <prefix>`). Continues only if it is not there, or for a manual run |
 | Job 2, `refresh` (windows) | Runs the same action: plan, restore, build the misses, save. It builds from the trusted code on `develop`, never from the PR |
 | Concurrency | One group, `cancel-in-progress: false`: the running refresh finishes, and a newer pending one replaces an older pending one. This avoids building the same state twice in parallel |
 
@@ -131,12 +134,15 @@ Alternatives that were rejected:
 | Pass the PR's entries as an artifact | The poisoning risk above |
 | Gate on an artifact the PR run uploads when it built something | Misses the case above, where a PR run hits its own cache but `develop` was never refreshed |
 
+The gate cannot see the tools, so after a new MSBuild on the runner image `develop` keeps its entry of the old tools until a repository changes
+(or a manual run of `build-cache.yml`); in between, pull requests rebuild everything, as before this cache.
+
 Until the generation workflow adopts the cache, nothing else refreshes `develop`. If no PR runs for 7 days, GitHub deletes the unused entry and the next
 PR builds everything once (about 1 min 15 s), then the refresh restores it.
 
 ### 7. Where it is used
 
-A composite action replaces `.github/actions/bhom-assemblies`. It is adopted in steps, because a wrong cache does very different harm depending on where
+The composite action `.github/actions/bhom-assemblies` is rewritten for this. It is adopted in steps, because a wrong cache does very different harm depending on where
 it is used:
 
 | Workflow | When | Why |
@@ -170,7 +176,8 @@ that measurement.
 
 | Risk | Handling |
 |---|---|
-| A stale entry is used | The key contains the commit, the dependencies' keys, the OS, the build script and the MSBuild version. The `v1` salt covers the rest |
+| A stale entry is used | The key contains the commit, the dependencies' keys, the OS, the build script and the MSBuild and .NET SDK versions. The `v1` salt (`-Salt` of `Build-Repositories.ps1`) covers the rest |
+| A build fails but its files are cached | `Build-Repositories.ps1` stops at the first build that exits with an error, before the entry is complete and before the save |
 | A file shared by two repositories is only in the first one's entry | Fine while both are listed, since every run installs every listed repository. After removing a repository from the list, bump the salt |
 | A build has side effects outside `%ProgramData%\BHoM` | None known. The plan checks this by comparing the folder before and after on a real run |
 | Two jobs build the same repository at once | Avoided in `pr-checks.yml` by `needs`. Elsewhere, wasted time, not a wrong result: the second save of the same key fails harmlessly |
@@ -181,8 +188,10 @@ that measurement.
 
 ## Implementation steps
 
-1. **Planning script.** Add `-Plan` to `Build-Repositories.ps1` (or a small script it calls): commits, dependencies, keys, order, hit or miss. A `-CommitsFile`
-   parameter replaces `git ls-remote` so tests need no network.
+Steps 1 to 6 are done.
+
+1. **Planning script.** Add `-Plan` to `Build-Repositories.ps1`: commits, dependencies, keys, order, hit or miss. A `-CommitsFile`
+   parameter replaces `git ls-remote` and `-DependenciesRoot` the fetch of `dependencies.txt`, so tests need no network.
 2. **Build with the folder.** `-CacheFolder` for `Build-Repositories.ps1`: copy on a hit, clone at the planned commit and build on a miss, snapshot, copy the
    difference, prune, write `.repos/commits.txt`. `-NoCache` for the old behaviour.
 3. **Composite action.** Plan, restore (exact then prefix), build, save when something was built; outputs which repositories were built.
@@ -204,6 +213,9 @@ that measurement.
 - **On GitHub:** a first run that builds and saves, a second that restores everything, then a PR that touches one upstream repository's commit (or a fake) and rebuilds only that one,
   and a check that the refresh run makes the next PR hit.
 
-## Questions to settle before coding
+The plan logic and the restore are tested in `test_build_plan.py`, and the workflow structure in `test_workflows.py`. The run on the development
+machine with real builds and the runs on GitHub are still to do.
+
+## Still to measure
 
 1. Build time per repository from a real run (the `Building <name>...` lines with timestamps), to confirm the expected gain.

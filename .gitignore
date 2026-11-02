@@ -80,3 +80,5 @@ dist/
 /.claude
 # Read-only clones made by the scripts
 .repos/
+# Build cache entries made by Build-Repositories.ps1
+.build-cache/

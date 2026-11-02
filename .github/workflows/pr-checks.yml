@@ -73,8 +73,11 @@ jobs:
 
   # Its own job, so that the pull request page names what is pending. The Python PR is a proposal: this only passes once the linked C# pull
   # request is merged, because the assemblies built here come from the C# develop branches. After that merge, re-run this job.
+  # It waits for the first job, which saves the build cache, so that a change in a C# repository is built once; it runs even when the tests fail.
   alignment:
     name: C# alignment (fails until the linked C# PR is merged)
+    needs: checks
+    if: ${{ !cancelled() }}
     runs-on: windows-latest
     env:
       PYTHONPATH: ${{ github.workspace }}/.ci/generation

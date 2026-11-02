@@ -36,6 +36,7 @@ def test_all_workflows_are_valid_and_have_the_expected_jobs():
     assert list(load("pr-checks.yml")["jobs"]) == ["checks", "alignment"]
     assert list(load("linked-csharp-pr.yml")["jobs"]) == ["linked"], "one job, so the pull request page shows one line"
     assert list(load("linked-csharp-pr-close.yml")["jobs"]) == ["close"]
+    assert list(load("build-cache.yml")["jobs"]) == ["gate", "refresh"]
 
 def test_the_weekly_generation_commit_cannot_start_the_linked_pr_workflow():
     """Checks that neither linked-PR workflow has a push or schedule trigger, that they run for pull requests only on src/bhom_schema paths, and that only the close workflow reacts to a closed pull request.
@@ -70,11 +71,13 @@ def test_workflows_start_with_read_only_permissions_and_raise_them_per_job():
 
     Protects the token permissions of the workflows.
     """
-    for name in ("linked-csharp-pr.yml", "linked-csharp-pr-close.yml", "pr-checks.yml"):
+    for name in ("linked-csharp-pr.yml", "linked-csharp-pr-close.yml", "pr-checks.yml", "build-cache.yml"):
         assert load(name)["permissions"] == {"contents": "read"}, name
 
     assert load("linked-csharp-pr.yml")["jobs"]["linked"]["permissions"] == {"contents": "read", "pull-requests": "write"}
     assert "permissions" not in load("linked-csharp-pr-close.yml")["jobs"]["close"]
+    assert load("build-cache.yml")["jobs"]["gate"]["permissions"] == {"contents": "read", "actions": "read"}
+    assert "permissions" not in load("build-cache.yml")["jobs"]["refresh"]
 
 
 def test_the_app_token_is_made_only_for_the_repositories_the_change_touches():
@@ -152,13 +155,14 @@ def test_every_listed_converted_repository_is_also_built():
     assert all(r.lower() in built for r in lines("Converted-repositories.txt"))
 
 def test_the_generation_and_the_checks_build_the_same_repositories():
-    """Checks that the generation and PR checks workflows clone and build the repositories from the same list.
+    """Checks that the generation and PR checks workflows build the repositories from the same list, the generation from its own clones and the PR checks through the build cache.
 
     Protects align, which compares the PR with what the generator would write.
     """
-    for path in (WORKFLOWS / "python-schema-generation.yml", WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml"):
-        text = path.read_text(encoding="utf-8")
-        assert "Clone-Repositories.ps1 -List Included-repositories.txt" in text and "Build-Repositories.ps1 -List Included-repositories.txt" in text
+    generation = (WORKFLOWS / "python-schema-generation.yml").read_text(encoding="utf-8")
+    assert "Clone-Repositories.ps1 -List Included-repositories.txt" in generation and "Build-Repositories.ps1 -List Included-repositories.txt" in generation
+    action = (WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml").read_text(encoding="utf-8")
+    assert "Build-Repositories.ps1 -List Included-repositories.txt" in action and 'List = "Included-repositories.txt"' in action
 
 def test_the_release_workflow_is_manual_and_only_the_publish_job_gets_an_identity_token():
     """Checks that the release workflow starts only by hand, that contents are read-only by default, and that only the TestPyPI job can ask for an identity token.
@@ -189,22 +193,67 @@ def test_the_release_workflow_stores_no_secret_and_nothing_is_published_in_a_dry
     assert publishing and all(s["if"] == "${{ !inputs.dry_run }}" for s in publishing)
 
 
-def test_the_pr_checks_build_only_when_the_cache_of_assemblies_misses():
-    """Checks that the shared assemblies action caches the built BHoM assemblies under a key made from the current commits, builds only on a cache miss, and saves the cache right after the build.
+def test_the_assemblies_action_plans_restores_builds_and_saves_in_that_order():
+    """Checks that the shared assemblies action plans the build first, restores the build cache by its exact key then by its prefix, builds from the saved plan with the cache folder, and saves under the exact key only when an entry was added.
 
-    Protects the speed of the PR checks from a change that rebuilds every time, and the cache from becoming stale.
+    Protects the speed of the PR checks from a change that rebuilds every time, and the cache from being saved under a key that does not match its content.
     """
     action = yaml.safe_load((WORKFLOWS.parent / "actions" / "bhom-assemblies" / "action.yml").read_text(encoding="utf-8"))
     steps = action["runs"]["steps"]
     by_name = {s.get("name", s.get("uses", "")): s for s in steps}
-    restore = by_name["Restore the built BHoM assemblies"]
-    assert restore["with"]["key"] == "${{ steps.commits.outputs.key }}"
-    for name in ("Clone the repositories", "Build the repositories in dependency order", "Save the built BHoM assemblies"):
-        assert by_name[name]["if"] == "steps.assemblies.outputs.cache-hit != 'true'"
-    assert "git ls-remote" in by_name["Find the current commit of each repository"]["run"]
-    order = [s.get("name", "") for s in steps]
-    assert order.index("Build the repositories in dependency order") < order.index("Save the built BHoM assemblies")
+    order = list(by_name)
+    assert order.index("microsoft/setup-msbuild@v2") < order.index("Plan the build"), "the MSBuild version is part of the keys"
+    assert order.index("Plan the build") < order.index("Restore the build cache") < order.index("Build the repositories in dependency order") < order.index("Save the build cache")
+    assert "-Plan -PlanFile" in by_name["Plan the build"]["run"]
+    restore = by_name["Restore the build cache"]
+    assert restore["uses"].startswith("actions/cache/restore@")
+    assert restore["with"] == {"path": ".build-cache", "key": "${{ steps.plan.outputs.key }}", "restore-keys": "${{ steps.plan.outputs.prefix }}"}
+    build = by_name["Build the repositories in dependency order"]["run"]
+    assert 'PlanFile = "$env:RUNNER_TEMP/build-plan.json"' in build and 'CacheFolder = ".build-cache"' in build, "the build uses the planned commits"
+    save = by_name["Save the build cache"]
+    assert save["uses"].startswith("actions/cache/save@") and save["if"] == "steps.build.outputs.added != ''"
+    assert save["with"] == {"path": ".build-cache", "key": "${{ steps.plan.outputs.key }}"}
 
+def test_the_alignment_job_waits_for_the_tests_and_still_runs_when_they_fail():
+    """Checks that the C# alignment job needs the build and tests job and runs unless the run is cancelled.
+
+    Protects the PR checks from building the same changed C# repository twice, and the alignment result from being skipped when a test fails.
+    """
+    alignment = load("pr-checks.yml")["jobs"]["alignment"]
+    assert alignment["needs"] == "checks"
+    assert alignment["if"] == "${{ !cancelled() }}"
+
+def test_the_build_cache_refresh_runs_after_the_pr_checks_and_builds_from_develop():
+    """Checks that the refresh workflow starts only after the PR workflow or by hand, that its gate rejects forks and manual runs off develop and looks the current state up on develop, and that the refresh builds from develop.
+
+    Protects the develop cache, which every pull request reads, from what a pull request or a fork built.
+    """
+    workflow = load("build-cache.yml")
+    assert set(workflow["on"]) == {"workflow_run", "workflow_dispatch"}
+    assert workflow["on"]["workflow_run"] == {"workflows": ["PR"], "types": ["completed"]}
+    assert load("pr-checks.yml")["name"] == "PR"
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+    gate = workflow["jobs"]["gate"]
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in gate["if"]
+    assert "github.ref == 'refs/heads/develop'" in gate["if"]
+    assert gate["runs-on"] == "ubuntu-latest"
+    assert not any("bhom-assemblies" in str(s.get("uses", "")) or "actions/cache" in str(s.get("uses", "")) for s in gate["steps"]), "the gate writes no cache"
+    lookup = next(s for s in gate["steps"] if s.get("id") == "lookup")
+    assert "--ref refs/heads/develop" in lookup["run"] and "$env:STATE_PREFIX" in lookup["run"]
+    refresh = workflow["jobs"]["refresh"]
+    assert refresh["needs"] == "gate" and refresh["if"] == "needs.gate.outputs.refresh == 'true'"
+    checkout = next(s for s in refresh["steps"] if str(s.get("uses", "")).startswith("actions/checkout"))
+    assert checkout["with"]["ref"] == "develop"
+    assert any(s.get("uses") == "./.github/actions/bhom-assemblies" for s in refresh["steps"])
+
+def test_the_release_and_the_generation_build_clean():
+    """Checks that the release and generation workflows do not use the build cache yet.
+
+    Protects the published wheel and the weekly commit to develop from a cache that has not proved itself on the PR checks.
+    """
+    for name in ("release.yml", "python-schema-generation.yml"):
+        text = (WORKFLOWS / name).read_text(encoding="utf-8")
+        assert "bhom-assemblies" not in text and "actions/cache" not in text and "-CacheFolder" not in text, name
 
 def test_the_alignment_check_is_its_own_job_with_a_name_that_says_what_is_pending():
     """Checks that the C# alignment runs as its own job of pr-checks, named after the linked C# PR, using the shared assemblies action and explaining a failure in the job summary, and that the main job no longer runs align.

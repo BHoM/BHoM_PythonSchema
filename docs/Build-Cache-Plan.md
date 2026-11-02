@@ -1,7 +1,7 @@
 # Speeding up the PR checks with a build cache: background
 
-Status: the **plan** is in [Per-Repository-Build-Cache-Plan.md](Per-Repository-Build-Cache-Plan.md) (a build cache per repository, refreshed on `develop` when it
-does not have the current state yet). This page keeps the measurements and what exists today. The cache that exists today is described in [Workflows.md](Workflows.md).
+Status: **superseded** by [Per-Repository-Build-Cache-Plan.md](Per-Repository-Build-Cache-Plan.md) (a build cache per repository, refreshed on `develop`
+when it does not have the current state yet), which is implemented. This page keeps the measurements; the cache as it works now is described in [Workflows.md](Workflows.md).
 
 ## Where the time goes
 
