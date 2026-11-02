@@ -11,6 +11,7 @@ from pydantic import Field
 
 from bhom_schema.BHoM.BHoMObject import BHoMObject
 
+
 class Column(BHoMObject):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Column',

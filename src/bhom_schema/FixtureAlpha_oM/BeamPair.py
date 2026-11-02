@@ -24,4 +24,3 @@ class BeamPair(BHoMObject):
 
     First: Beam | None = Field(default=None, description='The first beam of the pair.')
     Second: Beam | None = Field(default=None, description='The second beam of the pair.')
-
