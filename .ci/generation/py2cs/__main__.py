@@ -1,4 +1,4 @@
-"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | verify | drafts | resolve | notes"""
+"""Command line: python -m py2cs check | manifest | diff | align | repos | plan | pr | close | verify | drafts | resolve | notes | alpha-version"""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from py2cs.alpha import alpha_version, read_bhom_version, stamp_version_file
 from py2cs.align import AlignError, align, changed_types, generate
 from py2cs.check import check_package
 from py2cs.ci import affected_repos, load_allowed, make_client, verify_package
@@ -108,6 +109,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--previous", help="the previous release's tag, named in the notes")
     p.add_argument("--out", required=True, type=Path)
 
+    p = sub.add_parser("alpha-version", help="the version of an alpha release, built from the BHoM version of a bhom_schema folder; fails when that BHoM version is already released")
+    p.add_argument("--package", required=True, type=Path)
+    p.add_argument("--tags", nargs="*", default=[], help="the release tags that exist, for example v10.0.0")
+    p.add_argument("--stamp", action="store_true", help="also write the version into the package's _version.py")
+
     args = parser.parse_args(argv)
     try:
         return run(args)
@@ -150,6 +156,14 @@ def run(args: argparse.Namespace) -> int:
         diff = diff_manifests(base, read_package(args.head_root))
         args.out.write_text(render_notes(diff, args.version, args.previous), encoding="utf-8")
         print(f"release notes for {len(diff.changes)} changed types")
+        return 0
+
+    if args.command == "alpha-version":
+        version_file = args.package / "_version.py"
+        version = alpha_version(read_bhom_version(version_file), args.tags)
+        if args.stamp:
+            stamp_version_file(version_file, version)
+        print(version)
         return 0
 
     if args.command == "align":

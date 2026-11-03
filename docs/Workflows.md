@@ -12,6 +12,7 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 | [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | One job, **Raise or update draft**: finds the C# repositories the change touches, raises or updates a linked **draft** pull request in each, and comments on the Python PR with its link. The shared action `.github/actions/linked-pr-context` does the finding |
 | [linked-csharp-pr-close.yml](../.github/workflows/linked-csharp-pr-close.yml) | A Python pull request that changes `src/bhom_schema` is closed, and by hand | Closes the linked C# draft with a comment when the Python PR was closed unmerged, or only comments when it was merged. A separate workflow so that nothing of it shows on an open pull request |
 | [release.yml](../.github/workflows/release.yml) | By hand only (dry run by default) | Regenerates with `--release X.Y`, checks, builds the wheel and the release notes; when not a dry run, pushes branch `vX.Y` and tag `vX.Y.0`, creates the GitHub Release and publishes to TestPyPI. See "Making a release" |
+| [alpha-release.yml](../.github/workflows/alpha-release.yml) | Every day at 6 AM UTC, and by hand (dry run by default) | Publishes `develop` as it is, as the pre-release `X.Y.0aYYMMDDHHmm`, to TestPyPI. No C# build. Skipped when `develop` has not moved since the last alpha. See "Making an alpha release" |
 
 ## How they fit together
 
@@ -52,6 +53,12 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 │ the cache on develop, where  │
 │ every PR can read it         │
 └──────────────────────────────┘
+
+ Every day:
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ alpha-release.yml   develop moved since tag alpha-latest? ─► stamp X.Y.0aYYMMDDHHmm ─► pytest,       │
+│                     Pyright ─► wheel ─► TestPyPI (trusted publishing) ─► move tag alpha-latest       │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
  End of a milestone, by hand:
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -133,6 +140,29 @@ TestPyPI is reached with trusted publishing, so no password or token is stored. 
 - In the repository settings, create the environment `testpypi` (it can require a reviewer).
 
 Real PyPI is added the same way when BHoM/BHoM is in scope. The branch `v10.0` is left alone afterwards.
+
+**Right after a release, bump the BHoM version on `develop`** to the next `Major.Minor`. The next weekly generation then writes it into `_version.py`. Until then
+the alpha workflow fails on purpose: an alpha of `10.0` would sort below the release `10.0.0`, so `--pre` users would be served the old release.
+
+## Making an alpha release
+
+Alphas are made by `alpha-release.yml` every day at 6 AM UTC (after the Saturday generation has pushed), so nothing is done by hand. Python users install the
+latest alpha with `pip install --pre bhom-schema`; without `--pre` they get the release. pip has no `--alpha` option.
+
+- **Source.** `develop` as it is. Nothing is regenerated and no C# is built; `develop` is regenerated weekly and takes pull requests in between.
+- **Version.** `python -m py2cs alpha-version` takes the BHoM version from `_version.py` and adds the UTC time: `10.1.0a2611031430`. Several alphas a day are fine, they order by time.
+  The version is stamped in the runner's checkout only and never committed, so `develop` keeps `10.1.0.dev0`. It fails when the tag `v10.1.0` already exists (see the bump above).
+- **Skip.** The tag `alpha-latest` points at the commit of the last published alpha. When `develop` is still there, the run does nothing, unless *force* is ticked.
+- **Checks.** Every module imports, the tests that need no C# assemblies, Pyright, and the wheel carries the stamped version.
+- **Publish.** The wheel goes to TestPyPI with trusted publishing, through the environment `testpypi-alpha`; then `alpha-latest` moves to the published commit. There is no GitHub Release and no tag per alpha.
+
+Run it by hand from the Actions tab with `dry_run` ticked (the default) to check and build without publishing, or unticked to publish a merge at once.
+It shares one concurrency group with the weekly generation and the release, so it never packages a half-pushed `develop`.
+
+TestPyPI is set up once, by an administrator, for both the release and the alpha. On the repository, create the environments `testpypi` and `testpypi-alpha`
+(Settings, Environments). On test.pypi.org, sign in with two-factor authentication, open *Your account*, *Publishing*, and add two pending publishers for the project
+`bhom-schema`, owner `BHoM`, repository `BHoM_PythonSchema`: workflow `release.yml` with environment `testpypi`, and workflow `alpha-release.yml` with environment `testpypi-alpha`.
+A publisher is bound to one workflow file, so both are needed. After the first upload, check that both are listed under the project's *Publishing* and add the other maintainers as owners.
 
 ## When is a Python pull request ready?
 

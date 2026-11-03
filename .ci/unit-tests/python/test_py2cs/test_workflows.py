@@ -277,3 +277,39 @@ def test_the_included_repositories_file_is_tidy():
     assert text.endswith("\n")
     assert "dKop" not in text, "the repository is spelt dKoP_Toolkit"
     assert all(name == name.strip() for name in text.splitlines())
+
+def test_the_alpha_workflow_publishes_only_when_asked_and_only_the_publish_job_gets_an_identity_token():
+    """Checks that the alpha workflow starts on a schedule or by hand, is a dry run by default, publishes only when develop moved and not a dry run, gives an identity token to the publish job only, and stores no secret.
+
+    Protects TestPyPI from an unplanned alpha and the identity token from the build job.
+    """
+    workflow = load("alpha-release.yml")
+    assert set(workflow["on"]) == {"schedule", "workflow_dispatch"}
+    assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
+    assert workflow["permissions"] == {"contents": "read"}
+    assert list(workflow["jobs"]) == ["build", "publish-testpypi", "mark"]
+    assert "permissions" not in workflow["jobs"]["build"]
+    publish = workflow["jobs"]["publish-testpypi"]
+    assert publish["permissions"] == {"id-token": "write"} and publish["environment"] == "testpypi-alpha"
+    assert publish["if"] == "${{ needs.build.outputs.publish == 'true' && !inputs.dry_run }}"
+    assert workflow["jobs"]["mark"]["needs"] == ["build", "publish-testpypi"], "the tag moves only after a publish"
+    assert "secrets." not in (WORKFLOWS / "alpha-release.yml").read_text(encoding="utf-8")
+
+def test_the_alpha_stamps_the_version_in_its_own_checkout_and_never_commits_it():
+    """Checks that the alpha workflow reads the released tags, stamps with py2cs alpha-version, runs no commit or push of develop, and moves only the tag alpha-latest.
+
+    Protects develop from a commit with a stamped version, and the weekly generation from a conflict with it.
+    """
+    text = (WORKFLOWS / "alpha-release.yml").read_text(encoding="utf-8")
+    assert 'git tag --list "v*.0"' in text and "py2cs alpha-version" in text and "--stamp" in text
+    assert "git commit" not in text and "HEAD:develop" not in text
+    pushes = [line.strip() for line in text.splitlines() if "git push" in line]
+    assert pushes == ["git push --force origin alpha-latest"]
+
+def test_the_workflows_that_write_to_develop_or_its_tags_share_one_concurrency_group():
+    """Checks that the generation, the release and the alpha share one concurrency group that never cancels a running one.
+
+    Protects an alpha from packaging a half-pushed develop and from racing a release.
+    """
+    for name in ("python-schema-generation.yml", "release.yml", "alpha-release.yml"):
+        assert load(name)["concurrency"] == {"group": "develop-publishing", "cancel-in-progress": False}, name
