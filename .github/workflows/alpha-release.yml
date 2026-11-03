@@ -85,7 +85,17 @@ jobs:
         if: steps.gate.outputs.publish == 'true'
         run: python -m py2cs verify --package src/bhom_schema
 
-      - name: Tests that need no C# assemblies
+      - uses: actions/setup-dotnet@v4
+        if: steps.gate.outputs.publish == 'true'
+        with:
+          dotnet-version: '8.0.x'
+
+      # The py2cs tests that plan changes to C# files run the Roslyn patcher (CI=true makes them fail, not skip, when it is missing). It needs no BHoM assemblies.
+      - name: Build the C# patcher
+        if: steps.gate.outputs.publish == 'true'
+        run: dotnet build .ci/generation/PythonSchemaGeneration.Patcher/PythonSchemaGeneration.Patcher.csproj -c Release --nologo
+
+      - name: Tests that need no BHoM assemblies
         if: steps.gate.outputs.publish == 'true'
         run: python -m pytest .ci/unit-tests/python/test_py2cs .ci/unit-tests/python/test_support -q
 
