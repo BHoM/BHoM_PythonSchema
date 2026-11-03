@@ -15,6 +15,11 @@ on:
         type: boolean
         default: true
 
+# The generation, the release and the alpha write to develop and its tags, so none of them runs while another does
+concurrency:
+  group: develop-publishing
+  cancel-in-progress: false
+
 permissions:
   contents: read
 

@@ -13,9 +13,9 @@ on:
         type: boolean
         default: false
 
-# Only one generation at a time
+# The generation, the release and the alpha write to develop and its tags, so none of them runs while another does
 concurrency:
-  group: python-schema-generation
+  group: develop-publishing
   cancel-in-progress: false
 
 # Raised for the commit step only
