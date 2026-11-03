@@ -165,6 +165,149 @@ Expected results to record: the version installed, a screenshot of the red under
 If the underline does not appear, check in this order: the interpreter is the `.venv` one (step 4); the package is installed in that venv (`pip show bhom-schema`); Pylance is enabled (the status bar shows *Pylance*, not *Jedi*); and the file is saved.
 The package currently has no `py.typed` marker. Pylance still reads the types from the installed source, so the check works, but adding `py.typed` (and listing it under `package-data` in `pyproject.toml`) would declare the package as typed for every tool. That is a small change to add to the release workflow's checks.
 
-## Later (not part of this plan): Databricks
+## Trying the package in a Databricks notebook
 
-The main consumers work in Databricks notebooks (`%pip install --pre bhom-schema`, which needs a runtime with Python 3.12 or later) and keep their data in Unity Catalog tables. Decided: their tables must follow the BHoM field names, so a row validates straight into a class. There are no real tables yet, so the mechanism can go the other way too: generate compliant tables from the Python schema (a Spark `StructType` or `CREATE TABLE` DDL derived from each model, nested types as `STRUCT`, interface-typed fields carrying `_t`), plus helpers to read a table into a list of objects and write objects back. This is a separate plan, to be written once the alpha/beta workflow above is in place.
+Same example as in VS Code (`LineLike`, its `bool` property `Infinite`), then a table made from the class and read back into objects. Decided: the team's tables follow the BHoM field names, so a column is a property of the class and a row validates straight into an object.
+
+### Notebook steps
+
+1. **Compute.** Attach the notebook to compute with Python 3.12 or later (the package needs it): Databricks Runtime 16.0 or later, or serverless with an environment version that has 3.12. Check in a cell: `import sys; print(sys.version)`. The compute needs outbound access to test.pypi.org and pypi.org. If it has none, put the wheel in a Unity Catalog volume and install it with `%pip install /Volumes/<catalog>/<schema>/<volume>/bhom_schema-<version>-py3-none-any.whl` (the wheel is the artifact of an alpha run, or the file on a GitHub Release for a beta).
+2. **Cell 1, install** (a `%pip` cell must be on its own):
+
+   ```
+   %pip install --pre --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+   ```
+
+   **Cell 2, restart Python** so the notebook sees the package:
+
+   ```python
+   dbutils.library.restartPython()
+   ```
+
+   Once the package is on PyPI the install is `%pip install --pre bhom-schema`. To pin a version for a job, use `bhom-schema==10.1.0a2611031430`.
+3. **Cell 3, the same example as in VS Code:**
+
+   ```python
+   from bhom_schema.FixtureAlpha_oM.LineLike import LineLike
+
+   line = LineLike(Infinite="banana", Label="axis")
+   print(line.Infinite)
+   ```
+
+   Expected: the cell fails with `ValidationError: 1 validation error for LineLike`, `Infinite`, *Input should be a valid boolean, unable to interpret input*. That error is the pass criterion in a notebook. The red underline of VS Code is not promised here: the notebook editor does not run Pylance. To see the underline against Databricks, use the same `.venv` project as in VS Code, or the Databricks extension for VS Code with Databricks Connect.
+   Then change `"banana"` to `True` and run again: it prints `True`.
+4. **Cell 4, the table helper.** It derives the column definitions from the class, so the table and the class cannot drift apart. It is plain Python (no Spark needed) and is a good candidate to move into the package later as `bhom_schema.tables`.
+
+   ```python
+   import types
+   import typing
+   from pydantic import BaseModel
+
+   SCALARS = {bool: "BOOLEAN", int: "BIGINT", float: "DOUBLE", str: "STRING"}
+   # bhom_version is the optional _bhomVersion of the JSON: not a column
+   SKIPPED = {"bhom_version"}
+
+   def spark_type(annotation):
+       """The Spark SQL type of a property: nested classes become STRUCT, lists ARRAY, Optional is just nullable."""
+       origin = typing.get_origin(annotation)
+       if origin in (typing.Union, types.UnionType):
+           options = [a for a in typing.get_args(annotation) if a is not type(None)]
+           if len(options) != 1:
+               raise NotImplementedError(f"{annotation} is a choice between types; it has no single column type")
+           return spark_type(options[0])
+       if origin is list:
+           return f"ARRAY<{spark_type(typing.get_args(annotation)[0])}>"
+       if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+           return "STRUCT<" + ", ".join(f"`{name}`: {spark_type(field.annotation)}" for name, field in annotation.model_fields.items() if name not in SKIPPED) + ">"
+       if annotation in SCALARS:
+           return SCALARS[annotation]
+       raise NotImplementedError(f"{annotation} has no column type yet (enums, ids and interface-typed properties are not supported)")
+
+   def columns(model):
+       """The column list of a class, as Spark SQL DDL."""
+       return ", ".join(f"`{name}` {spark_type(field.annotation)}" for name, field in model.model_fields.items() if name not in SKIPPED)
+
+   def create_table_sql(model, table):
+       """The CREATE TABLE statement for a class."""
+       return f"CREATE TABLE IF NOT EXISTS {table} ({columns(model)}) USING DELTA"
+
+   def plain(value):
+       """Takes the type tags (_t, _bhomVersion) out of a dumped object: the table holds the properties only."""
+       if isinstance(value, dict):
+           return {key: plain(item) for key, item in value.items() if key not in ("_t", "_bhomVersion")}
+       if isinstance(value, list):
+           return [plain(item) for item in value]
+       return value
+
+   def to_rows(objects):
+       """Objects to rows for spark.createDataFrame."""
+       return [plain(item.model_dump()) for item in objects]
+
+   def from_rows(model, rows):
+       """Spark rows to objects of the class; every row is validated."""
+       return [model.model_validate(row.asDict(recursive=True)) for row in rows]
+   ```
+
+5. **Cell 5, make the table.** Put your own catalog and schema in the name (you need *USE SCHEMA* and *CREATE TABLE* on it):
+
+   ```python
+   TABLE = "main.default.line_like"
+
+   sql = create_table_sql(LineLike, TABLE)
+   print(sql)
+   spark.sql(sql)
+   ```
+
+   The statement printed is the SQL that makes the same table, so it can be pasted into a SQL warehouse, a pipeline or a migration script:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS main.default.line_like (`Start` STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE>, `End` STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE>, `Infinite` BOOLEAN, `Label` STRING) USING DELTA
+   ```
+
+   `PointLike` is a nested class, so `Start` and `End` are one `STRUCT` column each. Check it with `display(spark.table(TABLE))` or `DESCRIBE TABLE main.default.line_like`.
+6. **Cell 6, fill it from objects** (a few rows; the schema comes from the table's own DDL):
+
+   ```python
+   lines = [LineLike(Infinite=bool(i % 2), Label=f"line-{i}") for i in range(10)]
+   spark.createDataFrame(to_rows(lines), schema=columns(LineLike)).write.mode("append").saveAsTable(TABLE)
+   ```
+
+   A wrong value fails at `LineLike(...)`, before anything is written, so a bad object never reaches the table.
+7. **Cell 7, fill it at scale.** A large set is built in Spark itself, never as Python objects. The columns must be in the same order and of the same types as the class:
+
+   ```python
+   spark.range(1_000_000).selectExpr(
+       "named_struct('X', cast(id as double), 'Y', 0D, 'Z', 0D) as Start",
+       "named_struct('X', cast(id as double) + 1D, 'Y', 0D, 'Z', 0D) as End",
+       "false as Infinite",
+       "concat('line-', id) as Label",
+   ).write.insertInto(TABLE)
+
+   print(spark.table(TABLE).count())
+   ```
+
+8. **Cell 8, read the table into a list of `LineLike`:**
+
+   ```python
+   rows = spark.table(TABLE).limit(1000).collect()
+   lines = from_rows(LineLike, rows)
+
+   print(len(lines), type(lines[0]).__name__)
+   print(lines[0].Start.X, lines[0].Infinite)
+   ```
+
+   With columns that follow the class, every row validates; the first line prints as a `LineLike` with a `PointLike` in `Start`. A column of the wrong type, or a null in a property that is not optional, raises the same `ValidationError` as in step 3, naming the property. Reading the whole table this way pulls every row onto the driver, so for millions of rows take a slice (`limit`, a `WHERE` on a key) or walk the table with `spark.table(TABLE).toLocalIterator()` instead of `collect()`.
+9. **Clean up** when done: `spark.sql(f"DROP TABLE IF EXISTS {TABLE}")`.
+
+Expected results to record: the Python version, the installed package version (`%pip show bhom-schema`), the `ValidationError` text from step 3, the printed `CREATE TABLE` statement, the row count after step 7, and the output of step 8.
+
+Not yet tested in a workspace: the Spark parts (steps 5 to 9) have not been run on Databricks. The helper's SQL, its rows and the read back into objects were checked in plain Python against `LineLike`.
+
+### What the helper does not cover (follow-up plan)
+
+The helper handles the simple shapes: `bool`, `int`, `float`, `str`, nested classes, lists, and optional properties. Every other generated class meets one of the things it refuses with a clear error: enums (a column of the name, as `SupportKind`), ids (`BHoM_Guid`, which `Beam` has through `BHoMObject`), interface-typed properties (they need `_t` to pick the class, so a `_t` field in the struct), and quantities. The follow-up plan, once this works on a workspace:
+
+- Move the helper into the package as `bhom_schema.tables` with `pyspark` as an optional extra, and cover those types.
+- Generate the `CREATE TABLE` statements for a whole namespace at once, so a catalog schema can be built from the package in one step.
+- Validate a big table in parallel (`mapInPandas`) and report the invalid rows instead of failing on the first.
+- Write a table's rows back from objects with `_t` where the property is an interface.
