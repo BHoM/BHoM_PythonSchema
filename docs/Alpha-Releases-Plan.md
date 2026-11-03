@@ -113,6 +113,58 @@ Real PyPI is set up the same way on pypi.org when it is time (the same two entri
 - Live: untick `dry_run` once; confirm the TestPyPI project page, then re-run and confirm the second run skips.
 - Guard: run against a state where `v{version}.0` exists and confirm it fails with the bump message.
 
+## Trying the package in a new VS Code project
+
+Do this after the first successful upload (the TestPyPI steps above). It shows what a user sees: wrong data types are underlined in the editor as they are typed, and rejected when the code runs.
+The example class is `LineLike` of the test namespace `FixtureAlpha_oM`; its `Infinite` property is a `bool`.
+
+1. **Install** Python 3.12 or later, and VS Code with the *Python* extension (it brings *Pylance*, which does the live type checking).
+2. **Make the project.** Create an empty folder, for example `bhom-try`, and open it in VS Code (*File*, *Open Folder*).
+3. **Make a virtual environment.** Open the terminal (*Terminal*, *New Terminal*) and run:
+
+   ```powershell
+   py -3.12 -m venv .venv
+   .venv\Scripts\Activate.ps1
+   ```
+
+   If PowerShell refuses to run the script, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and try again.
+4. **Select it.** Press `Ctrl+Shift+P`, run *Python: Select Interpreter*, and choose the one in `.\.venv`. The bottom right of the window then shows `3.12.x ('.venv')`.
+5. **Install the alpha.** While the package is on TestPyPI only:
+
+   ```powershell
+   pip install --pre --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+   ```
+
+   `--pre` is what picks the alpha. The extra index is where `pydantic` comes from. Once the package is on PyPI this is `pip install --pre bhom-schema`, and without `--pre` you get the beta.
+   Check with `pip show bhom-schema`: the version should look like `10.1.0a2611031430`.
+6. **Write the first file.** Create `try_schema.py`:
+
+   ```python
+   from bhom_schema.FixtureAlpha_oM.LineLike import LineLike
+
+   line = LineLike(Infinite=True, Label="axis")
+   print(line.Infinite)
+   ```
+
+   Run it with the play button or `python try_schema.py`. It prints `True`.
+7. **See the error in the editor.** Change the line to a string where a `bool` belongs:
+
+   ```python
+   line = LineLike(Infinite="banana", Label="axis")
+   ```
+
+   Pylance underlines `"banana"` in red at once, with no run needed. Hover over it: *Argument of type "Literal['banana']" cannot be assigned to parameter "Infinite" of type "bool"*. The *Problems* panel (`Ctrl+Shift+M`) lists it too.
+   Other wrong types show the same way, for example `Label=5` (should be `str`) or `Infinite=1.5`.
+8. **See the error when it runs.** Run the file. pydantic rejects the value: `ValidationError: 1 validation error for LineLike`, `Infinite`, *Input should be a valid boolean, unable to interpret input*.
+   Note that pydantic reads simple text such as `"true"` or `"yes"` as a boolean when it runs, so the run would accept them, but the editor still flags them. The editor check is the stricter one.
+9. **Check the types come from the package.** Hover over `LineLike` and press `F12` (*Go to Definition*): it opens the generated `.venv\Lib\site-packages\bhom_schema\FixtureAlpha_oM\LineLike.py`. Type `line.` and the property list (`Start`, `End`, `Infinite`, `Label`) pops up.
+10. **Optional: stricter checking.** For every type problem to show, not only argument types, add to `.vscode/settings.json`: `{ "python.analysis.typeCheckingMode": "standard" }` (or `"strict"`).
+
+Expected results to record: the version installed, a screenshot of the red underline with its hover text, and the `ValidationError` text.
+
+If the underline does not appear, check in this order: the interpreter is the `.venv` one (step 4); the package is installed in that venv (`pip show bhom-schema`); Pylance is enabled (the status bar shows *Pylance*, not *Jedi*); and the file is saved.
+The package currently has no `py.typed` marker. Pylance still reads the types from the installed source, so the check works, but adding `py.typed` (and listing it under `package-data` in `pyproject.toml`) would declare the package as typed for every tool. That is a small change to add to the release workflow's checks.
+
 ## Later (not part of this plan): Databricks
 
 The main consumers work in Databricks notebooks (`%pip install --pre bhom-schema`, which needs a runtime with Python 3.12 or later) and keep their data in Unity Catalog tables. Decided: their tables must follow the BHoM field names, so a row validates straight into a class. There are no real tables yet, so the mechanism can go the other way too: generate compliant tables from the Python schema (a Spark `StructType` or `CREATE TABLE` DDL derived from each model, nested types as `STRUCT`, interface-typed fields carrying `_t`), plus helpers to read a table into a list of objects and write objects back. This is a separate plan, to be written once the alpha/beta workflow above is in place.
