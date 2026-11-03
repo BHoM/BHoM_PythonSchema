@@ -9,7 +9,7 @@ import collections.abc
 import types
 import typing
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import Enum, Flag
@@ -367,6 +367,22 @@ def describe(model: type[BaseModel], fields: Mapping[str, Decision] | None = Non
         columns.append(entry)
 
     return columns
+
+def override_types(model: type[BaseModel], columns: Sequence[ColumnInfo], types: Mapping[str, str] | None) -> list[ColumnInfo]:
+    """Returns the columns with the column type of the named fields replaced, for example `{"Cost": "DECIMAL(18,2)"}`.
+
+    A name that is not a field of the class, or a field that has no column, raises ValueError, so a typo does not go unnoticed.
+    """
+    types = types or {}
+    stored = {column.field for column in columns if column.type is not None}
+    for name in types:
+        if name not in model.model_fields:
+            raise ValueError(f"{model.__name__} has no field {name!r} to give a column type; its fields are {', '.join(model.model_fields)}")
+
+        if name not in stored:
+            raise ValueError(f"{name} has no column to give a type, because its decision leaves it out")
+
+    return [replace(column, type=types[column.field]) if column.field is not None and column.field in types else column for column in columns]
 
 def custom_fields(model: type[BaseModel]) -> dict[str, Any]:
     """Returns the fields of a class that have no column of their own, with their types (`Start: PointLike`, `Points: list[PointLike]`).
