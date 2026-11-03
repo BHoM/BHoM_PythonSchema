@@ -10,7 +10,7 @@ This replaces the whole-hierarchy helper (`create_tables_sql(LineLike, PREFIX)` 
 
 1. **One class in, one table out.** Every helper takes a single model class. Nothing recurses.
 2. **Primitives are automatic, everything else is explicit.** A field whose type is a primitive (including lists, sets and dicts of primitives) gets a column. A field of any other type (another schema class, an interface, `Any`, a tuple, `Color`) is never mapped silently: the helper raises an error that names the field and the choices, until the user says what to do with it (see [Custom-typed fields](#custom-typed-fields)).
-3. **Column names are the BHoM field names.** No renaming layer. The one exception is the column that holds the id of a row in another table, which is named `<Field>_id` unless the user overrides it.
+3. **Column names are the BHoM field names.** No renaming layer. A field with a JSON alias uses the alias, so `bhom_version` is the column `_bhomVersion` on every table. The one exception is the column that holds the id of a row in another table, which is named `<Field>_id` unless the user overrides it. Every identifier in the generated SQL is quoted with backticks, because field names such as `End` and `Key` are SQL keywords.
 4. **Structs are a choice, not a default.** A class-typed field is never stored as a nested column unless the user asks for `Struct()`. The other choices are an id pointing at a row in another table, JSON text, or leaving the field out.
 5. **Pure Python at the core.** Nothing outside the optional Spark layer imports `pyspark`, so everything runs and is tested without a cluster. Spark is only needed to execute the SQL or to build a DataFrame.
 6. **The user can see what will happen.** Every helper that produces SQL returns a string, and a `describe` helper shows the same decisions as a table before anything runs.
@@ -54,14 +54,14 @@ The mapping is a table in code (`COLUMN_TYPES`), so it is easy to review and to 
 | Python annotation | C# type | Column type | Notes |
 |---|---|---|---|
 | `bool` | `bool` | `BOOLEAN` | |
-| `int` | `int` | `INT` | Python `int` is unbounded, so a value outside 32 bits fails validation when the row is read back, not when it is written |
+| `int` | `int` | `INT` | Python `int` is unbounded, so `to_row` raises for a value outside 32 bits, naming the field, rather than leaving it to `createDataFrame` |
 | `Annotated[int, ClrType('long')]` | `long` | `BIGINT` | `short` is `SMALLINT`, `byte` is `TINYINT` |
 | `float` | `double` | `DOUBLE` | |
 | `Annotated[float, ClrType('float')]` | `float` | `FLOAT` | |
 | `str` | `string` | `STRING` | |
 | `Annotated[str, ClrType('char')]` | `char` | `STRING` | A comment on the column says it holds one character |
 | `Decimal` | `decimal` | `DECIMAL(38,10)` | C# `decimal` has 28 digits; Spark allows 38 in total. Override with `types={"Cost": "DECIMAL(18,2)"}` |
-| `datetime` | `DateTime` | `TIMESTAMP_NTZ` | BHoM DateTimes carry no time zone. Needs Databricks Runtime 13.3 or later |
+| `datetime` | `DateTime` | `TIMESTAMP_NTZ` | BHoM DateTimes carry no time zone, so `to_row` raises for a time-zone-aware value. Needs Databricks Runtime 13.3 or later |
 | `date` | `DateOnly` | `DATE` | |
 | `timedelta` | `TimeSpan` | `DOUBLE` | Seconds. Delta tables cannot hold interval columns. The column comment says "seconds" and `to_row` / `from_row` convert |
 | `UUID` | `Guid` | `STRING` | Lower-case with dashes, as `str(uuid)` writes it |
@@ -72,16 +72,20 @@ The mapping is a table in code (`COLUMN_TYPES`), so it is easy to review and to 
 | `dict[str, X]` | `Dictionary<string, X>` | `MAP<STRING, X>` | X must be a primitive. Other key types are custom |
 | `X \| None` | nullable `X` | same as `X`, nullable | Every column is nullable except the key |
 
-Everything else is a [custom-typed field](#custom-typed-fields): another schema class, an interface or `Polymorphic[...]`, `Any`, `tuple[...]`, `Color`, a list of classes, a dict with a non-string key or a non-primitive value, `Callable`, `System.Type`. A `Struct()` decision on an interface-typed field is refused, because the fields of the object are not known until it is read.
+Everything else is a [custom-typed field](#custom-typed-fields): another schema class, an interface or `Polymorphic[...]`, `Any`, `tuple[...]`, `Color`, a list of classes, a dict with a non-string key or a non-primitive value, `Callable`, `System.Type`. A `Struct()` decision on an interface-typed field is refused, because the fields of the object are not known until it is read. A `Json()` decision on a `Callable` field is refused, because it has no JSON; `Skip()` is its only choice.
 
-`describe` and `create_table_sql` also write the field's `description` (from the C# XML summary) as the column `COMMENT`, so the table documents itself in Unity Catalog.
+A generic class (`Wrapper_1`, `TreeLike_1`) is refused by every helper, with an error that names the class. Its fields depend on a type argument that the table cannot record.
+
+`describe` and `create_table_sql` also write the field's `description` (from the C# XML summary) as the column `COMMENT`, so the table documents itself in Unity Catalog. A `Quantity` marker adds the quantity and unit (`Distance between the supports. [Length, m]`) and a `DisplayText` marker is put first when there is one.
+
+**NULL in a column means the field's default.** `from_row` treats a NULL in a column of a non-optional field (`LineLike.Infinite: bool`) as the field being absent, so the field takes its default. This is what lets rows written before `add_columns_sql` added a column still read as the class.
 
 ## The key column
 
 A table needs an id for other tables to point at. Two cases:
 
 - The class derives from `BHoMObject`: it already has `BHoM_Guid`, so that column is the key and nothing is added.
-- It does not (`PointLike`, `LineLike`): the helper adds `_id STRING NOT NULL`.
+- It does not (`PointLike`, `LineLike`): the helper adds `_id STRING NOT NULL`. A generated id is `str(uuid4())`, lower-case with dashes, the same text as a `BHoM_Guid` key, so a `Ref` column holds ids of one form whichever table it points at.
 
 `create_table_sql(..., key="_id")` is the default; `key="BHoM_Guid"` or any other field name uses that field; `key=None` adds no key. A key is only informational in Unity Catalog, and the helper adds no constraint, so it does not claim uniqueness.
 
@@ -106,7 +110,7 @@ All live in one public module, `bhom_schema.tables`.
 
 | Helper | Returns | Purpose |
 |---|---|---|
-| `describe(model, fields=None, key="_id")` | `list[ColumnInfo]` | One entry per column the table would have: name, column type, nullable, comment, the Python field it comes from and the decision that produced it (`primitive`, `ref`, `struct`, `json`, `key`). Printed as a table in a notebook, so the user sees the table before creating it. Does not raise for undecided fields; it lists them with the decision `undecided` |
+| `describe(model, fields=None, key="_id")` | `list[ColumnInfo]` | One entry per column the table would have: name, column type, nullable, comment, the Python field it comes from and the decision that produced it (`primitive`, `ref`, `struct`, `json`, `key`, or `skip` for a field with no column). Printed as a table in a notebook, so the user sees the table before creating it. Does not raise for undecided fields; it lists them with the decision `undecided` |
 | `custom_fields(model)` | `dict[str, type]` | The fields that need a decision, with their Python types. For a class-typed field the type is the schema class, so the user knows which other table to create next |
 | `column_type(annotation)` | `str` | The column type of one annotation. Raises `UnmappedType` for a custom one. The building block of the rest |
 
@@ -115,7 +119,7 @@ All live in one public module, `bhom_schema.tables`.
 | Helper | Returns | Purpose |
 |---|---|---|
 | `create_table_sql(model, table, *, fields=None, key="_id", types=None, replace=False)` | `str` | One `CREATE TABLE IF NOT EXISTS table (...) USING DELTA`, with column comments, a table comment (the class summary) and `TBLPROPERTIES ('bhom.type' = 'BH.oM.FixtureAlpha.LineLike', 'bhom.schema_version' = '...')`. `replace=True` gives `CREATE OR REPLACE TABLE`. `types` overrides the column type of a field |
-| `add_columns_sql(model, table, existing, *, fields=None, types=None)` | `str` or `None` | Given the existing column names, the `ALTER TABLE ... ADD COLUMNS (...)` for the ones the class has and the table lacks. For when a new alpha adds a property to a class. `None` when the table is complete |
+| `add_columns_sql(check, table)` | `str` or `None` | Given the `TableCheck` of the table (see [Check an existing table](#check-an-existing-table-against-a-class)), the `ALTER TABLE ... ADD COLUMNS (...)` for its `missing` columns. For when a new alpha adds a property to a class. `None` when nothing is missing. Comparing a class with a table happens in one place, `check_table` |
 
 Primary keys, foreign keys and `CHECK` constraints have no helper. The user creates each table with `create_table_sql`, then adds the constraints with their own `ALTER TABLE ... ADD CONSTRAINT` in Databricks once the referenced tables exist (in Unity Catalog they are informational, so this is documented in the guide, with the `LineLike` / `PointLike` statements as the example). A helper can come later if the same statements keep being written.
 
@@ -123,9 +127,9 @@ Primary keys, foreign keys and `CHECK` constraints have no helper. The user crea
 
 | Helper | Returns | Purpose |
 |---|---|---|
-| `to_row(obj, *, fields=None, key="_id", ids=None)` | `dict` | One object as a dict with the table's column names. Applies the conversions (`UUID` and enums to text, `timedelta` to seconds, `Json` fields to JSON text, `Struct` fields to nested dicts). `ids={"Start": "abc"}` fills the `Ref` columns; the user got those ids from the rows of the other tables. The key is `obj.BHoM_Guid` when the key is that field, otherwise `uuid4().hex` unless `ids` or the call gives one |
+| `to_row(obj, *, fields=None, key="_id", ids=None)` | `dict` | One object as a dict with the table's column names. Applies the conversions (`UUID` and enums to text, `timedelta` to seconds, `Json` fields to JSON text, `Struct` fields to nested dicts). `ids={"Start": "abc"}` fills the `Ref` columns; the user got those ids from the rows of the other tables. The key is `str(obj.BHoM_Guid)` when the key is that field, otherwise `str(uuid4())` unless `ids` gives one (`ids={"_id": ...}`). The user reads the key from the returned dict to fill the `Ref` columns of other tables |
 | `from_row(model, row, *, fields=None, held=None)` | object | The reverse, for one row. `held={"Start": point}` supplies the objects of `Ref` fields, since the helper does not fetch them. A `Ref` field with no entry in `held` keeps its default and `from_row` says so in a warning, not silently |
-| `rows_to_objects(model, rows, *, fields=None, held=None, errors="raise")` | `list` or `(list, list[RowError])` | `from_row` over many rows. `errors="collect"` returns the valid objects and a `RowError(index, key, message)` per bad row, so one bad row in a million does not hide the rest. `held` is `{field: {id: object}}` here |
+| `rows_to_objects(model, rows, *, fields=None, key="_id", held=None, keyed=False, errors="raise")` | `list` or `dict`, or that and `list[RowError]` | `from_row` over many rows. `keyed=True` returns `{key: object}`, which is what `held` of another table needs, since a class such as `PointLike` has no field that keeps its id. `errors="collect"` also returns a `RowError(index, key, message)` per bad row, so one bad row in a million does not hide the rest. `held` is `{field: {id: object}}` here |
 | `ddl_schema(model, *, fields=None, key="_id")` | `str` | The columns as a DDL string for `spark.createDataFrame(rows, schema=...)`, always the same columns `create_table_sql` makes |
 
 ### Check an existing table against a class
@@ -134,7 +138,7 @@ The team will have tables that exist before the helpers do, and tables written b
 
 | Helper | Returns | Purpose |
 |---|---|---|
-| `check_table(model, columns, *, fields=None, key="_id")` | `TableCheck` | `columns` is `{name: type}` from `DESCRIBE TABLE` or `df.dtypes`. Reports `missing` (fields with no column and no default), `extra` (columns the class does not know), `mismatched` (column has another type than the class expects) and `undecided` fields. `TableCheck.ok` and a readable `str()` |
+| `check_table(model, columns, *, fields=None, key="_id", types=None)` | `TableCheck` | `columns` is `{name: type}` from `DESCRIBE TABLE` or `df.dtypes`. Reports `missing` (the `ColumnInfo` of each column the class has and the table lacks; the rows read with the field's default), `extra` (columns the class does not know), `mismatched` (column has another type than the class expects) and `undecided` fields. `TableCheck.ok` and a readable `str()` |
 | `example_row(model, *, fields=None)` | `dict` | A row with the class's defaults, for a quick `INSERT` or `createDataFrame` smoke test |
 
 ### Spark layer (optional)
@@ -144,22 +148,33 @@ Imported separately, `from bhom_schema.tables.spark import ...`, and `pyspark` i
 | Helper | Purpose |
 |---|---|
 | `create_table(spark, model, table, **options)` | `spark.sql(create_table_sql(...))` and return the SQL it ran |
-| `write_objects(spark, objects, table, *, fields=None, key="_id", ids=None)` | `to_row` over the objects, `createDataFrame` with `ddl_schema`, append to the table |
-| `read_objects(spark, model, table, *, fields=None, held=None, where=None, limit=None)` | Query the table (optionally filtered) and run `rows_to_objects` over the rows |
-| `fetch_by_ids(spark, table, ids, *, key="_id", batch=5000)` | The rows of another table by id, in batches. What the user calls to get the `held` objects, with `rows_to_objects` on the result. Walking from one table to another stays a visible step in the user's code |
+| `write_objects(spark, objects, table, *, fields=None, key="_id", ids=None)` | `to_row` over the objects, `createDataFrame` with `ddl_schema`, append to the table. `ids` is a list of `to_row` `ids` dicts in the order of `objects`. Returns the keys of the written rows, in the same order |
+| `read_rows(spark, table, *, where=None, limit=None)` | Query the table (optionally filtered) and return its rows as dicts, before any of them become objects |
+| `read_objects(spark, model, table, *, fields=None, key="_id", held=None, keyed=False, where=None, limit=None)` | `read_rows` then `rows_to_objects`. For a table with no `Ref` fields, or when `held` is already known |
+| `fetch_by_ids(spark, table, ids, *, key="_id", batch=5000)` | The rows of another table by id, in batches. What the user calls to get the `held` objects, with `rows_to_objects(..., keyed=True)` on the result. Walking from one table to another stays a visible step in the user's code |
 
-The user composes the multi-table read themselves, one table at a time:
+The user composes the multi-table write and read themselves, one table at a time:
 
 ```python
-points = read_objects(spark, PointLike, "main.default.PointLike", where="...")
-lines = read_objects(spark, LineLike, "main.default.LineLike", limit=1000,
-                     fields={"Start": Ref("main.default.PointLike"), "End": Ref("main.default.PointLike")},
-                     held={"Start": points_by_id, "End": points_by_id})
+line_fields = {"Start": Ref("main.default.PointLike"), "End": Ref("main.default.PointLike")}
+
+# Write: the points first, then the lines with the keys of their points
+starts = write_objects(spark, [line.Start for line in lines], "main.default.PointLike")
+ends = write_objects(spark, [line.End for line in lines], "main.default.PointLike")
+write_objects(spark, lines, "main.default.LineLike", fields=line_fields,
+              ids=[{"Start": start, "End": end} for start, end in zip(starts, ends)])
+
+# Read: the line rows first, then only the points they point at
+line_rows = read_rows(spark, "main.default.LineLike", limit=1000)
+point_ids = {row["Start_id"] for row in line_rows} | {row["End_id"] for row in line_rows}
+point_rows = fetch_by_ids(spark, "main.default.PointLike", point_ids)
+points = rows_to_objects(PointLike, point_rows, keyed=True)
+lines = rows_to_objects(LineLike, line_rows, fields=line_fields, held={"Start": points, "End": points})
 ```
 
 ## Where the code goes
 
-The generator treats every module under `src/bhom_schema` as a generated class, except `_support`, `__init__.py` and `_version.py`. A new `bhom_schema/tables/` package would be read as schema classes, so `tables` is added to the skip lists in `.ci/generation/py2cs/reader.py` (lines 254, 426, 639) and `ci.py` (line 48), next to `_support`. The public path is `bhom_schema.tables`. It is a handful of lines, with a test that a module under `tables` is never listed as a class.
+The generator treats every module under `src/bhom_schema` as a generated class, except `_support`, `__init__.py` and `_version.py`. A new `bhom_schema/tables/` package would be read as schema classes, so `tables` is added next to `_support` in each list of skipped modules in `.ci/generation/py2cs/reader.py` and `ci.py`. The public path is `bhom_schema.tables`. It is a handful of lines, with a test that a module under `tables` is never listed as a class.
 
 The package stays one wheel. `pydantic` is the only dependency of the core module. `pyspark` is not added to `dependencies`; the Spark layer documents that it needs the Databricks runtime or `pip install pyspark`. Pyright runs on the package, so the new code is typed, and its `import pyspark` goes inside the functions with a `TYPE_CHECKING` stub, because the wheel has no `pyspark` stubs in CI.
 
@@ -167,10 +182,10 @@ The package stays one wheel. `pydantic` is the only dependency of the core modul
 
 Each step is mergeable alone, and the Databricks guide section is rewritten when step 4 lands.
 
-1. **Core mapping and inspection.** `column_type`, `custom_fields`, `describe`, `UnmappedType` with the readable error, the `Ref` / `Struct` / `Json` / `Skip` decisions, the `BASE_SKIPPED` constant, and the generator skip. Tests: one per row of the type mapping above, run against the real fixture classes (`Scalars` covers `datetime`, `UUID`, `Decimal`, `timedelta`, `char`; `Collections` covers lists, sets, dicts, tuples and a list of classes as `Struct`; `Beam` covers enums, `Quantity` and `ClrType('long')`; `LineLike` covers `Ref` and `Struct`).
-2. **DDL.** `create_table_sql`, `add_columns_sql`. Tests compare the SQL text for `LineLike` (once with `Ref`, once with `Struct`), `PointLike`, `Scalars`, `Beam`, and the error text for an undecided field, including a nested one.
-3. **Rows.** `to_row`, `from_row`, `rows_to_objects`, `ddl_schema`, `example_row`. The test that matters most is the round trip: for every fixture class, `from_row(to_row(obj))` equals `obj`, including `Json` and `Struct` fields and the `Ref` ids.
-4. **Checks and Spark layer.** `check_table` with a fake `DESCRIBE` output, then the Spark functions with a stub `spark` that records the SQL. The Databricks notebook in the guide is the only test that needs a real workspace, run by hand: create the tables, write 10 `LineLike` objects, read them back and compare, once with `Ref` and once with `Struct`. The guide also shows adding the primary and foreign keys by hand.
+1. **Core mapping and inspection.** `column_type`, `custom_fields`, `describe`, `UnmappedType` with the readable error, the `Ref` / `Struct` / `Json` / `Skip` decisions, the `BASE_SKIPPED` constant, and the generator skip. Tests: one per row of the type mapping above, run against the real fixture classes (`Scalars` covers `datetime`, `UUID`, `Decimal`, `timedelta`, `char`; `Collections` covers lists, sets, dicts, tuples and a list of classes as `Struct`; `Beam` covers enums, `Quantity` and `ClrType('long')`; `LineLike` covers `Ref` and `Struct`), plus the refusal of a generic class (`Wrapper_1`) and of `Json()` on a `Callable`.
+2. **DDL and checks.** `create_table_sql`, `check_table`, `add_columns_sql`. Tests compare the SQL text for `LineLike` (once with `Ref`, once with `Struct`, both quoting `` `End` ``), `PointLike`, `Scalars`, `Beam` (the unit in the comment of `Span`), the `_bhomVersion` column, and the error text for an undecided field, including a nested one. `check_table` and `add_columns_sql` run on a fake `DESCRIBE` output.
+3. **Rows.** `to_row`, `from_row`, `rows_to_objects`, `ddl_schema`, `example_row`. The test that matters most is the round trip: for every fixture class, `from_row(to_row(obj))` equals `obj`, including `Json` and `Struct` fields and the `Ref` ids. Also a row with a NULL in a non-optional column reads as the default, `keyed=True` gives the generated keys, and `to_row` raises for an `int` outside 32 bits and for a time-zone-aware `datetime`.
+4. **Spark layer.** The Spark functions with a stub `spark` that records the SQL. The Databricks notebook in the guide is the only test that needs a real workspace, run by hand: create the tables, write 10 `LineLike` objects, read them back and compare, once with `Ref` and once with `Struct`. The guide also shows adding the primary and foreign keys by hand.
 
 After every step: `python -m pytest`, `python -m pyright`, `python -m py2cs verify --package src/bhom_schema` (to prove the skip works and nothing in `tables` is taken for a schema class), and a build of the wheel, installed into a clean virtual environment where `from bhom_schema.tables import create_table_sql` works.
 
@@ -190,3 +205,6 @@ After every step: `python -m pytest`, `python -m pyright`, `python -m py2cs veri
 3. **`Color` is custom**, so the user picks a decision for it.
 4. **`Fragments` and `CustomData`** of every `BHoMObject` are custom. The module ships a named constant, `BASE_SKIPPED = {"Fragments": Skip(), "CustomData": Skip()}`, that the user spreads into `fields=` (`fields={**BASE_SKIPPED, "Start": Ref(...)}`), so the choice stays visible in their code and is not made for them.
 5. **`TIMESTAMP_NTZ`** is fine: the guide already needs Databricks Runtime 16 or later for Python 3.12.
+6. **`_bhomVersion`** is a column of every table, named after the JSON alias as every other column follows the BHoM name.
+7. **Generic classes are refused.** A table cannot say which type argument its rows were written with.
+8. **NULL means the default**, so rows written before `add_columns_sql` still read.
