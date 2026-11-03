@@ -17,6 +17,8 @@ from typing import Any
 from py2cs.model import GenericParam, Manifest, MemberInfo, PropertyInfo, TypeInfo
 
 ROOT_PACKAGE = "bhom_schema"
+# The folders of the package that are written by hand, never generated
+HAND_WRITTEN = {"_support", "tables"}
 MODEL_BASES = {"SchemaModel", "BaseModel"}
 ENUM_BASES = {"Enum", "IntEnum", "IntFlag", "Flag", "BHoMEnum", "BHoMFlags"}
 FLAG_BASES = {"IntFlag", "Flag", "BHoMFlags"}
@@ -627,7 +629,7 @@ def read_field(stmt: ast.AnnAssign, converter: Converter) -> PropertyInfo:
     return prop
 
 def read_package(package_root: Path, errors: list[ReadError] | None = None) -> Manifest:
-    """Reads every module under a bhom_schema folder (skipping the hand-written _support package and the generated _version.py) into a manifest keyed by C# name.
+    """Reads every module under a bhom_schema folder (skipping the hand-written _support and tables packages and the generated _version.py) into a manifest keyed by C# name.
 
     Problems go into `errors`, or are raised together as ReadErrors when no list is given. It is the Python side of every py2cs command: manifest, diff, check, align, plan and verify.
     """
@@ -636,7 +638,7 @@ def read_package(package_root: Path, errors: list[ReadError] | None = None) -> M
     manifest: Manifest = {}
     for path in sorted(package_root.rglob("*.py")):
         relative = path.relative_to(package_root).parts
-        if path.name in ("__init__.py", "_version.py") or relative[0] == "_support":
+        if path.name in ("__init__.py", "_version.py") or relative[0] in HAND_WRITTEN:
             continue
         info = read_file(path, package_root, resolver, problems)
         if info is None:

@@ -55,7 +55,7 @@ The mapping is a table in code (`COLUMN_TYPES`), so it is easy to review and to 
 |---|---|---|---|
 | `bool` | `bool` | `BOOLEAN` | |
 | `int` | `int` | `INT` | Python `int` is unbounded, so `to_row` raises for a value outside 32 bits, naming the field, rather than leaving it to `createDataFrame` |
-| `Annotated[int, ClrType('long')]` | `long` | `BIGINT` | `short` is `SMALLINT`, `byte` is `TINYINT` |
+| `Annotated[int, ClrType('long')]` | `long` | `BIGINT` | `short` is `SMALLINT`, `sbyte` is `TINYINT`, `byte` is `SMALLINT` (it goes up to 255, and `TINYINT` stops at 127), `ushort` is `INT`, `uint` is `BIGINT`, `ulong` is `DECIMAL(20,0)`. The element type of `long[]` or `List<long>` counts the same way |
 | `float` | `double` | `DOUBLE` | |
 | `Annotated[float, ClrType('float')]` | `float` | `FLOAT` | |
 | `str` | `string` | `STRING` | |
@@ -100,7 +100,7 @@ A table needs an id for other tables to point at. Two cases:
 | `Json()` | `<Field> STRING`, the JSON the schema writes | validated back into the field's type | A one-off or deeply nested value that does not deserve a table: `Any`, `CustomData`, a tuple |
 | `Skip()` | none | the field keeps its default | `Fragments`, or anything the table does not need |
 
-`Struct` maps the nested class by the same rules as a table: its primitive fields are automatic, and its own custom-typed fields need decisions, given as `Struct(fields={"Inner": Struct()})`. An undecided nested field raises the same error, naming the path (`Start.Inner`). `Struct` also accepts a list of classes (`Collections.Points`), which gives `ARRAY<STRUCT<...>>`. `Ref` does not accept a list; a one-to-many link through a table of its own is something the user builds themselves (see [Not in scope](#not-in-scope)).
+`Struct` maps the nested class by the same rules as a table: its primitive fields are automatic, and its own custom-typed fields need decisions, given as `Struct(fields={"Inner": Struct()})`. An undecided nested field raises the same error, naming the path (`Start.Inner`). The `_bhomVersion` of the nested class is left out of the struct: the version is kept once per row, in the table. A class that would nest itself (`CycleA` holding `CycleB` holding `CycleA`) is refused, naming the cycle. `Struct` also accepts a list of classes (`Collections.Points`), which gives `ARRAY<STRUCT<...>>`. `Ref` does not accept a list; a one-to-many link through a table of its own is something the user builds themselves (see [Not in scope](#not-in-scope)).
 
 ## The helpers
 
