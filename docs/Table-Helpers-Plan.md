@@ -143,7 +143,7 @@ The team will have tables that exist before the helpers do, and tables written b
 
 ### Spark layer (optional)
 
-Imported separately, `from bhom_schema.tables.spark import ...`, and `pyspark` is imported inside the functions, so the core module never needs it. Databricks always has it.
+Imported separately, `from bhom_schema.tables.spark import ...`. The functions take the `SparkSession` the notebook already has and import nothing from `pyspark` (the conditions are SQL text, the rows are dicts and a DDL string), so the package needs no Spark installed and the functions are tested with a stand-in session.
 
 | Helper | Purpose |
 |---|---|
@@ -176,7 +176,7 @@ lines = rows_to_objects(LineLike, line_rows, fields=line_fields, held={"Start": 
 
 The generator treats every module under `src/bhom_schema` as a generated class, except `_support`, `__init__.py` and `_version.py`. A new `bhom_schema/tables/` package would be read as schema classes, so `tables` is added next to `_support` in each list of skipped modules in `.ci/generation/py2cs/reader.py` and `ci.py`. The public path is `bhom_schema.tables`. It is a handful of lines, with a test that a module under `tables` is never listed as a class.
 
-The package stays one wheel. `pydantic` is the only dependency of the core module. `pyspark` is not added to `dependencies`; the Spark layer documents that it needs the Databricks runtime or `pip install pyspark`. Pyright runs on the package, so the new code is typed, and its `import pyspark` goes inside the functions with a `TYPE_CHECKING` stub, because the wheel has no `pyspark` stubs in CI.
+The package stays one wheel. `pydantic` is the only dependency of the core module. `pyspark` is not added to `dependencies`, and no module imports it: the Spark layer only calls methods of the session it is given. Pyright runs on the package, so the new code is typed; the session is typed `Any`.
 
 ## Build order
 
