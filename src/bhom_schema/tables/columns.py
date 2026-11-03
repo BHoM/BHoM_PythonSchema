@@ -267,6 +267,9 @@ def struct_type(model: type[BaseModel], decisions: Mapping[str, Decision] | None
             continue
 
         entry = column_for(name, info, decisions.get(name), f"{path}.{name}", (*stack, model))
+        if entry.decision == "ref":
+            raise ValueError(f"{path}.{name} is a Ref inside a Struct, which is an id that nothing could follow; use Struct(), Json() or Skip() for it")
+
         missing.update(entry.undecided)
         if entry.type is not None:
             parts.append(f"{quote(entry.name)}: {entry.type}")
