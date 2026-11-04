@@ -119,7 +119,8 @@ def build_entries(model: type[BaseModel], decisions: Mapping[str, Decision], pat
 
         entry = Entry(name, column.name, column.decision, info)
         if column.decision == "json":
-            entry.adapter = TypeAdapter(info.annotation)
+            annotation: Any = info.annotation
+            entry.adapter = TypeAdapter(annotation)
         elif column.decision == "struct" and isinstance(decision, Struct):
             shape = shape_of(info.annotation)
             held: Any = bare(info.annotation)[0]
