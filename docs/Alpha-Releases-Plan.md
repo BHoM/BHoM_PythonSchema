@@ -167,7 +167,9 @@ The package currently has no `py.typed` marker. Pylance still reads the types fr
 
 ## Trying the package in a Databricks notebook
 
-Same example as in VS Code (`LineLike`, its `bool` property `Infinite`), then a table made from the class and read back into objects. Decided: the team's tables follow the BHoM field names, so a column is a property of the class and a row validates straight into an object.
+Same example as in VS Code (`LineLike`, its `bool` property `Infinite`), then tables made from the classes with the helpers of `bhom_schema.tables` (see [Table-Helpers-Plan.md](Table-Helpers-Plan.md)) and read back into objects. Decided: the team's tables follow the BHoM field names, so a column is a property of the class and a row validates straight into an object. You decide which tables exist and how they link; the helpers do the mechanical work for one class at a time.
+
+The helpers are in the package from the first alpha built after they were merged. Check with `from bhom_schema.tables import describe` in step 4; if it fails, the alpha you installed is older.
 
 ### Notebook steps
 
@@ -196,118 +198,162 @@ Same example as in VS Code (`LineLike`, its `bool` property `Infinite`), then a 
 
    Expected: the cell fails with `ValidationError: 1 validation error for LineLike`, `Infinite`, *Input should be a valid boolean, unable to interpret input*. That error is the pass criterion in a notebook. The red underline of VS Code is not promised here: the notebook editor does not run Pylance. To see the underline against Databricks, use the same `.venv` project as in VS Code, or the Databricks extension for VS Code with Databricks Connect.
    Then change `"banana"` to `True` and run again: it prints `True`.
-4. **Cell 4, the table helper.** It derives the column definitions from the class, so the table and the class cannot drift apart. It is plain Python (no Spark needed) and is a good candidate to move into the package later as `bhom_schema.tables`.
+4. **Cell 4, which fields need a decision.** A field with a primitive type (`bool`, `int`, `float`, `str`, dates, enums, lists and dicts of those) gets a column by itself. Any other field is never mapped silently:
 
    ```python
-   import types
-   import typing
-   from pydantic import BaseModel
+   from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
+   from bhom_schema.tables import Json, Ref, Skip, Struct, check_table, custom_fields, describe
 
-   SCALARS = {bool: "BOOLEAN", int: "BIGINT", float: "DOUBLE", str: "STRING"}
-   # bhom_version is the optional _bhomVersion of the JSON: not a column
-   SKIPPED = {"bhom_version"}
+   print(custom_fields(LineLike))
 
-   def spark_type(annotation):
-       """The Spark SQL type of a property: nested classes become STRUCT, lists ARRAY, Optional is just nullable."""
-       origin = typing.get_origin(annotation)
-       if origin in (typing.Union, types.UnionType):
-           options = [a for a in typing.get_args(annotation) if a is not type(None)]
-           if len(options) != 1:
-               raise NotImplementedError(f"{annotation} is a choice between types; it has no single column type")
-           return spark_type(options[0])
-       if origin is list:
-           return f"ARRAY<{spark_type(typing.get_args(annotation)[0])}>"
-       if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-           return "STRUCT<" + ", ".join(f"`{name}`: {spark_type(field.annotation)}" for name, field in annotation.model_fields.items() if name not in SKIPPED) + ">"
-       if annotation in SCALARS:
-           return SCALARS[annotation]
-       raise NotImplementedError(f"{annotation} has no column type yet (enums, ids and interface-typed properties are not supported)")
-
-   def columns(model):
-       """The column list of a class, as Spark SQL DDL."""
-       return ", ".join(f"`{name}` {spark_type(field.annotation)}" for name, field in model.model_fields.items() if name not in SKIPPED)
-
-   def create_table_sql(model, table):
-       """The CREATE TABLE statement for a class."""
-       return f"CREATE TABLE IF NOT EXISTS {table} ({columns(model)}) USING DELTA"
-
-   def plain(value):
-       """Takes the type tags (_t, _bhomVersion) out of a dumped object: the table holds the properties only."""
-       if isinstance(value, dict):
-           return {key: plain(item) for key, item in value.items() if key not in ("_t", "_bhomVersion")}
-       if isinstance(value, list):
-           return [plain(item) for item in value]
-       return value
-
-   def to_rows(objects):
-       """Objects to rows for spark.createDataFrame."""
-       return [plain(item.model_dump()) for item in objects]
-
-   def from_rows(model, rows):
-       """Spark rows to objects of the class; every row is validated."""
-       return [model.model_validate(row.asDict(recursive=True)) for row in rows]
+   for column in describe(LineLike):
+       print(column.name, column.type, column.decision)
    ```
 
-5. **Cell 5, make the table.** Put your own catalog and schema in the name (you need *USE SCHEMA* and *CREATE TABLE* on it):
+   Expected: `Start` and `End`, both `PointLike`. `describe` shows the table that would be made: `Start` and `End` have no type and the decision `undecided`, and the other columns (`_id`, `_bhomVersion`, `Infinite`, `Label`) are mapped. Creating the table now would fail with an error that names the two fields and the four choices:
+
+   | Decision | What is stored |
+   |---|---|
+   | `Ref(table)` | `<Field>_id`, the id of a row of another table (a table per class, linked by id) |
+   | `Struct()` | a `STRUCT` column holding the object's own fields (and an `ARRAY` of them for a list of classes) |
+   | `Json()` | the object as JSON text in a `STRING` column |
+   | `Skip()` | nothing; a row that is read keeps the default of the field |
+5. **Cell 5, make the tables, one table per class.** Put your own catalog and schema in the prefix (you need *USE SCHEMA* and *CREATE TABLE* on it). The line stores the id of its two points, and the points are rows of the `PointLike` table:
 
    ```python
-   TABLE = "main.default.line_like"
+   from bhom_schema.tables import rows_to_objects
+   from bhom_schema.tables.spark import create_table, fetch_by_ids, read_objects, read_rows, write_objects
 
-   sql = create_table_sql(LineLike, TABLE)
-   print(sql)
-   spark.sql(sql)
+   PREFIX = "student_area.vcl"
+   POINTS = f"{PREFIX}.PointLike"
+   LINES = f"{PREFIX}.LineLike"
+   LINE_FIELDS = {"Start": Ref(POINTS), "End": Ref(POINTS)}
+
+   print(create_table(spark, PointLike, POINTS))
+   print(create_table(spark, LineLike, LINES, fields=LINE_FIELDS))
    ```
 
-   The statement printed is the SQL that makes the same table, so it can be pasted into a SQL warehouse, a pipeline or a migration script:
+   Each call runs the statement and returns it, so it can also be pasted into a SQL warehouse, a pipeline or a migration script. Expect:
 
    ```sql
-   CREATE TABLE IF NOT EXISTS main.default.line_like (`Start` STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE>, `End` STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE>, `Infinite` BOOLEAN, `Label` STRING) USING DELTA
+   CREATE TABLE IF NOT EXISTS `student_area`.`vcl`.`PointLike` (
+     `_id` STRING NOT NULL COMMENT 'Key of the row.',
+     `_bhomVersion` STRING COMMENT 'Optional version of BHoM used as part of automatic versioning and schema upgrades.',
+     `X` DOUBLE,
+     `Y` DOUBLE,
+     `Z` DOUBLE
+   )
+   USING DELTA
+   TBLPROPERTIES ('bhom.type' = 'BH.oM.FixtureAlpha.PointLike', 'bhom.schema_version' = '...')
    ```
 
-   `PointLike` is a nested class, so `Start` and `End` are one `STRUCT` column each. Check it with `display(spark.table(TABLE))` or `DESCRIBE TABLE main.default.line_like`.
-6. **Cell 6, fill it from objects** (a few rows; the schema comes from the table's own DDL):
+   and the `LineLike` statement with `Start_id`, `End_id`, `Infinite` and `Label`, and the class summary as the table comment. Check with `display(spark.table(LINES))` or `DESCRIBE TABLE`.
+6. **Cell 6, link the tables by hand (optional).** The helpers do not write constraints; you decide whether to add them. Unity Catalog records them as informational (it does not enforce them), which documents the link for readers and tools:
 
    ```python
-   lines = [LineLike(Infinite=bool(i % 2), Label=f"line-{i}") for i in range(10)]
-   spark.createDataFrame(to_rows(lines), schema=columns(LineLike)).write.mode("append").saveAsTable(TABLE)
+   spark.sql(f"ALTER TABLE {POINTS} ADD CONSTRAINT point_pk PRIMARY KEY (`_id`)")
+   spark.sql(f"ALTER TABLE {LINES} ADD CONSTRAINT line_pk PRIMARY KEY (`_id`)")
+   spark.sql(f"ALTER TABLE {LINES} ADD CONSTRAINT line_start_fk FOREIGN KEY (`Start_id`) REFERENCES {POINTS} (`_id`)")
+   spark.sql(f"ALTER TABLE {LINES} ADD CONSTRAINT line_end_fk FOREIGN KEY (`End_id`) REFERENCES {POINTS} (`_id`)")
    ```
 
-   A wrong value fails at `LineLike(...)`, before anything is written, so a bad object never reaches the table.
-7. **Cell 7, fill it at scale.** A large set is built in Spark itself, never as Python objects. The columns must be in the same order and of the same types as the class:
+   A primary key column must be `NOT NULL`, and `_id` is.
+7. **Cell 7, fill them from objects** (a few rows). The points are real `PointLike` objects, so each one is validated. `write_objects` writes one class into one table and returns the `_id` of each row it wrote, which is what the line rows need:
 
    ```python
-   spark.range(1_000_000).selectExpr(
-       "named_struct('X', cast(id as double), 'Y', 0D, 'Z', 0D) as Start",
-       "named_struct('X', cast(id as double) + 1D, 'Y', 0D, 'Z', 0D) as End",
-       "false as Infinite",
-       "concat('line-', id) as Label",
-   ).write.insertInto(TABLE)
+   objects = [
+       LineLike(Start=PointLike(X=i), End=PointLike(X=i + 1, Y=2), Infinite=bool(i % 2), Label=f"line-{i}")
+       for i in range(10)
+   ]
 
-   print(spark.table(TABLE).count())
+   starts = write_objects(spark, [line.Start for line in objects], POINTS)
+   ends = write_objects(spark, [line.End for line in objects], POINTS)
+   write_objects(spark, objects, LINES, fields=LINE_FIELDS, ids=[{"Start": start, "End": end} for start, end in zip(starts, ends)])
+
+   print(spark.table(POINTS).count(), spark.table(LINES).count())
    ```
 
-8. **Cell 8, read the table into a list of `LineLike`:**
+   A wrong value, such as `PointLike(X="north")`, fails at the constructor, and a value the column cannot hold (an integer that does not fit its `INT`, a `datetime` with a time zone) raises before anything is written, naming the field. Expect `20 10`: two points per line.
+8. **Cell 8, fill them at scale.** A large set is built in Spark itself, never as Python objects. The ids must be the same in the point rows and the line rows, so they are made from the row number (a random id such as `uuid()` would be different each time the query runs). The batch text keeps the ids of two runs apart:
 
    ```python
-   rows = spark.table(TABLE).limit(1000).collect()
-   lines = from_rows(LineLike, rows)
+   import uuid
 
-   print(len(lines), type(lines[0]).__name__)
-   print(lines[0].Start.X, lines[0].Infinite)
+   batch = uuid.uuid4().hex[:8]
+   base = spark.range(1_000_000).selectExpr(
+       "id",
+       f"concat('{batch}-start-', id) as start_id",
+       f"concat('{batch}-end-', id) as end_id",
+   )
+   no_version = "cast(null as string) as _bhomVersion"
+
+   base.selectExpr("start_id as _id", no_version, "cast(id as double) as X", "0D as Y", "0D as Z").write.insertInto(POINTS)
+   base.selectExpr("end_id as _id", no_version, "cast(id as double) + 1D as X", "0D as Y", "0D as Z").write.insertInto(POINTS)
+   base.selectExpr(f"concat('{batch}-line-', id) as _id", no_version, "start_id as Start_id", "end_id as End_id", "false as Infinite", "concat('line-', id) as Label").write.insertInto(LINES)
+
+   print(spark.table(POINTS).count(), spark.table(LINES).count())
    ```
 
-   With columns that follow the class, every row validates; the first line prints as a `LineLike` with a `PointLike` in `Start`. A column of the wrong type, or a null in a property that is not optional, raises the same `ValidationError` as in step 3, naming the property. Reading the whole table this way pulls every row onto the driver, so for millions of rows take a slice (`limit`, a `WHERE` on a key) or walk the table with `spark.table(TABLE).toLocalIterator()` instead of `collect()`.
-9. **Clean up** when done: `spark.sql(f"DROP TABLE IF EXISTS {TABLE}")`.
+   The columns of each query follow the order of the table (`insertInto` goes by position). Expect two million more points and one million more lines.
+9. **Cell 9, read the tables into a list of `LineLike`.** Reading is one table at a time, so the step from the lines to their points stays visible: read the line rows, fetch only the point rows they name, build the points keyed by id, then build the lines with those points:
 
-Expected results to record: the Python version, the installed package version (`%pip show bhom-schema`), the `ValidationError` text from step 3, the printed `CREATE TABLE` statement, the row count after step 7, and the output of step 8.
+   ```python
+   line_rows = read_rows(spark, LINES, limit=1000)
+   point_ids = {row["Start_id"] for row in line_rows} | {row["End_id"] for row in line_rows}
+   points = rows_to_objects(PointLike, fetch_by_ids(spark, POINTS, point_ids), keyed=True)
+   found = rows_to_objects(LineLike, line_rows, fields=LINE_FIELDS, held={"Start": points, "End": points})
 
-Not yet tested in a workspace: the Spark parts (steps 5 to 9) have not been run on Databricks. The helper's SQL, its rows and the read back into objects were checked in plain Python against `LineLike`.
+   print(len(found), type(found[0]).__name__)
+   print(type(found[0].Start).__name__, isinstance(found[0].End, PointLike))
+   print(found[0].Start.X, found[0].Infinite)
+   ```
 
-### What the helper does not cover (follow-up plan)
+   Every row is validated, so a column of the wrong type raises the same `ValidationError` as in step 3. A NULL in a column reads as the default of the property. `Start` and `End` are real `PointLike` objects (the second print shows `PointLike True`), not dictionaries. To keep the bad rows instead of stopping at the first, pass `errors="collect"` to `rows_to_objects`: it then returns the objects and a `RowError` per bad row.
+   `read_rows(..., limit=...)` and `where="..."` take a slice, because the rows are collected to the notebook; read a table with millions of rows in batches, not in one go.
+10. **Cell 10, the same line with the points inside the row (`Struct`).** If the points are only ever stored inside their line, one table is enough, and the decision for the two fields is the only difference:
 
-The helper handles the simple shapes: `bool`, `int`, `float`, `str`, nested classes, lists, and optional properties. Every other generated class meets one of the things it refuses with a clear error: enums (a column of the name, as `SupportKind`), ids (`BHoM_Guid`, which `Beam` has through `BHoMObject`), interface-typed properties (they need `_t` to pick the class, so a `_t` field in the struct), and quantities. The follow-up plan, once this works on a workspace:
+    ```python
+    LINES_STRUCT = f"{PREFIX}.LineLikeStruct"
+    STRUCT_FIELDS = {"Start": Struct(), "End": Struct()}
 
-- Move the helper into the package as `bhom_schema.tables` with `pyspark` as an optional extra, and cover those types.
-- Generate the `CREATE TABLE` statements for a whole namespace at once, so a catalog schema can be built from the package in one step.
-- Validate a big table in parallel (`mapInPandas`) and report the invalid rows instead of failing on the first.
-- Write a table's rows back from objects with `_t` where the property is an interface.
+    print(create_table(spark, LineLike, LINES_STRUCT, fields=STRUCT_FIELDS))
+    write_objects(spark, objects, LINES_STRUCT, fields=STRUCT_FIELDS)
+
+    back = read_objects(spark, LineLike, LINES_STRUCT, fields=STRUCT_FIELDS)
+    print(len(back), back[0].Start)
+    print(sorted(line.Label for line in back) == sorted(line.Label for line in objects))
+    ```
+
+    Expect the `Start` column to be `STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE>`, `10`, a `PointLike` and `True`.
+11. **Cell 11, will this table read as this class?** For a table that already exists (made by hand, or by an older alpha), compare its columns with the class before reading anything:
+
+    ```python
+    columns = {}
+    for row in spark.sql(f"DESCRIBE TABLE {LINES}").collect():
+        if not row.col_name or row.col_name.startswith("#"):
+            break
+
+        columns[row.col_name] = row.data_type
+
+    check = check_table(LineLike, columns, fields=LINE_FIELDS)
+    print(check.ok)
+    print(check)
+    ```
+
+    Expect `True` and `the table matches the class`. When a newer alpha adds a property to a class, the check lists the new column as missing, and `add_columns_sql(check, LINES)` gives the `ALTER TABLE ... ADD COLUMNS` for it (run it yourself); rows written before read the new property as its default.
+12. **Clean up** when done: `spark.sql(f"DROP TABLE IF EXISTS {POINTS}")` and the same for `LINES` and `LINES_STRUCT`.
+
+Expected results to record: the Python version, the installed package version (`%pip show bhom-schema`), the `ValidationError` text from step 3, the output of step 4, the printed `CREATE TABLE` statements, the row counts after step 7 (`20 10`) and after step 8, the output of steps 9 and 10, and the output of step 11.
+
+Not yet tested in a workspace: the Spark steps (5 to 11) have not been run on Databricks. The helpers are tested in plain Python against a stand-in `SparkSession` that keeps tables in memory (the SQL text, the rows, the DDL schema, the writes, the reads and the round trip of `LineLike` through both layouts). What that cannot show is whether Databricks accepts the statements and the `createDataFrame` rows, and whether the informational constraints of step 6 are accepted; this notebook is that check.
+
+### What the helpers do not cover
+
+- A generic class (`Wrapper_1`) is refused: a table cannot record which type its rows were written with.
+- A field typed with an interface can be stored as `Json()` (the JSON carries `_t`, so it reads back as the right class) or as a `Ref` to a table of your choice, but not as a `Struct`.
+- `Color` and other classes that are not generated are custom fields like any other, so they need a decision.
+- A list of classes is an `ARRAY` of `STRUCT` (`Struct()`) or JSON text (`Json()`); a table of its own for the elements is built by you from `create_table` and the ids of the rows.
+- Primary keys, foreign keys and `CHECK` constraints are written by you (step 6), and so are merges and upserts.
+- A table is named by you, so two classes with the same name in different assemblies do not collide, but the name is not checked against the class: `check_table` is how to find a table that does not match.
+- Whole-table reads are collected to the notebook. A join-based read that fills `held` in Spark, and validating a big table in parallel (`mapInPandas`), are follow-ups.
+- Adding `py.typed` to the package, so every tool treats the helpers as typed.

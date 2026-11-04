@@ -67,7 +67,7 @@ namespace PythonSchemaGeneration.Emission
 
         /***************************************************/
 
-        [Description("Lists the assembly folders of the package that this run did not generate: folders of the package root, other than the support and hidden ones, that " +
+        [Description("Lists the assembly folders of the package that this run did not generate: folders of the package root, other than the support, tables and hidden ones, that " +
             "no rendered type belongs to. With repos (a run for some repositories) only the folders whose Python files name one of those repositories count, so the " +
             "folders of other repositories are left alone. Generator calls it after a full run, so a failed build of an assembly is noticed instead of leaving its old files behind.")]
         public static List<string> MissingAssemblyFolders(string packageRoot, IEnumerable<RenderedType> rendered, IEnumerable<string> repos)
@@ -79,7 +79,7 @@ namespace PythonSchemaGeneration.Emission
 
             foreach (string folder in Directory.GetDirectories(packageRoot).Select(Path.GetFileName).OrderBy(name => name, StringComparer.Ordinal))
             {
-                if (folder.StartsWith("_") || folder.StartsWith(".") || generated.Contains(folder))
+                if (folder.StartsWith("_") || folder.StartsWith(".") || folder == "tables" || generated.Contains(folder))
                     continue;
 
                 if (repos != null && !repos.Contains(RepoOfFolder(Path.Combine(packageRoot, folder)), StringComparer.OrdinalIgnoreCase))
