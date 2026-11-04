@@ -50,7 +50,6 @@ def element_markers(clr: str | None) -> list[object]:
 
 def to_cell(value: Any, annotation: Any, markers: list[object], path: str) -> Any:
     """Turns the value of a primitive field into what its column holds: UUIDs and enums become text, a timedelta becomes seconds, collections convert element by element.
-
     Raises ValueError for an integer that does not fit its column and for a datetime with a time zone, naming the field.
     """
     if value is None:
