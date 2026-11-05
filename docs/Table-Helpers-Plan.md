@@ -28,13 +28,13 @@ custom_fields(LineLike)
 # 2. Make the decision, get the SQL
 sql = create_table_sql(
     LineLike,
-    "main.default.LineLike",
-    fields={"Start": Ref("main.default.PointLike"), "End": Ref("main.default.PointLike")},
+    "student_area.vcl.LineLike",
+    fields={"Start": Ref("student_area.vcl.PointLike"), "End": Ref("student_area.vcl.PointLike")},
 )
 spark.sql(sql)
 ```
 
-Before step 2 is answered, `create_table_sql(LineLike, "main.default.LineLike")` raises:
+Before step 2 is answered, `create_table_sql(LineLike, "student_area.vcl.LineLike")` raises:
 
 ```
 LineLike has 2 fields of a custom type, so they have no column until you decide how to store them:
@@ -156,18 +156,18 @@ Imported separately, `from bhom_schema.tables.spark import ...`. The functions t
 The user composes the multi-table write and read themselves, one table at a time:
 
 ```python
-line_fields = {"Start": Ref("main.default.PointLike"), "End": Ref("main.default.PointLike")}
+line_fields = {"Start": Ref("student_area.vcl.PointLike"), "End": Ref("student_area.vcl.PointLike")}
 
 # Write: the points first, then the lines with the keys of their points
-starts = write_objects(spark, [line.Start for line in lines], "main.default.PointLike")
-ends = write_objects(spark, [line.End for line in lines], "main.default.PointLike")
-write_objects(spark, lines, "main.default.LineLike", fields=line_fields,
+starts = write_objects(spark, [line.Start for line in lines], "student_area.vcl.PointLike")
+ends = write_objects(spark, [line.End for line in lines], "student_area.vcl.PointLike")
+write_objects(spark, lines, "student_area.vcl.LineLike", fields=line_fields,
               ids=[{"Start": start, "End": end} for start, end in zip(starts, ends)])
 
 # Read: the line rows first, then only the points they point at
-line_rows = read_rows(spark, "main.default.LineLike", limit=1000)
+line_rows = read_rows(spark, "student_area.vcl.LineLike", limit=1000)
 point_ids = {row["Start_id"] for row in line_rows} | {row["End_id"] for row in line_rows}
-point_rows = fetch_by_ids(spark, "main.default.PointLike", point_ids)
+point_rows = fetch_by_ids(spark, "student_area.vcl.PointLike", point_ids)
 points = rows_to_objects(PointLike, point_rows, keyed=True)
 lines = rows_to_objects(LineLike, line_rows, fields=line_fields, held={"Start": points, "End": points})
 ```
@@ -193,15 +193,15 @@ After every step: `python -m pytest`, `python -m pyright`, `python -m py2cs veri
 
 The unit tests cover every helper, but only against a stand-in for Spark. This procedure checks them in a real Databricks notebook, one cell per block, in order. Steps 2 to 4 need no tables; steps 5 and 6 create and fill two real tables; steps 7 and 8 read them back; step 9 checks enum members. Anything other than the expected result is a bug to report, with the statement and the error text.
 
-Every cell below assumes this first cell has run (change `main.default` to a catalog and schema you may write to):
+Every cell below assumes this first cell has run (change `student_area.vcl` to a catalog and schema you may write to):
 
 ```python
 from bhom_schema.FixtureAlpha_oM.LineLike import LineLike
 from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
 from bhom_schema.tables import *
 
-POINTS = "main.default.PointLike"
-LINES = "main.default.LineLike"
+POINTS = "student_area.vcl.PointLike"
+LINES = "student_area.vcl.LineLike"
 REFS = {"Start": Ref(POINTS), "End": Ref(POINTS)}
 ```
 
@@ -310,6 +310,19 @@ rebuilt = from_row(LineLike, stored, fields=REFS, held={"Start": points[stored["
 print(rebuilt)
 ```
 
+What each line does:
+
+1. `spark.createDataFrame([row], schema=ddl_schema(LineLike, fields=REFS)).write.mode("append").saveAsTable(LINES)` writes the `row` dict from `to_row` into the `LineLike` table.
+   - `ddl_schema(LineLike, fields=REFS)` gives the column names and types of the table (`` `_id` STRING NOT NULL, ..., `Start_id` STRING, ... ``), so Spark does not guess the types from the values.
+   - `createDataFrame([row], schema=...)` builds a one-row DataFrame from the dict.
+   - `.write.mode("append")` adds the row and keeps the existing ones; the default mode would fail because the table exists.
+   - `.saveAsTable(LINES)` writes it to the table by name. This is what `write_objects` does for many objects. It proves that Spark accepts what `to_row` produces.
+2. `print(spark.table(LINES).count())` counts the rows of the table, to see that the row was added.
+3. `points = {r["_id"]: from_row(PointLike, r.asDict()) for r in spark.table(POINTS).collect()}` reads every row of the points table into Python (`collect()`), turns each row into a dict (`asDict()`) and then into a `PointLike` (`from_row`). The result maps each point's `_id` to its object, which is what a `Ref` column holds.
+4. `stored = spark.table(LINES).where("`_id` = 'l1'").collect()[0].asDict()` reads the one line row with the key `l1` and turns it into a dict. It holds `Start_id` and `End_id`, the keys of the two points, not the points.
+5. `rebuilt = from_row(LineLike, stored, fields=REFS, held={...})` makes the `LineLike` from that dict. `fields=REFS` says that `Start` and `End` are stored as ids. `held` gives the objects that those ids point at, looked up in `points` by `stored["Start_id"]` and `stored["End_id"]`. `from_row` cannot fetch a point itself, because the user decides where the other table is.
+6. `print(rebuilt)` shows the object, to check that it matches the line that was stored.
+
 Expect `3` (the written row is the third), then `LineLike` with `Start` at `X=1.0`, `End` at `X=2.0`, `Infinite` `False` and `Label` `axis`. Without `held`, `from_row` warns that `Start` keeps its default.
 
 ### 8. `rows_to_objects`
@@ -337,7 +350,7 @@ Expect `3`, then one line per row with its label and the `X` of its two points (
 ```python
 from bhom_schema.FixtureAlpha_oM.Beam import Beam
 
-BEAMS = "main.default.Beam"
+BEAMS = "student_area.vcl.Beam"
 BEAM_FIELDS = {**BASE_SKIPPED, "Start": Struct()}
 
 # a. A wrong value set in Python is flagged where it is set
