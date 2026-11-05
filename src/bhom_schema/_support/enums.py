@@ -6,6 +6,7 @@ BHoM writes an enum as its name, except at top level or in an `object` property,
 
 from __future__ import annotations
 
+import difflib
 from enum import Enum, IntFlag
 from typing import Any
 
@@ -42,6 +43,29 @@ class NamedMembers:
         return ", ".join(parts) if parts else str(value)
 
     @classmethod
+    def member_help(cls, value: str) -> str:
+        """Lists the member names, and when `value` is close to one of them (a different case, a typo) adds "Did you mean ...?".
+
+        Flags enums add that names are combined with ", ". The text goes at the end of every refusal of a value.
+        """
+        names = list(cls.bhom_members())
+        text = f"Members: {', '.join(names)}."
+        lowered = {name.lower(): name for name in names}
+        close = lowered.get(value.lower()) or next(iter(difflib.get_close_matches(value, names, n=1)), None)
+        if value and close:
+            text += f" Did you mean {close}?"
+
+        if issubclass(cls, IntFlag):
+            text += " Combine names with ', '."
+
+        return text
+
+    @classmethod
+    def refusal(cls, value: str, reason: str) -> PydanticCustomError:
+        """Builds the error for a value that is not accepted: `<value> <reason> <enum>.`, then the members and the closest name."""
+        return PydanticCustomError("enum_value", "{value} {reason} {enum}. {members}", {"value": value, "reason": reason, "enum": cls.__name__, "members": cls.member_help(value)})
+
+    @classmethod
     def from_bhom(cls, value: Any) -> Any:
         """Reads a member from what BHoM JSON holds: a member name, "A, B" for combined flags, BHoM's object form, a number, or a member itself.
 
@@ -54,24 +78,34 @@ class NamedMembers:
             return cls.from_bhom(value["Value"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
 
         if isinstance(value, bool):
-            raise PydanticCustomError("enum_value", "{value} is not a value of {enum}", {"value": str(value), "enum": cls.__name__})
+            raise cls.refusal(str(value), "is not a value of")
 
         if isinstance(value, int):
+            if issubclass(cls, IntFlag):
+                defined = 0
+                for member in cls.bhom_members().values():
+                    defined |= member.value
+
+                if value & ~defined:
+                    raise cls.refusal(str(value), "has bits that no member defines in")
+
+                return cls(value)  # pyright: ignore[reportCallIssue]
+
             try:
                 return cls(value)  # pyright: ignore[reportCallIssue]
             except ValueError:
-                raise PydanticCustomError("enum_value", "{value} is not a value of {enum}", {"value": str(value), "enum": cls.__name__}) from None
+                raise cls.refusal(str(value), "is not a value of") from None
 
         if isinstance(value, str):
             members = cls.bhom_members()
             tokens = [part.strip() for part in value.split(",")]
             if len(tokens) > 1 and not issubclass(cls, IntFlag):
-                raise PydanticCustomError("enum_value", "{value} names several members, and {enum} is not a flags enum", {"value": value, "enum": cls.__name__})
+                raise PydanticCustomError("enum_value", "{value} names several members, and {enum} is not a flags enum. {members}", {"value": value, "enum": cls.__name__, "members": cls.member_help("")})
 
             result: Any = None
             for token in tokens:
                 if token not in members:
-                    raise PydanticCustomError("enum_value", "{value} is not a member of {enum}", {"value": token, "enum": cls.__name__})
+                    raise cls.refusal(token, "is not a member of")
 
                 result = members[token] if result is None else result | members[token]
 

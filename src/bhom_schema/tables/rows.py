@@ -10,6 +10,7 @@ import typing
 import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import Enum
 from datetime import datetime, timedelta
 from typing import Any, Literal, overload
 from uuid import UUID, uuid4
@@ -85,6 +86,10 @@ def to_cell(value: Any, annotation: Any, markers: list[object], path: str) -> An
 
     if isinstance(value, datetime) and value.tzinfo is not None:
         raise ValueError(f"{path} is a datetime with a time zone, but BHoM DateTimes have none and the column is TIMESTAMP_NTZ; pass one without tzinfo")
+
+    if isinstance(kind, type) and issubclass(kind, Enum) and not isinstance(value, kind):
+        members: Mapping[str, Any] = getattr(kind, "bhom_members", lambda: {member.name: member for member in kind})()
+        raise ValueError(f"{path} is {value!r}, which is not a member of {kind.__name__} ({', '.join(members)})")
 
     name = getattr(value, "bhom_name", None)
     if callable(name):
