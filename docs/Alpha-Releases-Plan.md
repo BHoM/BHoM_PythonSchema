@@ -137,6 +137,14 @@ The example class is `LineLike` of the test namespace `FixtureAlpha_oM`; its `In
 
    `--pre` is what picks the alpha. The extra index is where `pydantic` comes from. Once the package is on PyPI this is `pip install --pre bhom-schema`, and without `--pre` you get the beta.
    Check with `pip show bhom-schema`: the version should look like `10.1.0a2611031430`.
+
+   **Getting a newer alpha later.** A plain `pip install` leaves an installed version alone, so upgrade:
+
+   ```
+   pip install --upgrade --pre --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+   ```
+
+   Then run `pip show bhom-schema` and compare the version with the one on test.pypi.org. If the old version is still there (the package list can lag a few minutes after an upload), pin it: `bhom-schema==<version>`. Restart the VS Code Python session or terminal that imports the package.
 6. **Write the first file.** Create `try_schema.py`:
 
    ```python
@@ -187,6 +195,18 @@ The helpers are in the package from the first alpha built after they were merged
    ```
 
    Once the package is on PyPI the install is `%pip install --pre bhom-schema`. To pin a version for a job, use `bhom-schema==10.1.0a2611031430`.
+
+   **A notebook that already has an older version.** A plain `%pip install` does nothing when a version is installed, and the old version stays loaded in the running Python. Use `--upgrade`, in a cell of its own, then restart:
+
+   ```
+   %pip install --upgrade --pre --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+   ```
+
+   ```python
+   dbutils.library.restartPython()
+   ```
+
+   Then check in a new cell: `import bhom_schema; print(bhom_schema.__version__)` must show the version on test.pypi.org, and `from bhom_schema.tables import describe` must not fail. If the old version comes back, the package list has not caught up with the upload yet: wait a few minutes, or pin the version (`bhom-schema==<version>`). A step-by-step check of every new method, with the expected output of each, is in [Table-Helpers-Plan.md](Table-Helpers-Plan.md#testing-the-helpers-by-hand).
 3. **Cell 3, the same example as in VS Code:**
 
    ```python

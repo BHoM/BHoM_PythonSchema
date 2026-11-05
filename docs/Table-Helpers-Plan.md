@@ -189,6 +189,151 @@ Each step is mergeable alone, and the Databricks guide section is rewritten when
 
 After every step: `python -m pytest`, `python -m pyright`, `python -m py2cs verify --package src/bhom_schema` (to prove the skip works and nothing in `tables` is taken for a schema class), and a build of the wheel, installed into a clean virtual environment where `from bhom_schema.tables import create_table_sql` works.
 
+## Testing the helpers by hand
+
+The unit tests cover every helper, but only against a stand-in for Spark. This procedure checks them in a real Databricks notebook, one cell per block, in order. Steps 2 to 4 need no tables; steps 5 and 6 create and fill two real tables; steps 7 and 8 read them back. Anything other than the expected result is a bug to report, with the statement and the error text.
+
+Every cell below assumes this first cell has run (change `main.default` to a catalog and schema you may write to):
+
+```python
+from bhom_schema.FixtureAlpha_oM.LineLike import LineLike
+from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
+from bhom_schema.tables import *
+
+POINTS = "main.default.PointLike"
+LINES = "main.default.LineLike"
+REFS = {"Start": Ref(POINTS), "End": Ref(POINTS)}
+```
+
+### 1. Install or update the package
+
+The helpers are in the first alpha built after they were merged. An old install is not replaced by a plain `pip install`, so upgrade, in a cell of its own:
+
+```
+%pip install --upgrade --pre --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bhom-schema
+```
+
+Then restart Python in the next cell, and check in a third:
+
+```python
+dbutils.library.restartPython()
+```
+
+```python
+import bhom_schema
+print(bhom_schema.__version__)
+from bhom_schema.tables import describe
+```
+
+The version must be the one shown on test.pypi.org, and the import must not fail. If it does, the old version is still installed: pin the version (`bhom-schema==<version>`) and restart again.
+
+### 2. `column_type`
+
+```python
+print(column_type(float), column_type(list[str]))
+column_type(PointLike)
+```
+
+Expect `DOUBLE ARRAY<STRING>`, then the last line raises `UnmappedType: PointLike has no column type`. `custom_fields(LineLike)` names the fields that need a decision: `Start` and `End`, both `PointLike`.
+
+### 3. `describe`
+
+```python
+for column in describe(PointLike):
+    print(column.name, column.type, column.decision)
+
+for column in describe(LineLike):
+    print(column.name, column.type, column.decision)
+```
+
+Expect for `PointLike`: `_id STRING key`, `_bhomVersion STRING primitive`, then `X`, `Y`, `Z` as `DOUBLE primitive`. For `LineLike`: `_id STRING key`, `_bhomVersion STRING primitive`, `Start None undecided`, `End None undecided`, `Infinite BOOLEAN primitive`, `Label STRING primitive`. The `undecided` rows are what `create_table_sql` refuses until the user decides.
+
+### 4. `create_table_sql`
+
+```python
+print(create_table_sql(PointLike, POINTS))
+print(create_table_sql(LineLike, LINES, fields=REFS))
+print(create_table_sql(LineLike, LINES + "Struct", fields={"Start": Struct(), "End": Struct()}))
+create_table_sql(LineLike, LINES)
+```
+
+Expect, for the first three, a `CREATE TABLE IF NOT EXISTS` with every name in backticks, a column comment on `Infinite`, `USING DELTA`, the comment `A straight segment between two points.` on the `LineLike` tables, and `TBLPROPERTIES` with the `bhom.type` and the package version. The `Ref` version has `` `Start_id` STRING `` and `` `End_id` STRING ``; the `Struct` version has `` `Start` STRUCT<`X`: DOUBLE, `Y`: DOUBLE, `Z`: DOUBLE> ``. The last call, with no decision, raises `UnmappedType` with `LineLike has 2 fields of a custom type, ...`, the two fields, and the four choices (`Ref`, `Struct`, `Json`, `Skip`); no SQL is produced.
+
+### 5. Create the tables with `spark.sql()`
+
+```python
+spark.sql(create_table_sql(PointLike, POINTS))
+spark.sql(create_table_sql(LineLike, LINES, fields=REFS))
+
+spark.sql(f"DESCRIBE TABLE {POINTS}").show(truncate=False)
+spark.sql(f"DESCRIBE TABLE {LINES}").show(truncate=False)
+```
+
+Expect both statements to run without error and the two `DESCRIBE` outputs to list the columns of step 3 (with `Start_id` and `End_id` in place of `Start` and `End`) and the comments. In the catalog explorer, each table shows the table comment and the properties `bhom.type` and `bhom.schema_version`. To start over, drop the tables or pass `replace=True` to `create_table_sql`.
+
+### 6. Add test data
+
+```python
+spark.sql(f"""
+    INSERT INTO {POINTS} (`_id`, `X`, `Y`, `Z`) VALUES
+    ('p1', 1, 0, 0), ('p2', 2, 0, 0), ('p3', 3, 4, 0)
+""")
+spark.sql(f"""
+    INSERT INTO {LINES} (`_id`, `Start_id`, `End_id`, `Infinite`, `Label`) VALUES
+    ('l1', 'p1', 'p2', false, 'axis'), ('l2', 'p2', 'p3', true, NULL)
+""")
+
+print(spark.table(POINTS).count(), spark.table(LINES).count())
+spark.table(LINES).show()
+```
+
+Expect `3 2`, and the two lines with their point keys. A `NULL` is the default of its field: `Label` of `l2` reads back as the default in step 8.
+
+### 7. `to_row` and `from_row`
+
+```python
+line = LineLike(Start=PointLike(X=5), End=PointLike(X=6), Label="new")
+
+row = to_row(line, fields=REFS, ids={"Start": "p4", "End": "p5"})
+print(row)
+```
+
+Expect a dict with `_id` (a uuid text), `Start_id` `p4`, `End_id` `p5`, `Infinite` `False`, `Label` `new`. Without `ids`, `to_row` raises `Start is a Ref: pass ids=...`. Next, check that Spark accepts the row with the schema of the table, then rebuild the objects from the rows of the tables:
+
+```python
+spark.createDataFrame([row], schema=ddl_schema(LineLike, fields=REFS)).write.mode("append").saveAsTable(LINES)
+print(spark.table(LINES).count())
+
+points = {r["_id"]: from_row(PointLike, r.asDict()) for r in spark.table(POINTS).collect()}
+stored = spark.table(LINES).where("`_id` = 'l1'").collect()[0].asDict()
+rebuilt = from_row(LineLike, stored, fields=REFS, held={"Start": points[stored["Start_id"]], "End": points[stored["End_id"]]})
+print(rebuilt)
+```
+
+Expect `3` (the written row is the third), then `LineLike` with `Start` at `X=1.0`, `End` at `X=2.0`, `Infinite` `False` and `Label` `axis`. Without `held`, `from_row` warns that `Start` keeps its default.
+
+### 8. `rows_to_objects`
+
+```python
+line_rows = [r.asDict() for r in spark.table(LINES).collect()]
+point_rows = [r.asDict() for r in spark.table(POINTS).collect()]
+
+points = rows_to_objects(PointLike, point_rows, keyed=True)
+lines = rows_to_objects(LineLike, line_rows, fields=REFS, held={"Start": points, "End": points})
+print(len(lines))
+for line in lines:
+    print(line.Label, line.Start.X, line.End.X)
+
+objects, problems = rows_to_objects(PointLike, [{"_id": "a", "X": 1.0}, {"_id": "b", "X": "bad"}], errors="collect")
+print(len(objects), problems[0].index, problems[0].key)
+```
+
+Expect `3`, then one line per row with its label and the `X` of its two points (the `Label` of `l2` is the default, and its points are `p2` and `p3`), then `1 1 b` (one good object; the bad row is at position 1 with key `b`). Without `errors="collect"` the bad row raises `ValidationError`.
+
+### Afterwards
+
+The Spark wrappers (`create_table`, `write_objects`, `read_rows`, `fetch_by_ids`, `read_objects`) and the `check_table` and `add_columns_sql` helpers are exercised by steps 5 to 11 of "Trying the package in a Databricks notebook" in [Alpha-Releases-Plan.md](Alpha-Releases-Plan.md). A step that fails in Spark but passed in the steps above means Databricks rejected the SQL or the rows, not the Python logic.
+
 ## Not in scope
 
 - Creating all the tables of a class hierarchy at once. That is the decision the user keeps.
