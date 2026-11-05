@@ -67,7 +67,7 @@ def test_a_flags_enum_is_checked_name_by_name():
 
     assert sql[1] == (
         "ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Flags_enum` "
-        "CHECK (size(array_except(transform(split(`Flags`, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)")
+        "CHECK (`Flags` IS NULL OR size(array_except(transform(split(`Flags`, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)")
 
 def test_lists_and_structs_have_their_own_constraints():
     """Checks `forall` for lists of enums and of flags, and a dotted path with its own constraint name for an enum inside a Struct."""
@@ -75,7 +75,7 @@ def test_lists_and_structs_have_their_own_constraints():
 
     assert "`Joint_Support_Kind_enum` CHECK (`Support`.`Kind` IN ('None', 'Fixed', 'Pinned'))" in sql[0]
     assert "CHECK (forall(`Support`.`Kinds`, item -> item IN ('None', 'Fixed', 'Pinned')))" in sql[1]
-    assert "forall(`Support`.`Combos`, item -> size(array_except(transform(split(item, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)" in sql[2]
+    assert "forall(`Support`.`Combos`, item -> item IS NULL OR size(array_except(transform(split(item, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)" in sql[2]
 
 def test_a_class_without_enums_has_no_constraints_and_an_undecided_field_is_refused():
     """Checks the empty list, the Skip of an enum field, and that an undecided custom field raises before anything is returned."""

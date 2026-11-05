@@ -70,7 +70,8 @@ def valid_names(expression: str, enum: type[Enum], variable: str) -> str:
     """Writes the condition that holds when `expression` is a member name; for flags, when every name in the comma-separated text is one."""
     names = ", ".join(literal(name) for name in names_of(enum))
     if issubclass(enum, Flag):
-        return f"size(array_except(transform(split({expression}, ','), {variable} -> trim({variable})), array({names}))) = 0"
+        # size() of a NULL is -1 in Spark, so a NULL has to be let through by hand, as it is for IN
+        return f"{expression} IS NULL OR size(array_except(transform(split({expression}, ','), {variable} -> trim({variable})), array({names}))) = 0"
 
     return f"{expression} IN ({names})"
 

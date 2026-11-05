@@ -67,7 +67,7 @@ ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Support_enum` CHECK (`S
 A flags column is checked name by name, so a combination such as `A, B` passes and `A, Z` does not:
 
 ```sql
-ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Flags_enum` CHECK (size(array_except(transform(split(`Flags`, ','), x -> trim(x)), array('A', 'B', 'Both'))) = 0)
+ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Flags_enum` CHECK (`Flags` IS NULL OR size(array_except(transform(split(`Flags`, ','), x -> trim(x)), array('A', 'B', 'Both'))) = 0)
 ```
 
 Details:
@@ -113,17 +113,18 @@ print(Beam(Start=PointLike(), Flags="A, B").Flags)
 Beam(Start=PointLike(), Flags="A, Z")
 
 # c. A wrong value written by hand is refused by the table
+spark.sql(f"DROP TABLE IF EXISTS {BEAMS}")
 spark.sql(create_table_sql(Beam, BEAMS, fields=BEAM_FIELDS))
 
 for statement in enum_constraints_sql(Beam, BEAMS, BEAM_FIELDS):
     print(statement)
     spark.sql(statement)
 
-spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Support`, `Flags`) VALUES ('b1', 'Fixed', 'A, B'), ('b2', NULL, NULL)")
+spark.sql(f"INSERT INTO {BEAMS} (`BHoM_Guid`, `Support`, `Flags`) VALUES ('b1', 'Fixed', 'A, B'), ('b2', NULL, NULL)")
 print(spark.table(BEAMS).count())
 
-spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Support`) VALUES ('b3', 'Bogus')")
-spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Flags`) VALUES ('b4', 'A, Z')")
+spark.sql(f"INSERT INTO {BEAMS} (`BHoM_Guid`, `Support`) VALUES ('b3', 'Bogus')")
+spark.sql(f"INSERT INTO {BEAMS} (`BHoM_Guid`, `Flags`) VALUES ('b4', 'A, Z')")
 ```
 
 Expect:
