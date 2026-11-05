@@ -56,7 +56,7 @@ def test_a_plain_enum_gets_an_in_list_of_the_names_bhom_writes():
     """
     sql = enum_constraints_sql(Beam, "main.default.Beam", BEAM_FIELDS)
 
-    assert sql[0] == "ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Support_enum` CHECK (`Support` IN ('None', 'Fixed', 'Pinned'))"
+    assert sql[0] == "ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Support_enum` CHECK (`Support` IS NULL OR `Support` IN ('None', 'Fixed', 'Pinned'))"
 
 def test_a_flags_enum_is_checked_name_by_name():
     """Checks that the constraint of Beam.Flags splits the text at commas, so `A, B` passes and an unknown name does not.
@@ -67,15 +67,15 @@ def test_a_flags_enum_is_checked_name_by_name():
 
     assert sql[1] == (
         "ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Flags_enum` "
-        "CHECK (size(array_except(transform(split(`Flags`, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)")
+        "CHECK (`Flags` IS NULL OR size(array_except(transform(split(`Flags`, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)")
 
 def test_lists_and_structs_have_their_own_constraints():
     """Checks `forall` for lists of enums and of flags, and a dotted path with its own constraint name for an enum inside a Struct."""
     sql = enum_constraints_sql(Joint, "t.s.Joint", {"Support": Struct()})
 
-    assert "`Joint_Support_Kind_enum` CHECK (`Support`.`Kind` IN ('None', 'Fixed', 'Pinned'))" in sql[0]
-    assert "CHECK (forall(`Support`.`Kinds`, item -> item IN ('None', 'Fixed', 'Pinned')))" in sql[1]
-    assert "forall(`Support`.`Combos`, item -> size(array_except(transform(split(item, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)" in sql[2]
+    assert "`Joint_Support_Kind_enum` CHECK (`Support`.`Kind` IS NULL OR `Support`.`Kind` IN ('None', 'Fixed', 'Pinned'))" in sql[0]
+    assert "CHECK (`Support`.`Kinds` IS NULL OR forall(`Support`.`Kinds`, item -> item IS NULL OR item IN ('None', 'Fixed', 'Pinned')))" in sql[1]
+    assert "`Support`.`Combos` IS NULL OR forall(`Support`.`Combos`, item -> item IS NULL OR size(array_except(transform(split(item, ','), part -> trim(part)), array('A', 'B', 'Both'))) = 0)" in sql[2]
 
 def test_a_class_without_enums_has_no_constraints_and_an_undecided_field_is_refused():
     """Checks the empty list, the Skip of an enum field, and that an undecided custom field raises before anything is returned."""
@@ -91,7 +91,7 @@ def test_sparse_has_no_zero_member_and_is_still_checked():
     """Checks an enum whose members start at 1: the constraint lists exactly its two names."""
     sql = enum_constraints_sql(SparseHolder, "t.s.SparseHolder", BASE_SKIPPED)
 
-    assert "`Level` IN ('One', 'Two')" in sql[0]
+    assert "`Level` IS NULL OR `Level` IN ('One', 'Two')" in sql[0]
 
 def test_a_wrong_value_that_got_into_an_object_is_refused_when_the_row_is_made():
     """Checks that to_row raises for a string in an enum field, which model_construct (and a skipped validation) allows, and names the field and the members.
