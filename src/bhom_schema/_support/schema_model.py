@@ -26,7 +26,7 @@ class SchemaModel(BaseModel):
     """
 
     model_config = ConfigDict(
-        arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True, serialize_by_alias=True, json_schema_extra=add_type_property)
+        arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True, serialize_by_alias=True, validate_assignment=True, json_schema_extra=add_type_property)
 
     bhom_version: str | None = Field(default=None, alias="_bhomVersion", description="Optional version of BHoM used as part of automatic versioning and schema upgrades.")
 

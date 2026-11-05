@@ -191,7 +191,7 @@ After every step: `python -m pytest`, `python -m pyright`, `python -m py2cs veri
 
 ## Testing the helpers by hand
 
-The unit tests cover every helper, but only against a stand-in for Spark. This procedure checks them in a real Databricks notebook, one cell per block, in order. Steps 2 to 4 need no tables; steps 5 and 6 create and fill two real tables; steps 7 and 8 read them back. Anything other than the expected result is a bug to report, with the statement and the error text.
+The unit tests cover every helper, but only against a stand-in for Spark. This procedure checks them in a real Databricks notebook, one cell per block, in order. Steps 2 to 4 need no tables; steps 5 and 6 create and fill two real tables; steps 7 and 8 read them back; step 9 checks enum members. Anything other than the expected result is a bug to report, with the statement and the error text.
 
 Every cell below assumes this first cell has run (change `main.default` to a catalog and schema you may write to):
 
@@ -329,6 +329,45 @@ print(len(objects), problems[0].index, problems[0].key)
 ```
 
 Expect `3`, then one line per row with its label and the `X` of its two points (the `Label` of `l2` is the default, and its points are `p2` and `p3`), then `1 1 b` (one good object; the bad row is at position 1 with key `b`). Without `errors="collect"` the bad row raises `ValidationError`.
+
+### 9. Enum members
+
+`Beam` has a `SupportKind` field and an `Options` (flags) field. Parts a and b need no table; part c checks that the table itself refuses a wrong value.
+
+```python
+from bhom_schema.FixtureAlpha_oM.Beam import Beam
+
+BEAMS = "main.default.Beam"
+BEAM_FIELDS = {**BASE_SKIPPED, "Start": Struct()}
+
+# a. A wrong value set in Python is flagged where it is set
+Beam(Start=PointLike(), Support="Bogus")
+beam = Beam(Start=PointLike())
+beam.Support = "Fixd"
+
+# b. The flags enum takes names combined with ", ", and nothing else
+print(Beam(Start=PointLike(), Flags="A, B").Flags)
+Beam(Start=PointLike(), Flags="A, Z")
+
+# c. A wrong value written by hand is refused by the table
+spark.sql(create_table_sql(Beam, BEAMS, fields=BEAM_FIELDS))
+
+for statement in enum_constraints_sql(Beam, BEAMS, BEAM_FIELDS):
+    print(statement)
+    spark.sql(statement)
+
+spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Support`, `Flags`) VALUES ('b1', 'Fixed', 'A, B'), ('b2', NULL, NULL)")
+print(spark.table(BEAMS).count())
+
+spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Support`) VALUES ('b3', 'Bogus')")
+spark.sql(f"INSERT INTO {BEAMS} (`_id`, `Flags`) VALUES ('b4', 'A, Z')")
+```
+
+Expect:
+
+- **a.** Both lines raise a `ValidationError`, the second at the assignment itself. The first says `Bogus is not a member of SupportKind. Members: None, Fixed, Pinned.`; the second says `Fixd is not a member of SupportKind. Members: None, Fixed, Pinned. Did you mean Fixed?`
+- **b.** The first line prints `Options.Both`; the second raises `Z is not a member of Options. Members: A, B, Both.`. `Beam(Flags=8)` raises too, because no member has that bit.
+- **c.** Two `ALTER TABLE ... ADD CONSTRAINT ... CHECK` statements are printed and run (`Beam_Support_enum` and `Beam_Flags_enum`). The first `INSERT` succeeds, including the row of `NULL`s, and the count is `2`. The last two `INSERT`s each fail with a Delta constraint violation that names the constraint (`Beam_Support_enum`, `Beam_Flags_enum`), and the count stays `2`. `to_row` also refuses a wrong value that got into an object without validation, for example from `Beam.model_construct(Support="Bogus", Start=PointLike())`.
 
 ### Afterwards
 

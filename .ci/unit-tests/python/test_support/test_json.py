@@ -204,6 +204,40 @@ def test_an_enum_refuses_what_is_not_a_member():
         with pytest.raises(ValidationError, match=message):
             Holder.model_validate({"Level": bad})
 
+def test_a_refused_enum_value_lists_the_members_and_the_closest_name():
+    """Checks that the error names every member, suggests the name of a different case or a typo, and for flags says how to combine names."""
+    with pytest.raises(ValidationError, match=r"Members: None, Fast\. Did you mean Fast\?"):
+        Holder.model_validate({"Level": "fast"})
+
+    with pytest.raises(ValidationError, match=r"Members: A, B, Both\. Did you mean Both\? Combine names"):
+        Holder.model_validate({"Flags": "Bothh"})
+
+    with pytest.raises(ValidationError) as caught:
+        Holder.model_validate({"Level": "Zzzz"})
+
+    assert "Did you mean" not in str(caught.value)
+
+def test_flags_refuse_a_number_with_a_bit_that_no_member_has():
+    """Checks that 3 and 0 are read, and that 8, which no member defines, is refused instead of being kept as an unnamed flag."""
+    assert Holder.model_validate({"Flags": 3}).Flags == Options.Both
+    assert Holder.model_validate({"Flags": 0}).Flags == Options(0)
+
+    with pytest.raises(ValidationError, match="8 has bits that no member defines in Options"):
+        Holder.model_validate({"Flags": 8})
+
+def test_a_wrong_enum_value_is_refused_when_it_is_assigned():
+    """Checks that setting an enum field after construction is validated, and that a valid name is converted to its member."""
+    holder = Holder()
+
+    with pytest.raises(ValidationError, match="Fastt is not a member of Mode"):
+        holder.Level = "Fastt"  # pyright: ignore[reportAttributeAccessIssue]
+
+    assert holder.Level is Mode.Fast
+
+    holder.Level = "None"  # pyright: ignore[reportAttributeAccessIssue]
+
+    assert holder.Level is Mode.None_
+
 def test_flags_are_written_and_read_as_comma_separated_names():
     """Checks a defined combination (by its own name), an undefined combination (the single flags joined), and reading both back."""
     assert json.loads(Holder(Flags=Options.A).model_dump_json())["Flags"] == "A"
