@@ -61,7 +61,7 @@ Steps 1 and 2 only protect values that go through Python. A user can also write 
 `enum_constraints_sql(model, table, fields)` returns the statements that add these constraints, one per enum column. The user runs them after `create_table_sql`, as in the notebook steps:
 
 ```sql
-ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Support_enum` CHECK (`Support` IN ('None', 'Fixed', 'Pinned'))
+ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Support_enum` CHECK (`Support` IS NULL OR `Support` IN ('None', 'Fixed', 'Pinned'))
 ```
 
 A flags column is checked name by name, so a combination such as `A, B` passes and `A, Z` does not:
@@ -73,7 +73,7 @@ ALTER TABLE `main`.`default`.`Beam` ADD CONSTRAINT `Beam_Flags_enum` CHECK (`Fla
 Details:
 
 - The members are the names BHoM writes (`None`, not `None_`), taken from `bhom_members()`.
-- `NULL` passes a `CHECK`, which agrees with "NULL in a column means the field default".
+- A `NULL` must pass, since it means the field default. Delta refuses a row when the check is `NULL` as well as when it is false, so every condition says `col IS NULL OR ...`.
 - An enum inside a `Struct` is reached by its dotted path (`` `Start`.`Kind` ``); a list of enums uses `forall(col, x -> x IN (...))`.
 - `enum_columns(model, fields)` is the small function underneath: it lists the enum columns of the table (`{'Support': SupportKind, 'Flags': Options}`) and is exported for the same reason as `custom_fields`.
 - The statements are `ALTER TABLE`, run after `CREATE TABLE`, because I have not confirmed that Databricks accepts a `CHECK` inside `CREATE TABLE`. The helper only returns text and never runs it, as for every other SQL helper.

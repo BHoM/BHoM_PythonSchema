@@ -67,26 +67,28 @@ def enum_columns(model: type[BaseModel], fields: Mapping[str, Decision] | None =
     return found
 
 def valid_names(expression: str, enum: type[Enum], variable: str) -> str:
-    """Writes the condition that holds when `expression` is a member name; for flags, when every name in the comma-separated text is one."""
+    """Writes the condition that holds when `expression` is NULL, or a member name; for flags, when every name in the comma-separated text is one.
+
+    The NULL is let through by hand: Delta refuses a row when a CHECK is NULL as well as when it is false, and size() of a NULL is -1.
+    """
     names = ", ".join(literal(name) for name in names_of(enum))
     if issubclass(enum, Flag):
-        # size() of a NULL is -1 in Spark, so a NULL has to be let through by hand, as it is for IN
         return f"{expression} IS NULL OR size(array_except(transform(split({expression}, ','), {variable} -> trim({variable})), array({names}))) = 0"
 
-    return f"{expression} IN ({names})"
+    return f"{expression} IS NULL OR {expression} IN ({names})"
 
 def condition_of(column: EnumColumn) -> str:
     """Writes the CHECK condition of one enum column."""
     expression = ".".join(quote(part) for part in column.path.split("."))
     if column.many:
-        return f"forall({expression}, item -> {valid_names('item', column.enum, 'part')})"
+        return f"{expression} IS NULL OR forall({expression}, item -> {valid_names('item', column.enum, 'part')})"
 
     return valid_names(expression, column.enum, "part")
 
 def enum_constraints_sql(model: type[BaseModel], table: str, fields: Mapping[str, Decision] | None = None, key: str | None = KEY_COLUMN) -> list[str]:
     """Returns one `ALTER TABLE ... ADD CONSTRAINT ... CHECK` statement per enum column, so Delta refuses any write whose value is not a member.
 
-    A NULL passes, since it means the default of the field. Run the statements after the table is created; adding one to a table that already holds a wrong value fails.
+    A NULL passes, since it means the default of the field (the condition says so, because Delta refuses a NULL result). Run the statements after the table is created; adding one to a table that already holds a wrong value fails.
     """
     target = quote_table(table)
     prefix = table.replace("`", "").split(".")[-1]
