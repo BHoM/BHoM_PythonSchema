@@ -144,17 +144,21 @@ Checked with the real BHoM serialiser (`Serialiser_Engine`) on the fixture `Supp
 | Generator, C# to Python | Works: `dict[SupportKind, float]`, `dict[Options, int]` |
 | Generator, Python to C# (`py2cs drafts`) | Works: `Dictionary<SupportKind, double>` again; the Roslyn round trip and the manifest alignment pass |
 | C# writes it | **As an array of `{"k": "Fixed", "v": 2.5}`**, with the member name as the key. BHoM_JSONSchema describes the same form (`ToJsonSchema.cs`: "Non stringbased dictionaries are stored as an array of objects with k and v") |
-| Python reads what C# wrote | **Fails**: the generated field is a dict, and the support layer does not read the `k`/`v` array. The test for it is `xfail(strict=True)`, so it fails the day this is fixed and must then be switched on |
-| Python writes it | As an object, `{"Fixed": 2.5}`, with C# member names (`None`, not `None_`) |
-| C# reads what Python wrote | Works: it accepts the object form |
+| Python reads what C# wrote | **Fixed.** It failed at first (the generated field is a dict and nothing read the `k`/`v` array); the support layer now reads it |
+| Python writes it | Now as the `k`/`v` array, with C# member names (`None`, not `None_`); it was an object `{"Fixed": 2.5}` at first |
+| C# reads what Python wrote | Works, for the new array (checked with the real serialiser) and for the old object form |
 | A key that is not a member | Python refuses it with the member list. C# does not flag it: it silently maps the key to the member with value 0 (`None`), so a wrong key becomes wrong data |
 | Table helpers | `dict[Enum, float]` has no column type; it needs `Json()` or `Skip()`. A `MAP<STRING, DOUBLE>` with member-name keys is a small addition |
 
-So the C# to Python direction is broken for **every** dictionary whose key is hashable but not a string (enum, `Guid`, `decimal`), not only for enums: the generator emits `dict[K, V]` (rule of gotcha 11), but BHoM writes an array. The fix is in the support layer, not in the generator:
+So the C# to Python direction was broken for **every** dictionary whose key is hashable but not a string (enum, `Guid`, `decimal`), not only for enums: the generator emits `dict[K, V]` (rule of gotcha 11), but BHoM writes an array. The fix is in the support layer, not in the generator (`_support/key_value_pairs.py`, called from `SchemaModel`), and it covers every such dictionary: an enum, `Guid` or `decimal` key (a Python `dict`), and a class as the key (a list of pairs, found by its `ClrType` marker):
 
-1. **Read** a `k`/`v` array into the dictionary (a model-level step before validation, for fields typed as a dictionary with a non-string key).
-2. **Write** the `k`/`v` array, so that other readers, and BHoM_JSONSchema, accept the file.
-3. **JSON Schema**: emit the array-of-`{k, v}` schema for those fields.
+1. **Read:** a `k`/`v` array is read into the dictionary (or the list of pairs) before validation, so a wrong enum key is flagged with the member list. A dictionary written as a plain object is still read; an array that is not made of `k`/`v` objects is left for validation to refuse.
+2. **Write:** the array is written, by `model_dump_json` and by `model_dump`, so the other readers and BHoM_JSONSchema accept it.
+3. **JSON Schema:** the property is an array (or null, when optional) of objects with `k` and `v`, the form of BHoM_JSONSchema; the JSON that C# wrote validates against it.
+
+Tests: `test_support/test_key_value_pairs.py` (stand-in classes: enum, `UUID` and `decimal` keys, an optional one, and the refusals) and `test_fixtures/test_enum_keyed_dictionaries.py` (the real C# JSON, the schema, and the class key of `Collections.ByPoint`). Python's output was also read back by the real BHoM serialiser: `{Fixed: 2.5, None: 1, Pinned: 7}` and the flags keys came back intact.
+
+Not done: the table helpers still treat `dict[Enum, float]` as a custom field (`Json()` or `Skip()`).
 
 ### Python-driven enum lists
 

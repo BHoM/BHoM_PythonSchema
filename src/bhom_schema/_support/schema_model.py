@@ -6,6 +6,8 @@ from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
+from bhom_schema._support.key_value_pairs import describe_key_values, read_key_values, write_key_values
+
 FRAGMENT_SET = "BH.oM.Base.FragmentSet"
 
 def type_name(model: type[BaseModel]) -> str:
@@ -14,9 +16,13 @@ def type_name(model: type[BaseModel]) -> str:
     return str(marker.get("clr_name", model.__name__))
 
 def add_type_property(schema: dict[str, Any], model: type[BaseModel]) -> None:
-    """Adds the optional `_t` property to the JSON Schema of a class, fixed to its C# name, as every schema of BHoM_JSONSchema has it."""
+    """Adds the optional `_t` property to the JSON Schema of a class, fixed to its C# name, as every schema of BHoM_JSONSchema has it.
+
+    A dictionary with a key that is not a string is described the way BHoM writes it, as an array of `k`/`v` objects.
+    """
     properties = cast(dict[str, Any], schema.setdefault("properties", {}))
     properties["_t"] = {"type": ["string", "null"], "description": "Optional type disciminator.", "const": type_name(model)}
+    describe_key_values(model, properties)
 
 class SchemaModel(BaseModel):
     """Pydantic base of the generated classes.
@@ -36,7 +42,8 @@ class SchemaModel(BaseModel):
         """Checks and removes `_t` before a mapping is validated, and unwraps a FragmentSet written as an object.
 
         `_t` is optional, but when it is there it must be this class (the base name, for a generic class). BHoM writes a FragmentSet as
-        `{"_t": "BH.oM.Base.FragmentSet", "_v": [...]}` or as a plain array; the fields hold a list, so both end up as one.
+        `{"_t": "BH.oM.Base.FragmentSet", "_v": [...]}` or as a plain array; the fields hold a list, so both end up as one. A dictionary with a key that is not a string
+        is written as an array of `{"k": ..., "v": ...}`; it is read into the dictionary here.
         """
         if not isinstance(data, dict):
             return data
@@ -52,13 +59,16 @@ class SchemaModel(BaseModel):
             if isinstance(value, dict) and cast(dict[str, Any], value).get("_t") == FRAGMENT_SET:
                 values[key] = cast(dict[str, Any], value).get("_v") or []
 
+        read_key_values(cls, values)
         return values
 
     @model_serializer(mode="wrap")
     def write_type_tag(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Writes `_t` first, and leaves out `_bhomVersion` when it is not set, so the JSON matches what BHoM writes."""
+        """Writes `_t` first, leaves out `_bhomVersion` when it is not set, and writes a dictionary with a key that is not a string as an array of `k`/`v` objects, so the JSON matches what BHoM writes."""
         data = cast(dict[str, Any], handler(self))
         if data.get("_bhomVersion", 0) is None:
             del data["_bhomVersion"]
+
+        write_key_values(type(self), data)
 
         return {"_t": type_name(type(self)), **data}
