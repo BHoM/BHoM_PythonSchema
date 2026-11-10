@@ -34,7 +34,7 @@ So the C# tests are not only checks; they **produce the input** the Python tests
 | `csharp/PythonSchemaGeneration.Tests/` | The NUnit tests (44 tests). |
 | `csharp/Fixtures/` | The fake oM assemblies `FixtureAlpha_oM` and `FixtureBeta_oM`: the test classes of the generator, in this repository. They started as a copy of [CSharpSchema_Test](https://github.com/BHoM/CSharpSchema_Test) and are separate from it: that repository is where the loop is rehearsed, and changes there never reach these tests. Their assembly `Description` names CSharpSchema_Test on purpose, because the generator reads the owning repository from it. See section 3. |
 | `python/` | The pytest tests (about 73 test cases) in four folders: `test_py2cs`, `test_fixtures`, `test_spike`, `test_alignment`. |
-| `notebooks/` | Notebooks to try a behaviour by hand in VS Code, with the steps in section 11 |
+| `notebooks/` | Notebooks to try a behaviour by hand in VS Code, with the steps in sections 11 and 12 |
 | `python/support.py` | Shared helpers for the pytest folders. |
 | `golden/` | Committed "expected output" files. See section 6. |
 | `github-fixtures/repo-listing.json` | A recorded list of which repository owns which assembly folder, so tests need no network. |
@@ -254,3 +254,26 @@ After a change, run `run-all.ps1`. Per the project rules it must finish green, i
    The notebook is stored without outputs, so the first run shows nothing until you run it. A cell that prints something else, or raises, is a bug to report with the cell number and its text.
 
 The same behaviour is covered by pytest (`test_support/test_key_value_pairs.py` and `test_fixtures/test_enum_keyed_dictionaries.py`), which also reads the text that the real BHoM serialiser wrote. The notebook is for seeing it yourself.
+
+## 12. Trying the validation of ExampleObject by hand in VS Code
+
+`notebooks/ExampleObject-Validation.ipynb` gives `ExampleObject` good and bad values for each of its fields (numbers, dates, enums, flags, lists, dictionaries, nested objects, JSON) and shows what is accepted and what is refused at once, with the message. It is also the script to follow when demoing the package.
+
+It must test **your checkout** and not the copy on TestPyPI, so cell 1 prints the folder that `bhom_schema` is loaded from and stops with an error if it is `site-packages`. Follow steps 1 to 3 and 5 of section 11 (the `pip install -e` environment, the kernel, a restart after each code change), open `.ci/unit-tests/notebooks/ExampleObject-Validation.ipynb`, and run the cells from the top.
+
+| Cell | What it shows | Pass |
+|---|---|---|
+| 1 | Version and the folder it is loaded from | `the local version of bhom-schema is in use`, with a path inside `BHoM_PythonSchema\src` |
+| 3 | A valid object | `accepted` |
+| 4 | Wrong types | 5 lines `refused`, each naming the field |
+| 5 | Enum members | `refused` with `Members: ...`, and `Did you mean Approved?` for a typo or a wrong case |
+| 6 | Flags | `Painted, Insulated` accepted; an unknown name and `8` refused |
+| 7 | Assigning a field | the bad assignments refused, the object unchanged |
+| 8 | Collections | each wrong item refused, with its position (`Labels.1`) |
+| 9 | Nested objects | the path of the wrong field (`Storeys.1.TypicalHeight`) |
+| 10 | JSON | `accepted`, then `refused`, then `2 errors` |
+| 11 | Write and read back | `True` |
+| 12 | Summary | `24 wrong values were refused ...` and `All checks passed` |
+
+To demo a published package (on Databricks, say), install it with `pip install --upgrade --pre bhom-schema` and skip the `assert` in cell 1.
+

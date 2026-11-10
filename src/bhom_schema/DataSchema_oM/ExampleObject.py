@@ -29,7 +29,7 @@ class ExampleObject(BHoMObject):
         'assembly': 'DataSchema_oM',
         'namespace': 'BH.oM.Adapters.DataSchema',
         'repo': 'BHoM/DataSchema_Toolkit',
-        'kind': 'class',
+    'kind': 'class',
     }
 
     SomeStringProperty: str | None = Field(default=None, description='A text. Becomes a nullable string in Python, since a string can be null in C#.')
