@@ -42,6 +42,8 @@ def affected_repos(base: Manifest, head: Manifest, listing: Listing | None) -> t
 IMPORT_ALL = """
 import importlib, json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
+# -I ignores PYTHONPATH, so put the checked package first, ahead of any bhom_schema installed in the environment
+sys.path.insert(0, str(root))
 failures = []
 count = 0
 for path in sorted((root / "bhom_schema").rglob("*.py")):

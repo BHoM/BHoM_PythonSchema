@@ -134,3 +134,32 @@ Expect:
 - **c.** Two `ALTER TABLE ... ADD CONSTRAINT ... CHECK` statements are printed and run (one for `Support`, one for `Flags`). The first `INSERT` succeeds, including the row of `NULL`s, and the count is `2`. The last two `INSERT`s each fail with a Delta constraint violation that names the constraint and the value (`Bogus`, `A, Z`), and the count stays `2`.
 
 Finish by dropping the `Beam` table with the others.
+
+## Enum-keyed dictionaries, and enum lists driven from Python
+
+Checked with the real BHoM serialiser (`Serialiser_Engine`) on the fixture `SupportTotals` (`Dictionary<SupportKind, double>` and `Dictionary<Options, int>`), in `.ci/unit-tests/csharp/Fixtures/FixtureAlpha_oM/EnumKeys.cs`. The tests are in `test_fixtures/test_enum_keyed_dictionaries.py`.
+
+| Step | Result |
+|---|---|
+| Generator, C# to Python | Works: `dict[SupportKind, float]`, `dict[Options, int]` |
+| Generator, Python to C# (`py2cs drafts`) | Works: `Dictionary<SupportKind, double>` again; the Roslyn round trip and the manifest alignment pass |
+| C# writes it | **As an array of `{"k": "Fixed", "v": 2.5}`**, with the member name as the key. BHoM_JSONSchema describes the same form (`ToJsonSchema.cs`: "Non stringbased dictionaries are stored as an array of objects with k and v") |
+| Python reads what C# wrote | **Fails**: the generated field is a dict, and the support layer does not read the `k`/`v` array. The test for it is `xfail(strict=True)`, so it fails the day this is fixed and must then be switched on |
+| Python writes it | As an object, `{"Fixed": 2.5}`, with C# member names (`None`, not `None_`) |
+| C# reads what Python wrote | Works: it accepts the object form |
+| A key that is not a member | Python refuses it with the member list. C# does not flag it: it silently maps the key to the member with value 0 (`None`), so a wrong key becomes wrong data |
+| Table helpers | `dict[Enum, float]` has no column type; it needs `Json()` or `Skip()`. A `MAP<STRING, DOUBLE>` with member-name keys is a small addition |
+
+So the C# to Python direction is broken for **every** dictionary whose key is hashable but not a string (enum, `Guid`, `decimal`), not only for enums: the generator emits `dict[K, V]` (rule of gotcha 11), but BHoM writes an array. The fix is in the support layer, not in the generator:
+
+1. **Read** a `k`/`v` array into the dictionary (a model-level step before validation, for fields typed as a dictionary with a non-string key).
+2. **Write** the `k`/`v` array, so that other readers, and BHoM_JSONSchema, accept the file.
+3. **JSON Schema**: emit the array-of-`{k, v}` schema for those fields.
+
+### Python-driven enum lists
+
+- The member **name is the stored value** (`SteelPlate`, not `Steel Plate`): both the JSON of a property and of a dictionary key use it. So an existing text such as `Steel Plate` is migrated to the member name, once, in the data.
+- `py2cs` already turns an edited Python enum into C# changes: `addEnumMember`, `removeEnumMember` and `setEnumValue`, with the member comment as the `Description`. A member without an explicit value is only added at the end, so existing values do not shift. The linked-PR workflow raises the C# draft from the Python PR.
+- Removing or renaming a member is a breaking change for stored data, and C# will not flag a stale value (see above), so the migration comes first.
+- A `[DisplayText]` on an enum member is **not** carried to Python (only properties have it), so a Python-driven list cannot own it. Do not use it on members that Python will drive.
+- `BHoM/DataSchema_Toolkit` is now in `Included-repositories.txt`, so the weekly generation builds it and generates its Python (checked once by hand: 68 types, `py2cs verify` 0 problems). The linked C# pull request also needs it in `Converted-repositories.txt`, which a test deliberately restricts to `BHoM/CSharpSchema_Test` for now ("C# pull requests may only be raised in the test repository for now"). That is a separate, deliberate step.
