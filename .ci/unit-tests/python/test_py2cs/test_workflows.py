@@ -143,7 +143,7 @@ def test_the_main_bhom_repository_is_never_written_to():
     Protects the main BHoM repository from C# PRs while the process is tested.
     """
     converted = lines("Converted-repositories.txt")
-    assert converted == ["BHoM/CSharpSchema_Test"], "C# pull requests may only be raised in the test repository for now"
+    assert converted == ["BHoM/CSharpSchema_Test", "BHoM/DataSchema_Toolkit"], "C# pull requests may only be raised in the test repository and the DataSchema toolkit for now"
     assert "BHoM/BHoM" in lines("Included-repositories.txt"), "BHoM is cloned and built (read only), but never written to"
 
 def test_every_listed_converted_repository_is_also_built():

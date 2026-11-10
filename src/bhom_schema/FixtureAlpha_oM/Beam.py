@@ -15,6 +15,7 @@ from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
 from bhom_schema.FixtureAlpha_oM.SupportKind import SupportKind
 from bhom_schema._support import ClrType, DisplayText, Quantity
 
+
 class Beam(BHoMObject):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Beam',
