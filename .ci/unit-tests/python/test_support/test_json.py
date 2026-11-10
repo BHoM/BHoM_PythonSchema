@@ -64,6 +64,13 @@ class Options(BHoMFlags):
     B = 2
     Both = 3
 
+class Finish(BHoMFlags):
+    """A stand-in flags enum with no named combination."""
+    __bhom__: ClassVar[dict[str, Any]] = {"clr_name": "BH.oM.Finish", "kind": "enum", "flags": True}
+    Painted = 1
+    Insulated = 2
+    Sealed = 4
+
 class Holder(SchemaModel):
     """A stand-in class with enum fields."""
     __bhom__: ClassVar[dict[str, Any]] = {"clr_name": "BH.oM.Holder", "kind": "class"}
@@ -216,6 +223,14 @@ def test_a_refused_enum_value_lists_the_members_and_the_closest_name():
         Holder.model_validate({"Level": "Zzzz"})
 
     assert "Did you mean" not in str(caught.value)
+
+def test_a_combination_of_flags_that_no_member_names_is_written_as_the_names():
+    """Checks that a combination with no named member is written as its member names joined by a comma and read back, and does not fail."""
+    both = Finish.Painted | Finish.Insulated
+
+    assert both.bhom_name() == "Painted, Insulated"
+    assert Finish.from_bhom("Painted, Insulated") == both
+    assert Finish.Sealed.bhom_name() == "Sealed"
 
 def test_flags_refuse_a_number_with_a_bit_that_no_member_has():
     """Checks that 3 and 0 are read, and that 8, which no member defines, is refused instead of being kept as an unnamed flag."""

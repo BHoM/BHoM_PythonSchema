@@ -35,9 +35,10 @@ class NamedMembers:
         cls = type(self)
         members = cls.bhom_members()
         value: int = getattr(self, "value")
-        known: Any = getattr(cls, "_value2member_map_").get(value)
-        if known is not None:
-            return next(name for name, member in members.items() if member is known)
+        # A combination that no member names can be cached by Python as a member of its own, so a match must be one of the named members
+        for name, member in members.items():
+            if member.value == value:
+                return name
 
         parts = [name for name, member in members.items() if member.value & value and (member.value & (member.value - 1)) == 0]
         return ", ".join(parts) if parts else str(value)

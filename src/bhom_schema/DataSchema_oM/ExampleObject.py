@@ -5,15 +5,25 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Annotated, Any, ClassVar
+from uuid import UUID
 
 from pydantic import Field
 
 from bhom_schema.BHoM.BHoMObject import BHoMObject
+from bhom_schema.BHoM.IObject import IObject
+from bhom_schema.DataSchema_oM.Enums.StructuralMaterial import StructuralMaterial
+from bhom_schema.DataSchema_oM.ExampleFinish import ExampleFinish
+from bhom_schema.DataSchema_oM.ExampleStatus import ExampleStatus
+from bhom_schema.DataSchema_oM.Grid import Grid
+from bhom_schema.DataSchema_oM.Storey import Storey
+from bhom_schema._support import ClrType, DisplayText, Polymorphic, Quantity
 
 
 class ExampleObject(BHoMObject):
-    """Object description in here. Will appear in the UI tooltip."""
+    """Example object for demonstrating the C# to Python conversion: one property for each kind of type that the conversion supports."""
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.Adapters.DataSchema.ExampleObject',
         'assembly': 'DataSchema_oM',
@@ -22,5 +32,29 @@ class ExampleObject(BHoMObject):
         'kind': 'class',
     }
 
-    SomeStringProperty: str | None = Field(default=None, description='Property description in here.')
-    SomeNumberProperty: int = Field(default=0, description='Property description in here.')
+    SomeStringProperty: str | None = Field(default=None, description='A text. Becomes a nullable string in Python, since a string can be null in C#.')
+    SomeNumberProperty: int = Field(default=0, description='A whole number. Becomes an int in Python.')
+    SomeDecimalNumber: float = Field(default=1.5, description='A number with a decimal part. Becomes a float in Python.')
+    IsActive: bool = Field(default=True, description='A true or false value.')
+    Cost: Decimal = Field(default=Decimal('10.25'), description='An exact decimal value, for money for example. Becomes a Decimal in Python.')
+    Letter: Annotated[str, ClrType('char')] = Field(default='x', description='A single character. Becomes a one-letter str in Python.')
+    CreatedOn: datetime = Field(default=datetime(2020, 1, 2, 3, 4, 5, 0), description='A date and time. Becomes a datetime in Python.')
+    Duration: timedelta = Field(default=timedelta(seconds=5400.0), description='A length of time. Becomes a timedelta in Python.')
+    ExternalId: UUID = Field(default=UUID(int=0), description='A unique identifier. Becomes a UUID in Python.')
+    OptionalCount: int | None = Field(default=None, description='A whole number that can be missing. Becomes int | None in Python.')
+    OptionalRatio: float | None = Field(default=None, description='A number that can be missing. Becomes float | None in Python.')
+    SpanLength: Annotated[float, Quantity('Length', 'm'), DisplayText('Span length')] = Field(default=6.0, description='A length in metres. The display text and the unit travel with the property to Python.')
+    Status: ExampleStatus = Field(default=ExampleStatus.Draft, description='A choice from a list of allowed values. Python refuses a value that is not a member.')
+    Material: StructuralMaterial | None = Field(default=None, description='A choice that can be missing.')
+    Finish: ExampleFinish = Field(default=ExampleFinish.None_, description="A combination of values from a list, written as a comma-separated text such as 'Painted, Insulated'.")
+    Labels: list[str] = Field(default_factory=list, description='A list of texts (named Labels because every BHoM object already has Tags).')
+    Values: Annotated[list[float], ClrType('double[]')] = Field(default_factory=list, description='An array of numbers. Becomes a list of floats in Python.')
+    Matrix: list[list[int]] = Field(default_factory=list, description='A list of lists of whole numbers, such as a matrix.')
+    UniqueNames: set[str] = Field(default_factory=set, description='A set of unique texts. Becomes a set in Python.')
+    Lookup: dict[str, float] = Field(default_factory=dict, description='A dictionary with text keys.')
+    TotalsByStatus: dict[ExampleStatus, float] = Field(default_factory=dict, description='A dictionary with an enum as the key. Written as a list of key and value objects in JSON.')
+    Pair: tuple[int, str] | None = Field(default=None, description='A pair of values of different types.')
+    MainGrid: Grid | None = Field(default=None, description='Another object, held inside this one.')
+    Storeys: list[Storey] = Field(default_factory=list, description='A list of other objects.')
+    Anything: Polymorphic[IObject] | None = Field(default=None, description='Any object of a type that implements IObject, whatever its class. Python reads and writes the class of each one.')
+    Extra: Any | None = Field(default=None, description='A value of any type. Becomes Any in Python.')
