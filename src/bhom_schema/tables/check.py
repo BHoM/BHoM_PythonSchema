@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from bhom_schema.tables.columns import KEY_COLUMN, ColumnInfo, describe, override_types
+from bhom_schema.tables.columns import KEY_COLUMN, ColumnInfo, UndecidedField, describe, override_types
 from bhom_schema.tables.decisions import Decision
 
 def normalized(column_type: str) -> str:
@@ -19,25 +19,25 @@ class TableCheck:
     """What differs between a table and the table a class would have.
 
     `missing` are the columns of the class that the table lacks (a row is read with the default of the field); `extra` are the table's columns that the class
-    does not store (they are ignored when a row is read); `mismatched` are the expected columns whose table type is another, with that type; `undecided` are the
-    fields that still need a decision, by path. `ok` is true when the table reads as the class: nothing missing, mismatched or undecided.
+    does not store (they are ignored when a row is read); `mismatched` are the expected columns whose table type is another, with that type; `undecided_fields`
+    are the fields that still need a decision. `ok` is true when the table reads as the class: nothing missing, mismatched or undecided.
     """
 
     missing: list[ColumnInfo] = field(default_factory=list[ColumnInfo])
     extra: list[str] = field(default_factory=list[str])
     mismatched: list[tuple[ColumnInfo, str]] = field(default_factory=list[tuple[ColumnInfo, str]])
-    undecided: dict[str, str] = field(default_factory=dict[str, str])
+    undecided_fields: list[UndecidedField] = field(default_factory=list[UndecidedField])
 
     @property
     def ok(self) -> bool:
         """Tells whether the table reads as the class."""
-        return not (self.missing or self.mismatched or self.undecided)
+        return not (self.missing or self.mismatched or self.undecided_fields)
 
     def __str__(self) -> str:
         """Writes the differences, one per line, or says the table matches."""
         lines = [f"missing column {column.name} {column.type}" for column in self.missing]
         lines += [f"column {column.name} is {actual}, the class expects {column.type}" for column, actual in self.mismatched]
-        lines += [f"field {path} ({kind}) still needs a decision" for path, kind in self.undecided.items()]
+        lines += [f"field {entry.path} ({entry.type}) still needs a decision" for entry in self.undecided_fields]
         lines += [f"extra column {name}, which the class does not store" for name in self.extra]
         return "\n".join(lines) if lines else "the table matches the class"
 
@@ -54,7 +54,7 @@ def check_table(
     result = TableCheck()
     known: set[str] = set()
     for column in expected:
-        result.undecided.update(column.undecided)
+        result.undecided_fields.extend(column.undecided_fields)
         if column.type is None:
             continue
 

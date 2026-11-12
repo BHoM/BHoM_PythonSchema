@@ -230,7 +230,7 @@ The helpers are in the package from the first alpha built after they were merged
        print(column.name, column.type, column.decision)
    ```
 
-   Expected: `Start` and `End`, both `PointLike`. `describe` shows the table that would be made: `Start` and `End` have no type and the decision `undecided`, and the other columns (`_id`, `_bhomVersion`, `Infinite`, `Label`) are mapped. Creating the table now would fail with an error that names the two fields and the four choices:
+   Expected: `Start` and `End`, both `PointLike`. `describe` shows the table that would be made: `Start` and `End` have no type and no decision (`decision` is `None`, `needs_decision` is `True`, and `undecided_fields` names the field and its type), and the other columns (`_id`, `_bhomVersion`, `Infinite`, `Label`) are mapped. Creating the table now would fail with an error that names the two fields and the four choices:
 
    | Decision | What is stored |
    |---|---|

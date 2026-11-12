@@ -24,7 +24,7 @@ from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
 from bhom_schema.FixtureAlpha_oM.Scalars import Scalars
 from bhom_schema.FixtureAlpha_oM.SupportKind import SupportKind
 from bhom_schema.FixtureAlpha_oM.Wrapper_1 import Wrapper_1
-from bhom_schema.tables import BASE_SKIPPED, Json, Ref, Skip, Struct, UnmappedType, column_type, custom_fields, describe, require_decided
+from bhom_schema.tables import BASE_SKIPPED, Json, Ref, Skip, Struct, UndecidedField, UnmappedType, column_type, custom_fields, describe, require_decided
 
 def columns_of(model: type, **options: Any) -> dict[str, tuple[str | None, str]]:
     """Describes a class and returns {column name: (type, decision)}, which is all most checks need."""
@@ -115,10 +115,10 @@ def test_collections_class_maps_collections_and_names_the_rest():
     assert columns["Matrix"] == ("ARRAY<ARRAY<INT>>", "primitive")
     assert columns["Words"] == ("ARRAY<STRING>", "primitive")
     assert columns["OptionalCount"] == ("INT", "primitive")
-    assert columns["Points"] == (None, "undecided")
-    assert columns["ByPoint"] == (None, "undecided")
-    assert columns["Pair"] == (None, "undecided")
-    assert columns["Anything"] == (None, "undecided")
+    assert columns["Points"] == (None, None)
+    assert columns["ByPoint"] == (None, None)
+    assert columns["Pair"] == (None, None)
+    assert columns["Anything"] == (None, None)
 
 def test_beam_class_maps_enums_markers_and_comments():
     """Checks the columns of the Beam fixture: enums and flags are STRING with the allowed names in the comment, long and float come from the markers, and the quantity is in the comment.
@@ -198,10 +198,11 @@ def test_undecided_fields_are_listed_by_describe_and_refused_by_require_decided(
 
     Protects the rule that no field is ever left out of a table without the user saying so.
     """
-    undecided = [column for column in describe(LineLike) if column.decision == "undecided"]
+    undecided = [column for column in describe(LineLike) if column.needs_decision]
 
-    assert [(column.name, column.type, column.undecided) for column in undecided] == [
-        ("Start", None, (("Start", "PointLike"),)), ("End", None, (("End", "PointLike"),))]
+    assert [(column.name, column.type, column.decision, column.undecided_fields) for column in undecided] == [
+        ("Start", None, None, (UndecidedField("Start", "PointLike"),)), ("End", None, None, (UndecidedField("End", "PointLike"),))]
+    assert not any(column.needs_decision or column.undecided_fields for column in describe(LineLike, {"Start": Skip(), "End": Skip()}))
 
     with pytest.raises(UnmappedType) as error:
         require_decided(LineLike)
@@ -215,7 +216,7 @@ def test_undecided_fields_are_listed_by_describe_and_refused_by_require_decided(
         "  Struct()                     a STRUCT column holding the object's own fields\n"
         "  Json()                       the object as JSON text in a STRING column\n"
         "  Skip()                       no column; the field keeps its default when a row is read")
-    assert error.value.fields == {"Start": "PointLike", "End": "PointLike"}
+    assert error.value.undecided_fields == (UndecidedField("Start", "PointLike"), UndecidedField("End", "PointLike"))
 
 def test_the_error_for_one_field_is_singular_and_a_decided_class_does_not_raise():
     """Checks the wording for a single undecided field, and that require_decided returns the columns when every field is decided.
@@ -263,13 +264,13 @@ def test_struct_names_the_path_of_a_nested_undecided_field():
 
     holder = describe(CycleA, {"Other": Struct()})[-1]
 
-    assert (holder.decision, holder.undecided) == ("undecided", (("Other.Other", "CycleA"),))
+    assert (holder.decision, holder.undecided_fields) == (None, (UndecidedField("Other.Other", "CycleA"),))
 
     with pytest.raises(UnmappedType) as error:
         require_decided(CycleA, {"Other": Struct()})
 
     assert 'Pass fields={"Other": Struct(fields={"Other": ...})} with one of:' in str(error.value)
-    assert error.value.fields == {"Other.Other": "CycleA"}
+    assert error.value.undecided_fields == (UndecidedField("Other.Other", "CycleA"),)
 
 def test_a_struct_that_would_contain_itself_is_refused():
     """Checks that CycleA holding CycleB holding CycleA raises, naming the cycle, once the user asks for a Struct at every level.

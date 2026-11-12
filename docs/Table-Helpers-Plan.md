@@ -110,7 +110,7 @@ All live in one public module, `bhom_schema.tables`.
 
 | Helper | Returns | Purpose |
 |---|---|---|
-| `describe(model, fields=None, key="_id")` | `list[ColumnInfo]` | One entry per column the table would have: name, column type, nullable, comment, the Python field it comes from and the decision that produced it (`primitive`, `ref`, `struct`, `json`, `key`, or `skip` for a field with no column). Printed as a table in a notebook, so the user sees the table before creating it. Does not raise for undecided fields; it lists them with the decision `undecided` |
+| `describe(model, fields=None, key="_id")` | `list[ColumnInfo]` | One entry per column the table would have: name, column type, nullable, comment, the Python field it comes from and the decision that produced it (`primitive`, `ref`, `struct`, `json`, `key`, or `skip` for a field with no column; `None` when the field still needs a decision, which `needs_decision` tells and `undecided_fields` lists as `UndecidedField(path, type)`). Printed as a table in a notebook, so the user sees the table before creating it. Does not raise for undecided fields; it lists them with the decision `None` |
 | `custom_fields(model)` | `dict[str, type]` | The fields that need a decision, with their Python types. For a class-typed field the type is the schema class, so the user knows which other table to create next |
 | `column_type(annotation)` | `str` | The column type of one annotation. Raises `UnmappedType` for a custom one. The building block of the rest |
 
@@ -138,7 +138,7 @@ The team will have tables that exist before the helpers do, and tables written b
 
 | Helper | Returns | Purpose |
 |---|---|---|
-| `check_table(model, columns, *, fields=None, key="_id", types=None)` | `TableCheck` | `columns` is `{name: type}` from `DESCRIBE TABLE` or `df.dtypes`. Reports `missing` (the `ColumnInfo` of each column the class has and the table lacks; the rows read with the field's default), `extra` (columns the class does not know), `mismatched` (column has another type than the class expects) and `undecided` fields. `TableCheck.ok` and a readable `str()` |
+| `check_table(model, columns, *, fields=None, key="_id", types=None)` | `TableCheck` | `columns` is `{name: type}` from `DESCRIBE TABLE` or `df.dtypes`. Reports `missing` (the `ColumnInfo` of each column the class has and the table lacks; the rows read with the field's default), `extra` (columns the class does not know), `mismatched` (column has another type than the class expects) and `undecided_fields` (the `UndecidedField` of each field that still needs a decision). `TableCheck.ok` and a readable `str()` |
 | `example_row(model, *, fields=None)` | `dict` | A row with the class's defaults, for a quick `INSERT` or `createDataFrame` smoke test |
 
 ### Spark layer (optional)
@@ -246,7 +246,7 @@ for column in describe(LineLike):
     print(column.name, column.type, column.decision)
 ```
 
-Expect for `PointLike`: `_id STRING key`, `_bhomVersion STRING primitive`, then `X`, `Y`, `Z` as `DOUBLE primitive`. For `LineLike`: `_id STRING key`, `_bhomVersion STRING primitive`, `Start None undecided`, `End None undecided`, `Infinite BOOLEAN primitive`, `Label STRING primitive`. The `undecided` rows are what `create_table_sql` refuses until the user decides.
+Expect for `PointLike`: `_id STRING key`, `_bhomVersion STRING primitive`, then `X`, `Y`, `Z` as `DOUBLE primitive`. For `LineLike`: `_id STRING key`, `_bhomVersion STRING primitive`, `Start None None`, `End None None`, `Infinite BOOLEAN primitive`, `Label STRING primitive`. The rows with the decision `None` (`needs_decision`) are what `create_table_sql` refuses until the user decides.
 
 ### 4. `create_table_sql`
 

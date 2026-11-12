@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import Enum, Flag
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -38,24 +38,33 @@ DECISION_HELP = (
     "  Skip()                       no column; the field keeps its default when a row is read"
 )
 
+DecisionKind = Literal["primitive", "key", "ref", "struct", "json", "skip"]
+
+@dataclass(frozen=True)
+class UndecidedField:
+    """A field that still needs a decision: `path` is `Start`, or `Start.Inner` inside a Struct, and `type` is its type as text."""
+
+    path: str
+    type: str
+
 class UnmappedType(TypeError):
     """A type that has no column type, or fields that need a decision before the class can have a table.
 
-    `fields` maps the path of each undecided field (`Start`, or `Start.Inner` inside a Struct) to its type, as text; it is empty for a single type.
+    `undecided_fields` lists every field that needs a decision; it is empty for a single type.
     """
 
-    def __init__(self, message: str, fields: Mapping[str, str] | None = None) -> None:
-        """Keeps the message and the undecided fields (path to type text) that the message lists."""
+    def __init__(self, message: str, undecided_fields: Sequence[UndecidedField] = ()) -> None:
+        """Keeps the message and the undecided fields that the message lists."""
         super().__init__(message)
-        self.fields: dict[str, str] = dict(fields or {})
+        self.undecided_fields: tuple[UndecidedField, ...] = tuple(undecided_fields)
 
 @dataclass(frozen=True)
 class ColumnInfo:
     """One column of a table, or a field that has none.
 
     `name` is the column name, `type` the column type (None when there is no column yet), `field` the Python field the column comes from (None for the added
-    key), and `decision` how it was decided: `primitive`, `key`, `ref`, `struct`, `json`, `skip`, or `undecided`. `undecided` lists the path and type of every
-    field that still needs a decision.
+    key), and `decision` how it was decided: `primitive`, `key`, `ref`, `struct`, `json` or `skip`, or None when the field still needs a decision.
+    `undecided_fields` lists every field that needs one (the field itself, or the fields inside its Struct); it is empty when `decision` is not None.
     """
 
     name: str
@@ -63,8 +72,13 @@ class ColumnInfo:
     nullable: bool
     comment: str | None
     field: str | None
-    decision: str
-    undecided: tuple[tuple[str, str], ...] = ()
+    decision: DecisionKind | None
+    undecided_fields: tuple[UndecidedField, ...] = ()
+
+    @property
+    def needs_decision(self) -> bool:
+        """Tells whether the field still needs a decision before the class can have a table."""
+        return self.decision is None
 
 def quote(name: str) -> str:
     """Quotes a column or field name with backticks, as Spark SQL needs for names such as `End` and `Key`."""
@@ -251,8 +265,8 @@ def comment_of(info: FieldInfo, kind: Any) -> str | None:
 
     return " ".join(parts) or None
 
-def struct_type(model: type[BaseModel], decisions: Mapping[str, Decision] | None, path: str, stack: tuple[type[BaseModel], ...], missing: dict[str, str]) -> str:
-    """Builds the STRUCT type of a class from its fields, mapped by the same rules as a table; the fields still undecided go into `missing` by path."""
+def struct_type(model: type[BaseModel], decisions: Mapping[str, Decision] | None, path: str, stack: tuple[type[BaseModel], ...], missing: list[UndecidedField]) -> str:
+    """Builds the STRUCT type of a class from its fields, mapped by the same rules as a table; the fields still undecided go into `missing`."""
     refuse_generic(model)
     if model in stack:
         cycle = " -> ".join(owner.__name__ for owner in (*stack, model))
@@ -270,7 +284,7 @@ def struct_type(model: type[BaseModel], decisions: Mapping[str, Decision] | None
         if entry.decision == "ref":
             raise ValueError(f"{path}.{name} is a Ref inside a Struct, which is an id that nothing could follow; use Struct(), Json() or Skip() for it")
 
-        missing.update(entry.undecided)
+        missing.extend(entry.undecided_fields)
         if entry.type is not None:
             parts.append(f"{quote(entry.name)}: {entry.type}")
 
@@ -294,7 +308,7 @@ def column_for(name: str, info: FieldInfo, decision: Decision | None, path: str,
         if primitive is not None:
             return ColumnInfo(column, primitive, True, comment, name, "primitive")
 
-        return ColumnInfo(column, None, True, comment, name, "undecided", ((path, describe_type(annotation)),))
+        return ColumnInfo(column, None, True, comment, name, None, (UndecidedField(path, describe_type(annotation)),))
 
     if isinstance(decision, Skip):
         return ColumnInfo(column, None, True, comment, name, "skip")
@@ -320,10 +334,10 @@ def column_for(name: str, info: FieldInfo, decision: Decision | None, path: str,
 
     nested: Any = bare(annotation)[0]
     model: type[BaseModel] = bare(typing.get_args(nested)[0])[0] if shape == "classes" else nested
-    missing: dict[str, str] = {}
+    missing: list[UndecidedField] = []
     text = struct_type(model, decision.fields, path, stack, missing)
     if missing:
-        return ColumnInfo(column, None, True, comment, name, "undecided", tuple(missing.items()))
+        return ColumnInfo(column, None, True, comment, name, None, tuple(missing))
 
     return ColumnInfo(column, f"ARRAY<{text}>" if shape == "classes" else text, True, comment, name, "struct")
 
@@ -347,7 +361,7 @@ def describe(model: type[BaseModel], fields: Mapping[str, Decision] | None = Non
     """Lists the columns that the table of a class would have, the key first, so the user sees the table before creating it.
 
     Fields with a primitive type are mapped; the others follow `fields` (a decision per field name). A field that still needs a decision is listed with the
-    decision `undecided` and no type, and does not raise; `require_decided` raises for them. `key` is `_id` (the key of the class), a field name, or None.
+    decision None and no type, and does not raise; `require_decided` raises for them. `key` is `_id` (the key of the class), a field name, or None.
     """
     refuse_generic(model)
     decisions = dict(fields or {})
@@ -408,16 +422,16 @@ def require_decided(model: type[BaseModel], fields: Mapping[str, Decision] | Non
     The helpers that write SQL call it, so no column is ever left out without the user saying so.
     """
     columns = describe(model, fields, key)
-    undecided = {path: kind for column in columns for path, kind in column.undecided}
+    undecided = [entry for column in columns for entry in column.undecided_fields]
     if not undecided:
         return columns
 
     count = len(undecided)
     noun = "a field" if count == 1 else f"{count} fields"
     verb = "it has" if count == 1 else "they have"
-    lines = "\n".join(f"  {path}: {kind}" for path, kind in undecided.items())
+    lines = "\n".join(f"  {entry.path}: {entry.type}" for entry in undecided)
     example = "..."
-    for part in reversed(next(iter(undecided)).split(".")):
+    for part in reversed(undecided[0].path.split(".")):
         example = f'{{"{part}": {example}}}' if example == "..." else f'{{"{part}": Struct(fields={example})}}'
 
     raise UnmappedType(

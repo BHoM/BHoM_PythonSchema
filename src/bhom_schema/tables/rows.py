@@ -19,7 +19,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 
 from bhom_schema._support import ClrType
-from bhom_schema.tables.columns import KEY_COLUMN, bare, clr_elements, clr_name_of, column_for, column_type, quote, require_decided, shape_of
+from bhom_schema.tables.columns import KEY_COLUMN, DecisionKind, bare, clr_elements, clr_name_of, column_for, column_type, quote, require_decided, shape_of
 from bhom_schema.tables.decisions import Decision, Struct
 
 INTEGER_BITS = {"TINYINT": 8, "SMALLINT": 16, "INT": 32, "BIGINT": 64}
@@ -38,7 +38,7 @@ class Entry:
 
     field: str
     column: str
-    kind: str
+    kind: DecisionKind | None
     info: FieldInfo
     child: list[Entry] | None = None
     many: bool = False

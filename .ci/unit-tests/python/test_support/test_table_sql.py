@@ -14,7 +14,7 @@ from bhom_schema.FixtureAlpha_oM.LineLike import LineLike
 from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
 from bhom_schema.FixtureAlpha_oM.Scalars import Scalars
 from bhom_schema.FixtureAlpha_oM.Wrapper_1 import Wrapper_1
-from bhom_schema.tables import BASE_SKIPPED, Json, Ref, Skip, Struct, UnmappedType, add_columns_sql, check_table, create_table_sql
+from bhom_schema.tables import BASE_SKIPPED, Json, Ref, Skip, Struct, UndecidedField, UnmappedType, add_columns_sql, check_table, create_table_sql
 
 VERSION_COMMENT = "COMMENT 'Optional version of BHoM used as part of automatic versioning and schema upgrades.'"
 POINT = Ref("main.default.PointLike")
@@ -171,7 +171,7 @@ def test_check_table_of_a_matching_table_is_ok():
     check = check_table(LineLike, columns, fields={"Start": Struct(), "End": POINT})
 
     assert check.ok
-    assert check.missing == [] and check.extra == [] and check.mismatched == [] and check.undecided == {}
+    assert check.missing == [] and check.extra == [] and check.mismatched == [] and check.undecided_fields == []
     assert str(check) == "the table matches the class"
 
 def test_check_table_reports_missing_extra_and_mismatched_columns():
@@ -198,7 +198,7 @@ def test_check_table_lists_undecided_fields_and_ignores_extra_columns_for_ok():
     """
     undecided = check_table(LineLike, {"_id": "string"})
 
-    assert undecided.undecided == {"Start": "PointLike", "End": "PointLike"}
+    assert undecided.undecided_fields == [UndecidedField("Start", "PointLike"), UndecidedField("End", "PointLike")]
     assert not undecided.ok
 
     skipped = check_table(PointLike, {"_id": "string", "_bhomVersion": "string", "X": "double", "Y": "double", "Z": "double"}, fields={"Z": Skip()})
