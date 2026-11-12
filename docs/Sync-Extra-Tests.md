@@ -81,7 +81,7 @@ After the merge and the removal, run the type-validation notebook against the ne
 
 ## G. A class that refers to another class, and inheritance
 
-- Add `SyncTestRef: Grid | None = Field(default=None, description='...')` to `SyncTestDummy` (add the dummy first, as in test 4). The draft refers to `Grid` and does not touch `Grid.cs`.
+- Add `SyncTestRef: Grid | None = Field(default=None, description='...')` to `SyncTestDummy` (add the dummy first, as in test 1). The draft refers to `Grid` and does not touch `Grid.cs`.
 - Change the base class of `SyncTestDummy` from `BHoMObject` to `SchemaModel` and back. A base class removed or changed is a breaking change; the draft changes only the declaration line.
 - A class in a sub-namespace: put the dummy in a new folder `src/bhom_schema/DataSchema_oM/SyncTest/`. Expect the file in `DataSchema_oM/SyncTest/` and namespace `BH.oM.DataSchema.SyncTest`.
 - A class in an assembly folder that does not exist (`NoSuch_oM/Thing.py`) must be refused by `check`.
@@ -131,7 +131,7 @@ check exists for.
 
 ## N. What a Python user gets after the sync
 
-For each of tests 1 to 5 of the main procedure, install the alpha built after the merge in a clean environment and check the change as the user sees it:
+After each of the three tests of the main procedure, install the alpha built after the merge in a clean environment and check the change as the user sees it:
 
 - the new field is in `Grid.model_fields`, has its description, and `Grid(SyncTestField="x")` works; `Grid(SyncTestField=3)` is refused when the type is `str`;
 - JSON written by the new version and read by the old one (and the other way round): an unknown field must not break `model_validate_json`; a missing field takes its default;

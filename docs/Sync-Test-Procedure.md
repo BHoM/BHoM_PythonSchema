@@ -7,15 +7,13 @@ before. Ideas for further tests are in [Sync-Extra-Tests.md](Sync-Extra-Tests.md
 
 | Test | You change in Python | Expected in C# | Undone by |
 |---|---|---|---|
-| 1. Add a field | a new property `SyncTestField` (`str`) on `Grid` | one property added to `Grid.cs`, nothing else touched | test 3 |
+| 1. Add a field and a class | a new property `SyncTestField` (`str`) on `Grid`, and a new dummy class `SyncTestDummy`, in one pull request | one property added to `Grid.cs` and one new file `SyncTestDummy.cs`; nothing else touched | test 3 |
 | 2. Change the field type | `SyncTestField` from `str` to `int` | the type and the initial value of that property change; labelled `breaking-change` | test 3 |
-| 3. Remove the field | `SyncTestField` removed | the property is removed from `Grid.cs`; labelled `breaking-change`; `Grid.cs` is the same as before test 1 | |
-| 4. Add a class | a new dummy class `SyncTestDummy` | one new file `SyncTestDummy.cs` in `DataSchema_oM` | test 5 |
-| 5. Remove the class | `SyncTestDummy` removed | **no file is drafted**: a class removed in Python is deleted in C# by hand | |
+| 3. Remove the field and the class | `SyncTestField` and `SyncTestDummy` removed, in one pull request | the property is removed from `Grid.cs` (labelled `breaking-change`); **the class is not drafted**, so its file is deleted by hand on the draft's branch; afterwards both C# files are the same as before test 1 | |
 
-The field tests use only a field that the procedure itself creates, so no existing property of an existing class is ever changed, and `Grid` is the
-host because it is a small class with only two properties (`ExampleObject` has a `Grid` field, which a new field on `Grid` does not disturb). The same holds for the class tests: only `SyncTestDummy` is added
-and removed.
+The tests use only a field and a class that the procedure itself creates, so no existing property of an existing class is ever changed. `Grid` is the
+host because it is a small class with only two properties (`ExampleObject` has a `Grid` field, which a new field on `Grid` does not disturb). Three pull
+requests, each with its C# draft, are enough to show every kind of change: add, change and remove, for a field and for a whole class.
 
 ## Read this before you start
 
@@ -23,9 +21,9 @@ and removed.
   check compares against the merged C#). Tell the owners of DataSchema_Toolkit when you run this, and do the whole sequence in one sitting.
 - **Do not leave a test half done over a Saturday or a morning alpha.** The weekly *Python schema generation* (Saturday 4 AM UTC) rewrites
   `src/bhom_schema` from the C# `develop`, and the daily *alpha release* (6 AM UTC) publishes `develop` as it is. A dummy field or class that is merged
-  and not yet removed would be generated into `develop` and published. Run the sequence between two of those times, or accept that one alpha
+  and not yet removed would be generated into `develop` and published. Run the three tests between two of those times, or accept that one alpha
   carries the dummy.
-- **If you only want to see the drafts**, do steps 1 to 6 of each test and then close both pull requests without merging (see "Stop early" at the end of
+- **If you only want to see the drafts**, do the steps of each test up to the draft and then close both pull requests without merging (see "Stop early" at the end of
   "Closing the loop"). Nothing changes in either repository; you test the draft, but not the alignment.
 - The Python file you edit starts with `Do not edit by hand` because it is normally generated. That comment is about the weekly generation, which
   overwrites such files; the linked-PR loop is the sanctioned way to change them, and the generation brings your change back into line once the C# is merged.
@@ -116,29 +114,76 @@ proves the installation) and prints what it would do.
 **Stop early (drafts only).** Close the Python PR without merging. *Linked C# PR close* closes the draft with a comment; delete the `python-schema/pr-<N>`
 branch in DataSchema_Toolkit by hand. Neither repository has changed.
 
-## Test 1: add a field
+## Test 1: add a field and a class
 
-Goal: one new property in `Grid.cs`, and nothing else in that file changes.
+Goal: one new property in `Grid.cs` and one new file, in the same draft, and nothing else in the repository changes.
 
-1. Branch `sync-test/1-add-field`. Do step 1 of Part 1 (copy the Python before you edit).
+1. Branch `sync-test/1-add` from `develop`. Do step 1 of Part 1 (copy the Python before you edit).
 2. In `src/bhom_schema/DataSchema_oM/Grid.py` add one line at the end of the class, after `TypicalYSpacing`:
 
    ```python
        SyncTestField: str = Field(default='', description='A field added to test the sync.')
    ```
 
-3. Run Part 1. Expect, in the report: `Changes in Python: - property added: string SyncTestField`, no "Breaking changes" section, and a draft that differs from
-   `Grid.cs` by exactly three lines:
+3. Add `src/bhom_schema/DataSchema_oM/SyncTestDummy.py` (one class per file, in the assembly folder that already exists, in the style of `docs/templates/NewClass.py`):
 
-   ```csharp
+   ```python
+   """A dummy class that tests the sync between Python and C#."""
 
-           [Description("A field added to test the sync.")]
-           public virtual string SyncTestField { get; set; } = "";
+   from __future__ import annotations
+
+   from pydantic import Field
+
+   from bhom_schema.BHoM.BHoMObject import BHoMObject
+
+
+   class SyncTestDummy(BHoMObject):
+       """A dummy class that tests the sync between Python and C#."""
+       Label: str = Field("", description="A label.")
+       Count: int = Field(0, description="A count.")
    ```
 
-4. Push, open the pull request, and follow Part 2. The draft must not carry the `breaking-change` label (adding a property is not breaking).
-5. Push a second commit that only changes the description text. Expect the same draft and branch to be updated, with one `Description` line changed.
-6. Close the loop (all five steps). After step 5 the C# `develop` has `SyncTestField` in `Grid.cs`, and so does `src/bhom_schema` on `develop`.
+   No `__bhom__` marker is written: the folder says the assembly is `DataSchema_oM`, the namespace `BH.oM.DataSchema` and the repository `BHoM/DataSchema_Toolkit`.
+4. Run Part 1. Expect:
+   - `check` ends with `0 errors, 1 warnings`; the warning says the marker of `SyncTestDummy` was worked out as `BH.oM.DataSchema.SyncTestDummy`, `BHoM/DataSchema_Toolkit`, `class`.
+   - `plan` ends with `2 files planned in 1 repositories, 0 problems`.
+   - The report lists `DataSchema_oM/Grid.cs (changes to an existing file)` with `property added: string SyncTestField` and `DataSchema_oM/SyncTestDummy.cs (new file)` with `new type` and
+     `Location: folder of 4 existing same kind files in namespace BH.oM.DataSchema`. There is no "Breaking changes" section.
+   - The diff against `Grid.cs` is exactly three lines:
+
+     ```csharp
+
+             [Description("A field added to test the sync.")]
+             public virtual string SyncTestField { get; set; } = "";
+     ```
+
+   - `SyncTestDummy.cs` is a new file, with the copyright header of its neighbours:
+
+     ```csharp
+     using BH.oM.Base;
+     using System.ComponentModel;
+
+     namespace BH.oM.DataSchema
+     {
+         [Description("A dummy class that tests the sync between Python and C#.")]
+         public class SyncTestDummy : BHoMObject
+         {
+             [Description("A label.")]
+             public virtual string Label { get; set; } = "";
+
+             [Description("A count.")]
+             public virtual int Count { get; set; } = 0;
+         }
+     }
+     ```
+
+5. Push, open the pull request and follow Part 2. The draft has two files and **no** `breaking-change` label (adding is not breaking).
+6. Push a second commit that only changes the description text of `SyncTestField`. Expect the same branch and draft to be updated, with one `Description` line changed.
+7. Try one mistake on purpose, in a separate commit that you revert: delete the `description` of `Count`. Expect `py2cs check` to fail in **Build and tests** with the file and line. Write down
+   what **C# PR** does with that commit (it runs on its own, so it may still update the draft); do not merge the draft from that commit. Revert the commit.
+8. Close the loop (all five steps). In step 5 expect the generation to commit once: the generated `SyncTestDummy.py` has the `Generated by` header and the `__bhom__` marker that yours lacked. Pull `develop`.
+9. Check that the class imports from the new `develop`:
+   `python -c "from bhom_schema.DataSchema_oM.SyncTestDummy import SyncTestDummy; print(SyncTestDummy())"`.
 
 ## Test 2: change the field type
 
@@ -164,117 +209,60 @@ Goal: a type change is drafted as a change of that one property, and is labelled
    `[Length]` attribute appear in the draft.
 6. Close the loop.
 
-## Test 3: remove the field
+## Test 3: remove the field and the class
 
-Goal: the property goes, and `Grid.cs` is the same as before test 1.
+Goal: both go, and both C# files are the same as before test 1. The field is drafted; **the class is not**, because the draft tooling never deletes a C# file. This was seen on GitHub: no C# pull
+request is raised for the removal of a class, and **C# alignment** fails on the Python PR until the C# file is gone. The procedure below therefore removes the class from C# by hand, on the same branch as the draft.
 
-1. Branch `sync-test/3-remove-field` from `develop`. Do step 1 of Part 1.
-2. In `Grid.py` delete the `SyncTestField` line.
-3. Run Part 1. Expect: `property removed: int SyncTestField`, a "Breaking changes" section, and a draft that removes the three lines added in test 1 (the blank line, the `Description` and the property).
-4. Push and follow Part 2: `breaking-change` label again.
-5. Close the loop.
-6. **Check the field is gone from both sides:**
+1. Branch `sync-test/3-remove` from `develop`. Do step 1 of Part 1.
+2. In `Grid.py` delete the `SyncTestField` line, and delete `src/bhom_schema/DataSchema_oM/SyncTestDummy.py`. Nothing refers to the class.
+3. Run Part 1. Expect:
+   - `check` passes, and `plan` ends with `1 files planned in 1 repositories, 0 problems`: only `Grid.cs`.
+   - The report has `property removed: int SyncTestField` for `Grid.cs`, and under it `Removed in Python (delete or deprecate in C# by hand): BH.oM.DataSchema.SyncTestDummy`. The "Breaking changes"
+     section lists both, `BH.oM.DataSchema.Grid: property removed: int SyncTestField` and `BH.oM.DataSchema.SyncTestDummy: type removed`.
+   - The diff removes the three lines that test 1 added (the blank line, the `Description` and the property). It does not touch `SyncTestDummy.cs`.
+4. Push and open the pull request. Expect the draft to exist with the `breaking-change` label and the `Grid.cs` change only, and **C# alignment** to be red (it would be red anyway before the merge).
+5. **Delete the class in C# on the draft's branch.** In `C:\Github\DataSchema_Toolkit`:
 
    ```powershell
-   git diff <starting commit of this repository> HEAD -- src/bhom_schema/DataSchema_oM/Grid.py
-   git -C C:\Github\DataSchema_Toolkit diff <starting commit of DataSchema_Toolkit> HEAD -- DataSchema_oM/Grid.cs
+   git fetch
+   git checkout python-schema/pr-<N>
+   git rm DataSchema_oM/SyncTestDummy.cs
+   git commit -m "Remove SyncTestDummy, which was removed in Python"
+   git push origin python-schema/pr-<N>
+   git checkout develop
    ```
 
-   Both must print nothing (the commits in between are in the history; their net effect is zero). If the generation of test 3 step 5 changed the formatting of `Grid.py`,
-   that is the only difference you may see, and it belongs in the results.
-
-## Test 4: add a class
-
-Goal: one new file in the right folder and namespace, and no existing file touched.
-
-1. Branch `sync-test/4-add-class` from `develop`. Do step 1 of Part 1.
-2. Add `src/bhom_schema/DataSchema_oM/SyncTestDummy.py` (one class per file, in the assembly folder that already exists, in the style of `docs/templates/NewClass.py`):
-
-   ```python
-   """A dummy class that tests the sync between Python and C#."""
-
-   from __future__ import annotations
-
-   from pydantic import Field
-
-   from bhom_schema.BHoM.BHoMObject import BHoMObject
-
-
-   class SyncTestDummy(BHoMObject):
-       """A dummy class that tests the sync between Python and C#."""
-       Label: str = Field("", description="A label.")
-       Count: int = Field(0, description="A count.")
-   ```
-
-   No `__bhom__` marker is written: the folder says the assembly is `DataSchema_oM`, the namespace `BH.oM.DataSchema` and the repository `BHoM/DataSchema_Toolkit`.
-3. Run Part 1. Expect: `check` ends with `0 errors, 1 warnings` and the warning says the marker was worked out as `BH.oM.DataSchema.SyncTestDummy`, `BHoM/DataSchema_Toolkit`, `class`; the report says
-   `DataSchema_oM/SyncTestDummy.cs (new file)`, `Location: folder of 4 existing same kind files in namespace BH.oM.DataSchema`; and the git diff is one new file:
-
-   ```csharp
-   using BH.oM.Base;
-   using System.ComponentModel;
-
-   namespace BH.oM.DataSchema
-   {
-       [Description("A dummy class that tests the sync between Python and C#.")]
-       public class SyncTestDummy : BHoMObject
-       {
-           [Description("A label.")]
-           public virtual string Label { get; set; } = "";
-
-           [Description("A count.")]
-           public virtual int Count { get; set; } = 0;
-       }
-   }
-   ```
-
-   (with the same copyright header as its neighbours, and the section comments of the generated style). No existing file may be listed.
-4. Push and follow Part 2. The draft has one added file and **no** `breaking-change` label.
-5. Try one mistake on purpose, in a separate commit that you revert: delete the `description` of `Count`. Expect `py2cs check` to fail in **Build and tests** with the file and line. Write down
-   what **C# PR** does with that commit (it runs on its own, so it may still update the draft); the draft must not be merged from that commit. Revert the commit.
-6. Close the loop. In step 5 (generation) expect it to commit once: the generated `SyncTestDummy.py` has the `Generated by` header and the `__bhom__` marker that yours lacked. Pull `develop`.
-7. Open `src/bhom_schema/DataSchema_oM/SyncTestDummy.py` on `develop` and check it imports: `python -c "from bhom_schema.DataSchema_oM.SyncTestDummy import SyncTestDummy; print(SyncTestDummy())"`.
-
-## Test 5: remove the class
-
-Goal: see what happens to a class that disappears from Python. The expected result is that **no C# is drafted** (the draft tooling never deletes a C# file), so the C# side is deleted by hand and the
-alignment check then proves the two agree.
-
-1. Branch `sync-test/5-remove-class` from `develop`. Do step 1 of Part 1.
-2. Delete `src/bhom_schema/DataSchema_oM/SyncTestDummy.py`. (Do not touch any class that refers to it: nothing does.)
-3. Run Part 1. Expect `check` to pass, the report to contain `Removed in Python (delete or deprecate in C# by hand): BH.oM.DataSchema.SyncTestDummy` and a "Breaking changes" section
-   (`BH.oM.DataSchema.SyncTestDummy: type removed`), and `pr --dry-run` to print `would skip BHoM/DataSchema_Toolkit no planned files for this repository`.
-4. Push and open the pull request. Expect:
-   - **C# PR / Raise or update draft** does not open a pull request (there is nothing to draft). Write down what it shows: green with a skip, or no comment on the Python PR. This is the part of the
-     procedure that has not been observed before.
-   - **C# alignment** is red.
-5. **Delete the class in C# by hand:** a branch `sync-test/remove-dummy` of DataSchema_Toolkit with `DataSchema_oM/SyncTestDummy.cs` deleted, and a pull request to `develop`. Merge it.
-6. Re-run **C# alignment** on the Python PR: it must go green (the Python generated from the merged C# no longer has the class).
-7. Merge the Python PR. Run *Python schema generation* live: `No changes`.
-8. **End-state check.** Both of these must print nothing:
+   The draft now removes the property and the file in one pull request. **Do not push again to the Python PR from now on:** a push updates `python-schema/pr-<N>` from the Python alone, and would drop
+   your commit (if you must push, repeat this step afterwards). Write the result of the step in the results table.
+6. Build the draft, review, mark it ready and merge it (Closing the loop, steps 1 and 2).
+7. Re-run **C# alignment**: it must go green (the Python generated from the merged C# has neither the property nor the class).
+8. Merge the Python PR, then run *Python schema generation* live: `No changes`.
+9. **End-state check.** Both of these must print nothing:
 
    ```powershell
    git diff <starting commit of this repository> HEAD -- src/bhom_schema
    git -C C:\Github\DataSchema_Toolkit diff <starting commit of DataSchema_Toolkit> HEAD -- DataSchema_oM
    ```
 
-   Also look in DataSchema_Toolkit for leftover `python-schema/pr-*` and `sync-test/*` branches, and in this repository for leftover `sync-test/*` branches; delete them.
+   If the generation of test 1 changed the formatting of `Grid.py` or wrote `SyncTestDummy.py`, those are the only differences you may see before this test, and none may remain after it.
+   Also look for leftover `python-schema/pr-*` and `sync-test/*` branches in both repositories, and delete them.
 
 ## Results
 
 Fill in as you go.
 
-| | Test 1 | Test 2 | Test 3 | Test 4 | Test 5 |
-|---|---|---|---|---|---|
-| Local rehearsal matched the expectation | | | | | |
-| Python PR number | | | | | |
-| C# draft number | | | | | |
-| Draft as expected, label as expected | | | | | |
-| Draft built | | | | | |
-| Alignment green after the C# merge | | | | | |
-| Generation after the merge: `No changes`? If not, what differed | | | | | |
+| | Test 1 | Test 2 | Test 3 |
+|---|---|---|---|
+| Local rehearsal matched the expectation | | | |
+| Python PR number | | | |
+| C# draft number | | | |
+| Draft as expected, label as expected | | | |
+| Draft built | | | |
+| Alignment green after the C# merge | | | |
+| Generation after the merge: `No changes`? If not, what differed | | | |
 
-| | Starting commit | After test 5 |
+| | Starting commit | After test 3 |
 |---|---|---|
 | BHoM_PythonSchema `develop` | | |
 | DataSchema_Toolkit `develop` | | |
@@ -285,7 +273,7 @@ Fill in as you go.
 | Symptom | Likely cause |
 |---|---|
 | *C# PR* fails at *Make a token for the C# repositories touched* | The App is not installed on DataSchema_Toolkit, or `BHOM_APP_ID` / `BHOM_APP_PRIVATE_KEY` are missing |
-| *C# PR* is green but no draft appears | The PR is from a fork, or the change is only a removal (nothing to draft), or the C# already has the planned content (`already has the planned files, nothing to raise`) |
+| *C# PR* is green but no draft appears | The PR is from a fork, or the change is only the removal of a class (nothing to draft), or the C# already has the planned content (`already has the planned files, nothing to raise`) |
 | `plan` says it cannot find the file of a class | `C:\Github\DataSchema_Toolkit` is not on the current `develop`, or the class is in a folder that is not an assembly folder of `src/bhom_schema` |
 | `check` fails on a description or a default | Every class and field needs a description; a field without a default becomes a C# property without an initial value |
 | Alignment stays red after the C# merge | Re-run it by hand; then read the list it prints (the first value is from the C#, the second from the PR) |
