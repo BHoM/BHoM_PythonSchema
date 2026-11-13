@@ -27,6 +27,7 @@ foreach (FileJob file in job.Files)
         PatchResult patched = FilePatcher.Patch(source, file);
         File.WriteAllText(file.Output, patched.Text, new UTF8Encoding(bom));
         result.Notes = patched.Notes;
+        result.Empty = patched.Empty;
     }
     catch (Exception e)
     {

@@ -56,6 +56,10 @@ class GitHubClient(Protocol):
         """Contract: creates or updates one file on a branch with a commit message; the existing blob sha must be given when the file already exists. `pr` writes each planned C# file this way.
         """
 
+    def delete_file(self, repo: str, branch: str, path: str, message: str, sha: str) -> None:
+        """Contract: deletes one file on a branch with a commit message; the blob sha of the existing file must be given. `pr` deletes the C# file of a class removed in Python this way.
+        """
+
     def find_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
         """Contract: returns the open pull request whose head is the branch, or None. `pr` and `close` use it to find the linked draft C# pull request.
         """
@@ -165,6 +169,11 @@ class RestClient:
             body["sha"] = sha
         self._request("PUT", f"/repos/{repo}/contents/{urllib.parse.quote(path)}", body)
 
+    def delete_file(self, repo: str, branch: str, path: str, message: str, sha: str) -> None:
+        """Deletes a file on a branch through the GitHub contents API, sending the blob sha of the file. Used by `pr` to delete the C# file of a class removed in Python.
+        """
+        self._request("DELETE", f"/repos/{repo}/contents/{urllib.parse.quote(path)}", {"message": message, "sha": sha, "branch": branch})
+
     def find_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
         """Looks up the open pull request whose head is the given branch of the same owner, or returns None. Used by `pr` and `close` to find the linked C# draft.
         """
@@ -268,6 +277,12 @@ class MockGitHub:
         """
         self.calls.append(("put_file", repo, branch, path))
         self._repo(repo).files[(branch, path)] = content
+
+    def delete_file(self, repo: str, branch: str, path: str, message: str, sha: str) -> None:
+        """Removes a file from a branch and logs the call. Stands in for GitHub in tests and offline dry runs, and lets tests check which files were deleted.
+        """
+        self.calls.append(("delete_file", repo, branch, path))
+        self._repo(repo).files.pop((branch, path), None)
 
     def find_pull_request(self, repo: str, head_branch: str) -> PullRequest | None:
         """Returns the open pull request with that head branch, or None. Stands in for GitHub in tests and offline dry runs."""

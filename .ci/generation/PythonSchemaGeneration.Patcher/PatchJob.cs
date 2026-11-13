@@ -27,7 +27,8 @@ namespace PythonSchemaGeneration.Patcher
     /***************************************************/
 
     //One member-level change. Kind is one of addProperty, removeProperty, setPropertyType, setPropertyInitialiser, setDescription,
-    //setAttributes, setBases, addEnumMember, removeEnumMember, setEnumValue. Texts are C# source, ready to be written.
+    //setAttributes, setBases, addEnumMember, removeEnumMember, setEnumValue, removeType. Texts are C# source, ready to be written.
+    //removeType removes the whole type named by the file job and ignores every other change of that job.
     public class Change
     {
         public string Kind { get; set; }
@@ -62,6 +63,9 @@ namespace PythonSchemaGeneration.Patcher
 
         public List<string> Notes { get; set; } = new List<string>();
 
+        //True when nothing meaningful is left in the file after a removeType (only usings, empty namespaces, comments and blank lines)
+        public bool Empty { get; set; }
+
         public string Error { get; set; }
     }
 
@@ -72,5 +76,7 @@ namespace PythonSchemaGeneration.Patcher
         public string Text { get; set; }
 
         public List<string> Notes { get; set; } = new List<string>();
+
+        public bool Empty { get; set; }
     }
 }

@@ -41,6 +41,8 @@ class PatchResult:
     bom: bool = False
     notes: list[str] = field(default_factory=lambda: [])
     error: str | None = None
+    # After a removed type, nothing meaningful is left in the file (only usings, empty namespaces and comments), so the file can be deleted
+    empty: bool = False
 
 def default_patcher() -> Path:
     """The built patcher; the PY2CS_PATCHER environment variable points elsewhere."""
@@ -72,8 +74,12 @@ def run_patcher(patches: list[FilePatch], patcher: Path | None = None) -> list[P
                 results.append(PatchResult(error=str(entry["error"])))
                 continue
             data = output.read_bytes()
-            results.append(PatchResult(data.decode("utf-8-sig"), data.startswith(b"\xef\xbb\xbf"), list(entry.get("notes") or [])))
+            results.append(PatchResult(data.decode("utf-8-sig"), data.startswith(b"\xef\xbb\xbf"), list(entry.get("notes") or []), empty=bool(entry.get("empty"))))
         return results
+
+def build_removal_patch(path: Path, info: TypeInfo) -> FilePatch:
+    """The change list that removes a type, and nothing else, from the C# file that declares it. Used by `make_plan` for a class removed in Python."""
+    return FilePatch(path, info.simple_name, info.namespace, [{"kind": "removeType"}])
 
 def build_patch(path: Path, before: TypeInfo, after: TypeInfo, head: Manifest) -> FilePatch:
     """The change list turning the C# of `before` into the C# of `after`."""

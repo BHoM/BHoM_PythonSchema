@@ -12,7 +12,7 @@ from py2cs.csharp import emit_new
 from py2cs.diff import Diff
 from py2cs.locate import locate, place
 from py2cs.model import Manifest
-from py2cs.patch import FilePatch, PatcherError, PatchResult, build_patch, run_patcher
+from py2cs.patch import FilePatch, PatcherError, PatchResult, build_patch, build_removal_patch, run_patcher
 from py2cs.resolve import Listing, ResolveError, resolve_repo
 
 Patcher = Callable[[list[FilePatch]], list[PatchResult]]
@@ -21,7 +21,7 @@ Patcher = Callable[[list[FilePatch]], list[PatchResult]]
 class PlannedFile:
     repo: str
     path: str                 # relative to the repository root
-    action: str               # new | patch
+    action: str               # new | patch | delete (a file with nothing meaningful left after its type was removed)
     clr_name: str
     text: str
     rule: str = ""
@@ -35,13 +35,14 @@ class PlannedFile:
 @dataclass
 class Plan:
     files: list[PlannedFile] = field(default_factory=lambda: [])
+    # The types removed in Python that could not be removed in C#: no clone, no repository, or no file that declares them. Listed in the report for a hand edit
     removed: list[tuple[str, str]] = field(default_factory=lambda: [])    # (repo or "?", clr name)
     errors: list[str] = field(default_factory=lambda: [])
     # New in Python, but the C# already declares them (the C# pull request was merged): nothing to raise, `align` compares them
     existing: list[str] = field(default_factory=lambda: [])
 
     def repos(self) -> list[str]:
-        """Returns the sorted repositories that have a planned file or a removed type with a known repository. `plan` writes one report per repository and `pr` raises one pull request per repository.
+        """Returns the sorted repositories that have a planned file (a new file, a patch or a delete) or a removed type with a known repository. `plan` writes one report per repository and `pr` raises one pull request per repository.
         """
         return sorted({f.repo for f in self.files} | {r for r, _ in self.removed if r != "?"})
 
@@ -62,12 +63,14 @@ class Plan:
 
 def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[str], Path | None], listing: Listing | None = None,
               patcher: Patcher | None = None, only_repo: str | None = None) -> Plan:
-    """Turns a diff of two Python versions into the planned C# files: whole new files for new types, member-level patches (through the Roslyn patcher) for types that already exist.
+    """Turns a diff of two Python versions into the planned C# files: whole new files for new types, member-level patches (through the Roslyn patcher) for types that already exist,
+    and for a type removed in Python the removal of that type from its C# file, or the deletion of the file when nothing meaningful is left in it.
 
     It resolves the repository and finds the file in the clone of each class, and records problems instead of raising. Reads the clones, never writes into them. With only_repo, classes of other repositories are left out for the linked-PR job. The `plan` command calls it.
     """
     plan = Plan()
     pending: list[tuple[PlannedFile, FilePatch]] = []
+    removals: set[str] = set()
     for change in diff.changes:
         if change.kind == "removed":
             info = base.get(change.clr_name)
@@ -77,8 +80,21 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
                     repo = resolve_repo(info, listing).repo
                 except ResolveError as e:
                     plan.errors.append(str(e))
-            if only_repo is None or repo.lower() == only_repo.lower():
+            if only_repo is not None and repo.lower() != only_repo.lower():
+                continue
+
+            root = clone_for(repo) if repo != "?" else None
+            found = locate(root, info) if root is not None and info is not None else None
+            if root is None or info is None or found is None or found.path is None:
                 plan.removed.append((repo, change.clr_name))
+                continue
+
+            relative = found.path.relative_to(root).as_posix()
+            notes = [found.note] if found.note else []
+            planned = PlannedFile(repo, relative, "patch", change.clr_name, "", "existing file found by searching for the declaration", notes, change.details, change.breaking)
+            plan.files.append(planned)
+            pending.append((planned, build_removal_patch(found.path, info)))
+            removals.add(change.clr_name)
             continue
 
         info = head[change.clr_name]
@@ -124,13 +140,18 @@ def make_plan(diff: Diff, head: Manifest, base: Manifest, clone_for: Callable[[s
         except PatcherError as e:
             plan.errors.append(str(e))
             plan.files = [f for f in plan.files if f.action != "patch"]
+            plan.removed += [(f.repo, f.clr_name) for f, _ in pending if f.clr_name in removals]
             return plan
 
         for (planned, _), result in zip(pending, results):
             if result.error is not None:
                 plan.errors.append(f"{planned.clr_name}: {result.error}")
                 plan.files.remove(planned)
+                if planned.clr_name in removals:
+                    plan.removed.append((planned.repo, planned.clr_name))
                 continue
             planned.text, planned.bom = result.text, result.bom
             planned.notes += result.notes
+            if result.empty:
+                planned.action, planned.text = "delete", ""
     return plan
