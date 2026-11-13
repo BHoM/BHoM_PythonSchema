@@ -333,6 +333,206 @@ namespace PythonSchemaGeneration.Tests
 
         /***************************************************/
 
+        [Test]
+        [Description("Checks that removing the only class of a file leaves nothing meaningful, so the patcher reports the file as empty. Protects the case where py2cs " +
+            "deletes the C# file of a removed Python class.")]
+        public void RemovedClassAloneInItsFileLeavesAnEmptyFile()
+        {
+            string source = Lf("""
+                // Copyright header
+                using BH.oM.Base;
+                using System.ComponentModel;
+
+                namespace BH.oM.Demo
+                {
+                    [Description("Alone.")]
+                    public class Alone : BHoMObject
+                    {
+                        [Description("Label.")]
+                        public virtual string Label { get; set; } = "";
+                    }
+                }
+
+                """);
+            PatchResult result = Patch(source, "Alone", "BH.oM.Demo", null, new Change { Kind = "removeType" });
+
+            Assert.That(result.Empty, Is.True);
+            Assert.That(result.Text, Does.Not.Contain("Alone"));
+            Assert.That(result.Text, Does.Contain("// Copyright header"));
+            Assert.That(result.Notes, Is.Empty);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that removing one class takes its attributes and one blank line but leaves the other types and every other byte of the file, and that the file " +
+            "is not reported as empty. Protects the files that declare several types.")]
+        public void RemovedClassKeepsTheOtherTypesByteForByte()
+        {
+            int start = Demo.IndexOf("    [Description(\"A demo.\")]");
+            int end = Demo.IndexOf("    public enum Mode");
+            Assert.That(start, Is.GreaterThan(0));
+
+            PatchResult result = Patch(Demo, "Demo", "BH.oM.Demo", null, new Change { Kind = "removeType" });
+
+            Assert.That(result.Text, Is.EqualTo(Demo.Remove(start, end - start)));
+            Assert.That(result.Empty, Is.False);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that the comment directly above a removed class goes with it, while a comment separated by a blank line and the other class stay. Protects " +
+            "comments that belong to a neighbour.")]
+        public void CommentsDirectlyAboveARemovedClassGoWithIt()
+        {
+            string source = Lf("""
+                namespace BH.oM.Demo
+                {
+                    // Kept: separated by a blank line
+
+                    // Goes with First
+                    [Description("First.")]
+                    public class First
+                    {
+                    }
+
+                    public class Second
+                    {
+                    }
+                }
+
+                """);
+            string text = Patch(source, "First", "BH.oM.Demo", null, new Change { Kind = "removeType" }).Text;
+
+            Assert.That(text, Does.Contain("// Kept: separated by a blank line"));
+            Assert.That(text, Does.Not.Contain("Goes with First"));
+            Assert.That(text, Does.Not.Contain("First"));
+            Assert.That(text, Does.Contain("public class Second"));
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that a block namespace left with nothing in it is removed with its class while another namespace of the file stays, and that the file is not " +
+            "empty. Protects files that declare more than one namespace.")]
+        public void ANamespaceLeftEmptyGoesWithItsClass()
+        {
+            string source = Lf("""
+                using System;
+
+                namespace BH.oM.One
+                {
+                    public class Gone
+                    {
+                    }
+                }
+
+                namespace BH.oM.Two
+                {
+                    public class Stays
+                    {
+                    }
+                }
+
+                """);
+            PatchResult result = Patch(source, "Gone", "BH.oM.One", null, new Change { Kind = "removeType" });
+
+            Assert.That(result.Text, Does.Not.Contain("BH.oM.One"));
+            Assert.That(result.Text, Does.Contain("namespace BH.oM.Two"));
+            Assert.That(result.Text, Does.Contain("using System;"));
+            Assert.That(result.Empty, Is.False);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that a file-scoped namespace with only the removed class is reported as empty, and that a remaining enum or an assembly attribute keeps the " +
+            "file. Protects the rule that only a file with nothing meaningful is deleted.")]
+        public void OnlyAFileWithNothingMeaningfulIsReportedAsEmpty()
+        {
+            string scoped = Lf("""
+                using System;
+
+                namespace BH.oM.Demo;
+
+                public class Gone
+                {
+                }
+
+                """);
+            Assert.That(Patch(scoped, "Gone", "BH.oM.Demo", null, new Change { Kind = "removeType" }).Empty, Is.True);
+
+            string withEnum = scoped + "public enum Mode { A }\n";
+            Assert.That(Patch(withEnum, "Gone", "BH.oM.Demo", null, new Change { Kind = "removeType" }).Empty, Is.False);
+
+            string withAttribute = "[assembly: System.Reflection.AssemblyTitle(\"x\")]\n" + scoped;
+            Assert.That(Patch(withAttribute, "Gone", "BH.oM.Demo", null, new Change { Kind = "removeType" }).Empty, Is.False);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that the using lines stay when a class is removed, and that other changes sent with a removal are skipped with a note. Protects the rule that " +
+            "only the named class is touched.")]
+        public void UsingsStayAndOtherChangesAreSkipped()
+        {
+            PatchResult patched = Patch(Demo, "Demo", "BH.oM.Demo", new List<string> { "System.Linq" }, new Change { Kind = "removeType" }, new Change { Kind = "removeProperty", Name = "Length" });
+
+            Assert.That(patched.Text, Does.Contain("using BH.oM.Base;"));
+            Assert.That(patched.Text, Does.Contain("using System.ComponentModel;"));
+            Assert.That(patched.Text, Does.Not.Contain("System.Linq"));
+            Assert.That(patched.Notes, Has.One.Contains("other changes were skipped"));
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that a nested type goes with its class, and that a type of the same name in another namespace stays, with a note. Protects the file that declares " +
+            "two types of one name.")]
+        public void NestedTypesGoWithTheClassAndTheSameNameElsewhereStays()
+        {
+            string source = Lf("""
+                namespace BH.oM.One
+                {
+                    public class Same
+                    {
+                        public enum Inner { A }
+                    }
+                }
+
+                namespace BH.oM.Two
+                {
+                    public class Same
+                    {
+                    }
+                }
+
+                """);
+            PatchResult result = Patch(source, "Same", "BH.oM.One", null, new Change { Kind = "removeType" });
+
+            Assert.That(result.Text, Does.Not.Contain("Inner"));
+            Assert.That(result.Text, Does.Not.Contain("BH.oM.One"));
+            Assert.That(result.Text, Does.Contain("namespace BH.oM.Two"));
+            Assert.That(result.Text, Does.Contain("public class Same"));
+            Assert.That(result.Notes, Has.One.Contains("declares Same 2 times"));
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Checks that removing a class from a CRLF file leaves only CRLF line endings. Protects files that use Windows line endings.")]
+        public void RemovingAClassKeepsWindowsLineEndings()
+        {
+            string source = Demo.Replace("\n", "\r\n");
+            string text = Patch(source, "Demo", "BH.oM.Demo", null, new Change { Kind = "removeType" }).Text;
+
+            Assert.That(text.Replace("\r\n", ""), Does.Not.Contain("\n"));
+            Assert.That(text, Does.Contain("public enum Mode"));
+        }
+
+        /***************************************************/
+
         [Description("Builds a file job for the given type, namespace, usings and changes and runs the patcher on the source, returning the patched text and " +
             "notes. Used by every test in this class.")]
         private static PatchResult Patch(string source, string type, string ns = "BH.oM.Demo", List<string> usings = null, params Change[] changes)

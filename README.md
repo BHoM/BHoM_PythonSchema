@@ -67,6 +67,8 @@ without running it, so it only understands these rules:
   `dict[...]`, `set[...]`, `tuple[...]`, `X | None` (or `Optional[X]`), and other `bhom_schema` classes. Use
   `Annotated[int, ClrType("long")]` when the C# type is not the usual one, and `Quantity("Length", "m")` for physical quantities.
 - **Existing C# files are changed member by member**: only the properties that changed in Python are touched.
+- **A class removed in Python is removed from its C# file**, with its attributes and comments, and nothing else in the file changes. When nothing meaningful is
+  left in the file (only usings, empty namespaces and comments), the file is deleted. The C# pull request is still a draft that a person reviews and builds.
 
 [docs/templates/NewClass.py](docs/templates/NewClass.py) is a class to copy. Check your change before pushing:
 

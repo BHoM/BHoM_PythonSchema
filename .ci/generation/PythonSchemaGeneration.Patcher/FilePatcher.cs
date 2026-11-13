@@ -52,6 +52,9 @@ namespace PythonSchemaGeneration.Patcher
             if (type == null)
                 throw new InvalidOperationException($"the file does not declare {job.Type}");
 
+            if (job.Changes.Any(c => c.Kind == "removeType"))
+                return RemoveType(type, job.Changes.Count > 1);
+
             foreach (Change change in job.Changes)
             {
                 switch (change.Kind)
@@ -99,6 +102,44 @@ namespace PythonSchemaGeneration.Patcher
         }
 
         /***************************************************/
+        /**** Removing a type                           ****/
+        /***************************************************/
+
+        [Description("Removes the named type with its attributes, description and comments, and any block namespace left with nothing else in it, leaving the rest of the file as it is. "
+            + "Reports whether nothing meaningful is left, so py2cs deletes the file instead of keeping an empty one. Applies a removed Python class to the existing C# file.")]
+        private PatchResult RemoveType(BaseTypeDeclarationSyntax type, bool otherChanges)
+        {
+            if (otherChanges)
+                m_Notes.Add($"the other changes were skipped, because {type.Identifier.ValueText} is removed");
+
+            SyntaxNode target = type;
+            while (target.Parent is NamespaceDeclarationSyntax enclosing && enclosing.Members.Count == 1)
+                target = enclosing;
+
+            RemoveMemberLines(target);
+            string text = m_Edits.Apply(m_Source);
+            return new PatchResult { Text = text, Notes = m_Notes, Empty = IsEmpty(text) };
+        }
+
+        /***************************************************/
+
+        [Description("Tells whether a C# source has nothing meaningful: no type, member, statement or assembly attribute, only usings, namespaces without content, comments and blank lines. "
+            + "RemoveType uses it to decide whether the file can be deleted.")]
+        private static bool IsEmpty(string text)
+        {
+            CompilationUnitSyntax root = CSharpSyntaxTree.ParseText(text).GetCompilationUnitRoot();
+            return root.AttributeLists.Count == 0 && root.Members.All(IsEmptyNamespace);
+        }
+
+        /***************************************************/
+
+        [Description("Tells whether a member is a namespace that holds only empty namespaces. IsEmpty applies it to every top-level member.")]
+        private static bool IsEmptyNamespace(MemberDeclarationSyntax member)
+        {
+            return member is BaseNamespaceDeclarationSyntax declaration && declaration.Members.All(IsEmptyNamespace);
+        }
+
+        /***************************************************/
         /**** Finding things                            ****/
         /***************************************************/
 
@@ -112,6 +153,10 @@ namespace PythonSchemaGeneration.Patcher
             {
                 match = candidates[0];
                 m_Notes.Add($"the file declares {name} in namespace {NamespaceOf(match)}, the Python class says {ns}; the existing one is kept");
+            }
+            else if (candidates.Count > 1)
+            {
+                m_Notes.Add($"the file declares {name} {candidates.Count} times; only the one in namespace {ns} was used");
             }
 
             return match;

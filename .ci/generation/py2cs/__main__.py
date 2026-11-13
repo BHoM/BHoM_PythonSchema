@@ -20,11 +20,11 @@ from py2cs.model import dump_manifest
 from py2cs.notes import render_notes
 from py2cs.patch import FilePatch, PatchResult, run_patcher
 from py2cs.plan import Patcher, make_plan
-from py2cs.pr import PythonPr, close_linked, raise_pr
+from py2cs.pr import PythonPr, close_linked, load_summary, raise_pr
 from py2cs.reader import ReadErrors, read_package
 from py2cs.report import render_report
 from py2cs.resolve import ResolveError, load_listing, resolve_repo
-from py2cs.github import GitHubError
+from py2cs.github import GitHubError, MockGitHub
 
 def main(argv: list[str] | None = None) -> int:
     """Builds the argument parser with every command and its options, parses the arguments, runs them and turns failures into exit codes (1 for Python read errors, 2 for GitHub, alignment and value errors).
@@ -213,6 +213,10 @@ def run(args: argparse.Namespace) -> int:
         plan = make_plan(diff, head, base, clone_for, listing, patcher, args.only_repo)
         args.out.mkdir(parents=True, exist_ok=True)
         for f in plan.files:
+            # A deleted file has no text to write: the entry in plan.json is enough
+            if f.action == "delete":
+                continue
+
             target = args.out / f.repo.replace("/", "__") / f.path
             target.parent.mkdir(parents=True, exist_ok=True)
             # newline="" keeps the line endings of the existing file
@@ -242,6 +246,11 @@ def run(args: argparse.Namespace) -> int:
         python_client = None if offline else make_client(args.python_token_env)[0] if os.environ.get(args.python_token_env) else None
         if offline:
             print("no token: offline dry run, nothing is read from or written to GitHub")
+            # The offline stand-in is empty, so a file to delete is given a placeholder on the default branch: the preview shows the deletion instead of "already in step"
+            if isinstance(client, MockGitHub):
+                for entry in load_summary(args.plan_dir)["files"]:
+                    if entry["action"] == "delete" and str(entry["repo"]).lower() == args.repo.lower():
+                        client.repositories[args.repo].files[(client.default_branch(args.repo), entry["path"])] = b""
         python_pr = PythonPr(args.python_repo, args.python_pr, args.python_url)
         outcome = raise_pr(client, args.plan_dir, args.repo, python_pr, args.dry_run, python_client)
         for action in outcome.actions:

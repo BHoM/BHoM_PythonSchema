@@ -1,5 +1,7 @@
 # Plan: raise a C# pull request when a Python class is removed
 
+**Status: implemented** (patcher `removeType`, the `delete` action in `plan` and `pr`, `delete_file` in the GitHub client, with tests in `PatcherTests.cs` and `test_class_removal.py`). Still to do: run the sync test on GitHub ([Sync-Test-Procedure.md](Sync-Test-Procedure.md), test 3). The text below is the plan as agreed; where the code differs it is noted.
+
 ## The gap
 
 A Python pull request that **adds** a class gets a draft C# pull request with the new file. One that **changes** a class gets the changed members patched. One that
@@ -65,8 +67,8 @@ copyright header, for example). A file that keeps even one other class, an enum,
 
 ### 3. Report (`report.py`)
 
-- `### <path> (class removed)` for a patch, `### <path> (file deleted)` for a delete, each with `Type`, `Location` and `Changes in Python: type removed`.
-- The "Removed in Python (delete or deprecate in C# by hand)" line stays only for the classes that could not be found.
+- `### <path> (type removed)` for a patch, `### <path> (file deleted)` for a delete, each with `Type`, `Location` and `Changes in Python: type removed`.
+- The line `Removed in Python, but no C# declaration of it was found (it may be removed already; otherwise delete or deprecate it by hand)` stays only for the classes that could not be found.
 
 ### 4. GitHub client (`github.py`)
 
@@ -80,7 +82,7 @@ copyright header, for example). A file that keeps even one other class, an enum,
 - A `delete` entry is a file with no content:
   - in the "already in sync" test it is in sync when `get_file(base, path)` is `None`;
   - on the branch, if the file exists the action is `delete file <path>` (and, unless a dry run, `delete_file` with the sha it just read); if it is absent, `unchanged`;
-  - the dry-run line reads `would delete file BHoM/DataSchema_Toolkit DataSchema_oM/SyncTestDummy.cs`.
+  - the dry-run line reads `would delete file BHoM/DataSchema_Toolkit DataSchema_oM/SyncTestDummy.cs`. The offline dry run (no token) starts from an empty stand-in, so `py2cs pr --dry-run` puts a placeholder for each file to delete on the default branch of the stand-in; without it the preview would say the base is already in step.
 - A removal-only plan now has a file, so the branch, the draft, the label and the comment on the Python PR are made as for any other change. A later push to the Python PR updates the same branch.
 
 ### 6. Workflow and alignment

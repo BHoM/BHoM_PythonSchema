@@ -83,7 +83,7 @@ def raise_pr(client: GitHubClient, plan_dir: Path, repo: str, python_pr: PythonP
     base = client.default_branch(repo)
     # The base already has every planned file (the C# pull request was merged) and no draft is open: there is nothing to propose, and GitHub
     # refuses a pull request with no commits, whether or not the branch exists
-    in_sync = all((found := client.get_file(repo, base, e["path"])) is not None and found.content == (plan_folder(plan_dir, repo) / e["path"]).read_bytes() for e in files)
+    in_sync = all(_is_in_sync(client, repo, base, e, plan_dir) for e in files)
     if in_sync and client.find_pull_request(repo, branch) is None:
         result.actions.append(Action("skip", repo, f"{base} already has the planned files, nothing to raise"))
         return result
@@ -99,8 +99,18 @@ def raise_pr(client: GitHubClient, plan_dir: Path, repo: str, python_pr: PythonP
     # In a dry run a new branch does not exist yet, so the files are compared with the base branch it would start from
     read_ref = base if dry_run and _new_branch(result) else branch
     for entry in files:
-        data = (plan_folder(plan_dir, repo) / entry["path"]).read_bytes()
         current = client.get_file(repo, read_ref, entry["path"])
+        if entry["action"] == "delete":
+            if current is None:
+                result.actions.append(Action("unchanged", repo, entry["path"]))
+                continue
+
+            result.actions.append(Action("delete file", repo, entry["path"]))
+            if not dry_run:
+                client.delete_file(repo, branch, entry["path"], f"Python schema #{python_pr.number}: delete {str(entry['type']).rsplit('.', 1)[-1]}", current.sha)
+            continue
+
+        data = (plan_folder(plan_dir, repo) / entry["path"]).read_bytes()
         if current is not None and current.content == data:
             result.actions.append(Action("unchanged", repo, entry["path"]))
             continue
@@ -136,6 +146,15 @@ def raise_pr(client: GitHubClient, plan_dir: Path, repo: str, python_pr: PythonP
     if not dry_run and python_client is not None and result.pull_request is not None:
         python_client.upsert_comment(python_pr.repo, python_pr.number, MARKER, f"{MARKER}\nDraft C# pull request: {link}\n")
     return result
+
+def _is_in_sync(client: GitHubClient, repo: str, base: str, entry: dict[str, Any], plan_dir: Path) -> bool:
+    """Tells whether the base branch already has what the plan wants for one file: the same content, or no file at all for a deletion. `raise_pr` uses it to skip a pull request with nothing in it.
+    """
+    found = client.get_file(repo, base, entry["path"])
+    if entry["action"] == "delete":
+        return found is None
+
+    return found is not None and found.content == (plan_folder(plan_dir, repo) / entry["path"]).read_bytes()
 
 def _new_branch(result: PrResult) -> bool:
     """Tells whether the actions so far include creating the branch. In a dry run `raise_pr` uses it to compare files with the base branch, which the new branch would start from.

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from py2cs.plan import Plan
+from py2cs.plan import Plan, PlannedFile
 
 def only(plan: Plan, repo: str) -> Plan:
     """The part of a plan that belongs to one repository."""
     return Plan([f for f in plan.files if f.repo.lower() == repo.lower()], [(r, t) for r, t in plan.removed if r.lower() == repo.lower()], plan.errors)
+
+def heading(planned: PlannedFile) -> str:
+    """Says in a few words what the plan does to one C# file: a new file, a deleted file, a type removed from an existing file, or changes to an existing file."""
+    if planned.action == "new":
+        return "new file"
+    if planned.action == "delete":
+        return "file deleted"
+    return "type removed" if planned.changes == ["type removed"] else "changes to an existing file"
 
 def render_report(plan: Plan, python_pr: str = "", only_repo: str | None = None) -> str:
     """Writes the text of the C# pull request for a plan: the dependency on the Python PR, breaking changes, then per repository each file with its location, changes and notes, removed types and problems.
@@ -34,7 +42,7 @@ def render_report(plan: Plan, python_pr: str = "", only_repo: str | None = None)
     for repo in plan.repos():
         lines += ["", f"## {repo}"]
         for f in [x for x in plan.files if x.repo == repo]:
-            lines += ["", f"### `{f.path}` ({'new file' if f.action == 'new' else 'changes to an existing file'})", f"Type: `{f.clr_name}`"]
+            lines += ["", f"### `{f.path}` ({heading(f)})", f"Type: `{f.clr_name}`"]
             if f.rule:
                 lines.append(f"Location: {f.rule}")
             if f.changes:
@@ -45,7 +53,7 @@ def render_report(plan: Plan, python_pr: str = "", only_repo: str | None = None)
                 lines += ["", "Notes:"] + [f"- {n}" for n in f.notes]
         removed = [t for r, t in plan.removed if r == repo]
         if removed:
-            lines += ["", "Removed in Python (delete or deprecate in C# by hand):"] + [f"- `{t}`" for t in removed]
+            lines += ["", "Removed in Python, but no C# declaration of it was found (it may be removed already; otherwise delete or deprecate it by hand):"] + [f"- `{t}`" for t in removed]
 
     unknown = [t for r, t in plan.removed if r == "?"]
     if unknown:
