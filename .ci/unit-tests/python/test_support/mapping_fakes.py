@@ -1,7 +1,7 @@
 """A stand-in for a SparkSession that the tests of bhom_schema.mapping share: tables in memory, the few statements the helpers send, and DataFrames over dict rows.
 
-It understands what the helpers ask for and nothing more: CREATE TABLE (with IF NOT EXISTS and OR REPLACE), ALTER TABLE ... ADD COLUMNS, other statements (recorded), `createDataFrame` with a DDL
-string, `saveAsTable` in append mode (refusing a column the table does not have, as Delta does), `table`, `where` with an IN list, `limit`, `collect`, `columns` and `catalog.tableExists`.
+It understands what the helpers ask for and nothing more: CREATE TABLE (with IF NOT EXISTS and OR REPLACE), DROP TABLE IF EXISTS, ALTER TABLE ... ADD COLUMNS, other statements (recorded),
+`createDataFrame` with a DDL string, `saveAsTable` in append mode (refusing a column the table does not have, as Delta does) or overwrite mode, `table`, `where` with an IN list, `limit`, `collect`, `columns` and `catalog.tableExists`.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 CREATE = re.compile(r"^CREATE (?P<replace>OR REPLACE )?TABLE (?P<exists>IF NOT EXISTS )?(?P<name>\S+) \(\n(?P<body>.*?)\n\)", re.S)
+DROP = re.compile(r"^DROP TABLE IF EXISTS (?P<name>\S+)$")
 ADD_COLUMNS = re.compile(r"^ALTER TABLE (?P<name>\S+) ADD COLUMNS \(`(?P<column>[^`]+)` \w+\)$")
 IN_LIST = re.compile(r"^`(?P<column>[^`]+)` IN \((?P<items>.*)\)$")
 
@@ -33,12 +34,13 @@ class FakeTable:
         self.rows = rows if rows is not None else []
 
 class FakeWriter:
-    """The `write` of a frame: it appends the rows of the frame to the table that saveAsTable names, refusing a column the table does not have."""
+    """The `write` of a frame: it appends the rows of the frame to the table that saveAsTable names, refusing a column the table does not have; in overwrite mode it makes the table again from the frame."""
 
-    def __init__(self, session: FakeSpark, rows: list[dict[str, Any]]) -> None:
-        """Keeps the session and the rows to write."""
+    def __init__(self, session: FakeSpark, rows: list[dict[str, Any]], columns: list[str]) -> None:
+        """Keeps the session, the rows to write and their columns."""
         self.session = session
         self.rows = rows
+        self.columns = columns
         self.mode_name = ""
 
     def mode(self, name: str) -> FakeWriter:
@@ -46,10 +48,18 @@ class FakeWriter:
         self.mode_name = name
         return self
 
+    def option(self, name: str, value: str) -> FakeWriter:
+        """Accepts a write option (such as overwriteSchema) and returns the writer."""
+        return self
+
     def saveAsTable(self, name: str) -> None:
         """Appends the rows to the table."""
-        assert self.mode_name == "append"
-        table = self.session.tables[name.replace("`", "")]
+        key = name.replace("`", "")
+        if self.mode_name == "overwrite" or key not in self.session.tables:
+            self.session.tables[key] = FakeTable(list(self.columns), [])
+
+        assert self.mode_name in ("append", "overwrite")
+        table = self.session.tables[key]
         for row in self.rows:
             unknown = [column for column in row if column not in table.columns]
             if unknown:
@@ -69,7 +79,7 @@ class FakeFrame:
     @property
     def write(self) -> FakeWriter:
         """Returns the writer of the frame."""
-        return FakeWriter(self.session, self.rows)
+        return FakeWriter(self.session, self.rows, self.columns)
 
     def where(self, condition: str) -> FakeFrame:
         """Keeps the rows that an `IN` condition lets through; any other condition keeps every row."""
@@ -123,6 +133,11 @@ class FakeSpark:
             if created["replace"] or name not in self.tables:
                 self.tables[name] = FakeTable(columns)
 
+            return
+
+        dropped = DROP.match(statement)
+        if dropped:
+            self.tables.pop(dropped["name"].replace("`", ""), None)
             return
 
         added = ADD_COLUMNS.match(statement)

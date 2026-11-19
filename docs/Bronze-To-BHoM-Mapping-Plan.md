@@ -409,11 +409,11 @@ The rule across every row: **the engineer approves every change to the mapping f
 
 `.ci/unit-tests/notebooks/Bronze-To-BHoM-Demo.ipynb`, in the style of the two existing notebooks:
 
-1. Install and settings (widgets for the bronze volume path, and the catalog and schemas for silver and gold).
+1. Install and settings (widgets for the catalog and the schemas of silver and gold; the mapping is kept in the notebook's own folder).
 2. Bronze to silver, the way an engineer would: read `elements.parquet` and `levels.parquet` of one model from the volume, and write a deliberately messy flat table with project and model values
-   repeated on every row, lengths in millimetres, materials as free text, a `source_file` column, one column with no BHoM home and one row with a typo. When the volume is not reachable (for
-   example in the tests), the notebook builds the same rows from a small sample instead.
-3. `alignment`, `profile`, `check_key`, `schema_overview` and `describe_class`, shown without the agent: the facts the agent works from.
+   repeated on every row, lengths in millimetres, materials as free text, a `source_file` column, one column with no BHoM home and one row with a typo. The built notebook uses only a small sample, because the
+   Parquet columns of a real model are not known here; the cell says where `spark.read.parquet` goes. `test_mapping_notebook.py` runs the notebook against the stand-in session.
+3. `alignment`, `profile`, `sample_rows`, `check_key`, `schema_overview`, `describe_class` and `search_properties`, shown without the agent: the facts the agent works from.
 4. A ready-made mapping file, loaded and validated: the errors are shown (unknown material, the typo row, a key conflict), then fixed.
 5. `write_gold`, then read the gold tables back as objects with `read_objects`, and join a child to its parent through `Building_id`.
 6. A new column added to silver: `alignment` reports it.
@@ -455,7 +455,7 @@ The rule across every row: **the engineer approves every change to the mapping f
 
 ## Steps
 
-Steps 1 to 3 are implemented; the rest is still to do.
+Steps 1 to 4 are implemented; the rest is still to do.
 
 1. `bhom_schema.mapping`: the mapping file format with `find_mapping`, `load_mapping` and `save_mapping` and its rules, with tests.
 2. The tools to look with: `schema_overview`, `describe_class`, `search_properties`, `profile` (facts only), `sample_rows`, `check_key` and `alignment`, with tests. This replaces the first version of the step-2 helpers: the
