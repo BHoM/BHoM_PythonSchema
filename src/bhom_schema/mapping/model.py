@@ -239,11 +239,15 @@ def read_column(prop: str, value: object, model: type[BaseModel] | None, where: 
 
     return ColumnMapping(prop, source, unit, mapped, default, "default" in data)
 
-def check_property(model: type[BaseModel], prop: str, unit: str | None, values: Mapping[str, str], where: str, problems: list[str]) -> None:
-    """Checks a unit against the quantity of the property, and a value map against the members of its enum."""
+def field_facts(model: type[BaseModel], prop: str) -> tuple[Any, Quantity | None]:
+    """Returns the bare type of a field of a class (without `Annotated` and `| None`) and its `Quantity` marker, or None when it has none."""
     info = model.model_fields[prop]
     kind, markers = bare(info.annotation, info.metadata)
-    quantity = next((marker for marker in markers if isinstance(marker, Quantity)), None)
+    return kind, next((marker for marker in markers if isinstance(marker, Quantity)), None)
+
+def check_property(model: type[BaseModel], prop: str, unit: str | None, values: Mapping[str, str], where: str, problems: list[str]) -> None:
+    """Checks a unit against the quantity of the property, and a value map against the members of its enum."""
+    kind, quantity = field_facts(model, prop)
     if unit is not None:
         if quantity is None:
             problems.append(f"{where}: {prop} has no quantity, so it takes no unit")
