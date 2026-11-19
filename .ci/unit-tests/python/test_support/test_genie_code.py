@@ -233,3 +233,87 @@ def test_the_instructions_are_short_and_install_the_package_as_the_demo_does():
 
     assert len(text) < 3000 and "bhom-schema:" not in text
     assert install.removeprefix("%pip ") in text and "`@bhom-mapping check <table>`" in text
+
+# ---------------------------------------------------------------- publishing through the Workspace API
+
+class Missing(Exception):
+    """The exception the stand-in client raises for a path that does not exist, as the SDK's NotFound."""
+
+class FakeWorkspace:
+    """The `workspace` part of a WorkspaceClient, as far as the publisher uses it: it keeps files and folders by their API path and records the calls."""
+
+    def __init__(self, files: dict[str, str] | None = None) -> None:
+        """Starts with the given files (API path to text) and an empty log."""
+        self.files = dict(files or {})
+        self.folders: set[str] = set()
+        self.calls: list[tuple[str, str]] = []
+
+    def download(self, path: str) -> Any:
+        """Returns a file-like object with the bytes of the file, or raises Missing."""
+        import io
+
+        if path not in self.files:
+            raise Missing(path)
+
+        return io.BytesIO(self.files[path].encode("utf-8"))
+
+    def mkdirs(self, path: str) -> None:
+        """Records the folder."""
+        self.calls.append(("mkdirs", path))
+        self.folders.add(path)
+
+    def upload(self, path: str, content: Any, format: Any = None, overwrite: bool = False) -> None:
+        """Stores the file, refusing to replace one unless overwrite is set, and records the format."""
+        assert overwrite and format == "AUTO"
+        self.calls.append(("upload", path))
+        self.files[path] = content.read().decode("utf-8")
+
+    def delete(self, path: str, recursive: bool = False) -> None:
+        """Removes a folder and what is under it, or raises Missing when there is nothing there."""
+        self.calls.append(("delete", path))
+        found = [name for name in self.files if name.startswith(path + "/")]
+        if not found:
+            raise Missing(path)
+
+        for name in found:
+            del self.files[name]
+
+class FakeClient:
+    """A WorkspaceClient with only the `workspace` part."""
+
+    def __init__(self, files: dict[str, str] | None = None) -> None:
+        """Keeps the stand-in workspace."""
+        self.workspace = FakeWorkspace(files)
+
+def test_publishing_through_the_workspace_api_uses_paths_without_the_workspace_prefix():
+    """Checks that the workspace store writes the skill files and the instructions with the paths the Workspace API takes (`/.assistant/...`, not `/Workspace/.assistant/...`), as files in AUTO
+    format, replacing the skill folder and keeping other text of the instructions.
+
+    Protects the publish that failed through the file system: the root of the workspace cannot be written that way.
+    """
+    from pathlib import PurePosixPath
+
+    client = FakeClient({"/.assistant_workspace_instructions.md": "## Team A\n- Use tabs.\n", "/.assistant/skills/bhom-mapping/stale.md": "old"})
+    store = PUBLISH.WorkspaceStore(client, Missing, "AUTO")
+    actions = PUBLISH.publish(SOURCE, PurePosixPath("/Workspace"), dry_run=False, store=store)
+    files = client.workspace.files
+
+    assert actions[0] == "copied skill bhom-mapping to /Workspace/.assistant/skills/bhom-mapping"
+    assert sorted(name for name in files if name.startswith("/.assistant/skills/")) == [
+        "/.assistant/skills/bhom-mapping/SKILL.md", "/.assistant/skills/bhom-mapping/mapping-format.md", "/.assistant/skills/bhom-mapping/mapping-guidance.md"]
+    assert files["/.assistant/skills/bhom-mapping/SKILL.md"].replace("\r\n", "\n") == (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert files["/.assistant_workspace_instructions.md"].startswith("## Team A\n- Use tabs.\n\n<!-- bhom-schema: start -->\n## BHoM data")
+    assert ("delete", "/.assistant/skills/bhom-mapping") in client.workspace.calls and not any(path.startswith("/Workspace") for _, path in client.workspace.calls)
+
+def test_a_dry_run_through_the_workspace_api_only_reads():
+    """Checks that a dry run through the workspace store downloads the instructions (a missing file counts as empty) and makes no write, delete or folder call.
+
+    Protects the first look an admin takes before publishing.
+    """
+    from pathlib import PurePosixPath
+
+    client = FakeClient()
+    actions = PUBLISH.publish(SOURCE, PurePosixPath("/Workspace"), dry_run=True, store=PUBLISH.WorkspaceStore(client, Missing, "AUTO"))
+
+    assert client.workspace.calls == [] and actions[0].startswith("would copy skill bhom-mapping to /Workspace/.assistant/skills/bhom-mapping")
+    assert actions[1].startswith("would write the BHoM section of the instructions in /Workspace/.assistant_workspace_instructions.md")

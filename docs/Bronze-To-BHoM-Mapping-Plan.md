@@ -276,7 +276,8 @@ databricks/genie-code/
 Publishing, by an admin, after a change is merged:
 
 1. In the workspace, the admin keeps a Databricks Git folder of this repository, for example `/Workspace/Shared/admin/BHoM_PythonSchema`, and pulls it.
-2. The admin runs `publish.py` from that Git folder. It copies every skill folder of `databricks/genie-code/skills/` into `Workspace/.assistant/skills/`, replacing only the folders it owns, and
+2. The admin runs `publish.py` from that Git folder. It writes through the Workspace API (the Databricks SDK), not the file system of the notebook, which cannot create files in the root of the workspace
+   (the first version failed with `PERMISSION_DENIED ... View permissions on 0` for that reason). It copies every skill folder of `databricks/genie-code/skills/` into `Workspace/.assistant/skills/`, replacing only the folders it owns, and
    writes the BHoM section into `Workspace/.assistant_workspace_instructions.md` between two marker lines (`<!-- bhom-schema: start -->` and `<!-- bhom-schema: end -->`), so instructions that
    other teams add to the same file are kept.
 3. The admin starts a new Genie Code chat and checks that `@bhom-mapping` is listed.
