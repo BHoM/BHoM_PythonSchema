@@ -17,8 +17,8 @@ from typing import Any
 from py2cs.model import GenericParam, Manifest, MemberInfo, PropertyInfo, TypeInfo
 
 ROOT_PACKAGE = "bhom_schema"
-# The folders of the package that are written by hand, never generated
-HAND_WRITTEN = {"_support", "tables"}
+# The folders of the package that are written by hand, never generated: they are Python tools, not oM classes, so none of the one-class-per-file rules apply to them
+HAND_WRITTEN = {"_support", "tables", "mapping"}
 MODEL_BASES = {"SchemaModel", "BaseModel"}
 ENUM_BASES = {"Enum", "IntEnum", "IntFlag", "Flag", "BHoMEnum", "BHoMFlags"}
 FLAG_BASES = {"IntFlag", "Flag", "BHoMFlags"}

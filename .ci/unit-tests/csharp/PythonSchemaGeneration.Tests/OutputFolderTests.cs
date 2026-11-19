@@ -122,15 +122,16 @@ namespace PythonSchemaGeneration.Tests
         /***************************************************/
 
         [Test]
-        [Description("Checks that the hand-written tables folder is never listed as a folder the run did not generate, even in a run for all repositories. Protects it from " +
-            "the clean-up option, which deletes the folders that are listed.")]
-        public void TheHandWrittenTablesFolderIsNeverMissing()
+        [Description("Checks that the hand-written tables and mapping folders are never listed as a folder the run did not generate, even in a run for all repositories. Protects them " +
+            "from the clean-up option, which deletes the folders that are listed.")]
+        public void TheHandWrittenFoldersAreNeverMissing()
         {
             string folder = Path.Combine(Path.GetTempPath(), "pysg-tables-" + Guid.NewGuid().ToString("N"));
             try
             {
                 string package = Path.Combine(folder, "bhom_schema");
                 Directory.CreateDirectory(Path.Combine(package, "tables"));
+                Directory.CreateDirectory(Path.Combine(package, "mapping"));
                 WriteOldAssembly(package, "Old_oM", FixtureRepo);
 
                 List<string> missing = OutputWriter.MissingAssemblyFolders(package, new List<RenderedType>(), null);

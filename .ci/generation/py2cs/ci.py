@@ -47,7 +47,7 @@ sys.path.insert(0, str(root))
 failures = []
 count = 0
 for path in sorted((root / "bhom_schema").rglob("*.py")):
-    if path.name in ("__init__.py", "_version.py") or "_support" in path.parts or "tables" in path.parts:
+    if path.name in ("__init__.py", "_version.py") or "_support" in path.parts or "tables" in path.parts or "mapping" in path.parts:
         continue
     count += 1
     module = ".".join(path.relative_to(root).with_suffix("").parts)
