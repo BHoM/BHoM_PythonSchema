@@ -270,7 +270,7 @@ databricks/genie-code/
 │       ├── mapping-guidance.md          the judgment guidance (below), edited by the admins
 │       └── mapping-format.md            the mapping file reference, read by the skill when needed
 ├── workspace-instructions.md            the BHoM section of the workspace instructions
-└── publish.py                           a notebook that publishes both into the workspace
+└── publish.py                           a Databricks notebook (source format) that publishes both into the workspace; `test_genie_code.py` tests it and the skill text
 ```
 
 Publishing, by an admin, after a change is merged:
@@ -455,7 +455,7 @@ The rule across every row: **the engineer approves every change to the mapping f
 
 ## Steps
 
-Steps 1 to 4 are implemented; the rest is still to do.
+Steps 1 to 5 are implemented; the rest is still to do.
 
 1. `bhom_schema.mapping`: the mapping file format with `find_mapping`, `load_mapping` and `save_mapping` and its rules, with tests.
 2. The tools to look with: `schema_overview`, `describe_class`, `search_properties`, `profile` (facts only), `sample_rows`, `check_key` and `alignment`, with tests. This replaces the first version of the step-2 helpers: the
