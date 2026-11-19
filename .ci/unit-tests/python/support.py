@@ -52,7 +52,7 @@ def module_names(package: Path) -> list[str]:
     names: list[str] = []
     for file in sorted(package.rglob("*.py")):
         relative = file.relative_to(package.parent).with_suffix("")
-        if relative.parts[-1] in ("__init__", "_version") or relative.parts[1] in ("_support", "tables"):
+        if relative.parts[-1] in ("__init__", "_version") or relative.parts[1] in ("_support", "tables", "mapping"):
             continue
         names.append(".".join(relative.parts))
     return names
