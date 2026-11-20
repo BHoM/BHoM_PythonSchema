@@ -175,7 +175,7 @@ Open the file on GitHub, click the pencil (*Edit this file*), make the change, t
 
 ### In the PR description
 
-Say **what** you added and **why** (which silver column or tool needs it). Leave the checklist of the template in.
+Fill in **What I added and why** (which silver column or tool needs it) and leave the checklist of the template in. You tick its boxes as you go through sections 6 to 8.
 
 ## 6. Check that the C# pull request was raised
 

@@ -15,13 +15,18 @@ Closes #
 
 
 ### Python schema changes (only for PRs that change `src/bhom_schema`)
-<!-- A Python PR is a proposal: the C# is the source of truth. See "Life of a Python change" in the README. Delete if not required -->
+<!-- New to this? Read docs/User-Guide-2-Extending-The-Schema.md. A Python PR is a proposal: the matching C# PR is merged first, this one second. Delete this section if the PR does not change src/bhom_schema -->
 
-- [ ] Linked C# PR: 
-- [ ] The C# PR is merged, or this PR is closed with a comment if the C# PR was closed
-- [ ] `py2cs check` reports no errors
-- [ ] `py2cs align` passes against the merged C# (first value is the C#, second this PR)
-- [ ] Breaking changes (removed or renamed property, changed type, removed enum member or class) have a Versioning_Toolkit upgrade, or none is needed
+**What I added and why** (for example: a `NumberOfLifts` property on `Building`, because my `elements_flat` table has a `number_of_lifts` column that has no home yet):
+
+
+Tick each box when it is true:
+
+- [ ] Every new class and property has a **description** (what it is, its unit, and `Aliases:` with other names for it) and a **default value**, so Genie Code can map columns to it
+- [ ] A **comment with a link to a C# PR** appeared on this PR. Link: 
+- [ ] I asked a reviewer to approve the C# PR (see "Get the C# pull request approved" in the user guide), and it is **merged**. If it was closed without merging, I closed this PR with a comment saying why
+- [ ] After the C# merge I clicked **Checks** → **Re-run all jobs** on this PR, and the checks are **green**. If one lists differences (first value is the C#, second is this PR), I changed my Python to match the C# and pushed
+- [ ] I only **added** things. If I renamed or removed a property, changed a type, or removed an enum member or class, I talked to Viet Le (@vietle-bh) first, because old BHoM files may stop opening
 
 
 ### Test files
