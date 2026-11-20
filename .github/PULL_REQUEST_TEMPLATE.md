@@ -1,11 +1,6 @@
 <!-- PLEASE ENSURE YOU REVIEW THE CONTENT OF EACH PR CAREFULLY, INCLUDING SUBSEQUENT COMMENTS BY YOURSELF OR OTHERS. -->
 <!-- IN PARTICULAR PLEASE ENSURE THAT SENSITIVE OR INAPPROPRIATE INFORMATION IS NOT UPLOADED -->
 
-### NOTE: Depends on 
-<!-- Link to any additional PRs in other repos required for this PR to function -->
-<!-- Delete if not required -->
-
-   
 ### Issues addressed by this PR
 <!-- Add reference(s) to issue(s) solved by this PR. Please use keyword Fixes/Closes as per https://help.github.com/articles/closing-issues-using-keywords/ -->
 
@@ -26,7 +21,7 @@ Tick each box when it is true:
 - [ ] A **comment with a link to a C# PR** appeared on this PR. Link: 
 - [ ] I asked a reviewer to approve the C# PR (see "Get the C# pull request approved" in the user guide), and it is **merged**. If it was closed without merging, I closed this PR with a comment saying why
 - [ ] After the C# merge I clicked **Checks** → **Re-run all jobs** on this PR, and the checks are **green**. If one lists differences (first value is the C#, second is this PR), I changed my Python to match the C# and pushed
-- [ ] I only **added** things. If I renamed or removed a property, changed a type, or removed an enum member or class, I talked to Viet Le (@vietle-bh) first, because old BHoM files may stop opening
+- [ ] I only **added** things. If I renamed or removed a property, changed a type, or removed an enum member or class, old BHoM files may stop opening
 
 
 ### Test files

@@ -376,9 +376,9 @@ So add rows with the plain command, and use *replace* after a correction, a dele
 ### Run it
 
 1. **Attach compute.** Serverless, or a cluster with Python 3.12 or later. You need permission to create tables in two schemas of one catalog (they must already exist).
-2. **Set the widgets** at the top: `catalog`, `schema` (silver) and `gold_schema`. Leave `use_genie` on `yes` to follow the whole guide with Genie Code, or set it to `no` to let the notebook write the mapping itself (useful to test the package alone, or when `@bhom-mapping` is not published to your workspace yet).
-3. **Run the cells in order**, reading the *Expect* lines. With `use_genie = yes` the notebook stops at three **Genie Code steps** that tell you what to type in the panel; run the check cell that follows each one before going on. Each check cell says exactly what is missing if something went wrong.
-4. **Clean up:** set the `cleanup` widget to `yes` and run the last cell to drop the demo tables and the mapping file.
+2. **Set your variables.** In section 2 change `CATALOG`, `SILVER_SCHEMA` and `GOLD_SCHEMA` to your own and run the cell. The `@bhom-mapping` skill must be published to your workspace (ask a workspace admin if it is not).
+3. **Run the cells in order**, one section at a time, reading the *Expect* lines. The notebook stops at three **Genie Code steps** that tell you what to type in the panel; run the check cell that follows each one before going on. Each check cell says exactly what is missing if something went wrong.
+4. **Clean up:** run the last section. It always drops the demo tables and the mapping file, so use a gold schema that holds nothing else.
 
 A notebook that runs to the end with every check cell passing means the whole flow works in your workspace: the package installs, Genie Code can find the skill, a mapping can be written and validated, gold can be written and read back to a flat DataFrame.
 
