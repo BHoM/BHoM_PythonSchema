@@ -26,7 +26,7 @@ Tick each box when it is true:
 - [ ] A **comment with a link to a C# PR** appeared on this PR. Link: 
 - [ ] I asked a reviewer to approve the C# PR (see "Get the C# pull request approved" in the user guide), and it is **merged**. If it was closed without merging, I closed this PR with a comment saying why
 - [ ] After the C# merge I clicked **Checks** → **Re-run all jobs** on this PR, and the checks are **green**. If one lists differences (first value is the C#, second is this PR), I changed my Python to match the C# and pushed
-- [ ] I only **added** things. If I renamed or removed a property, changed a type, or removed an enum member or class, I talked to Viet Le (@vietle-bh) first, because old BHoM files may stop opening
+- [ ] I only **added** things. If I renamed or removed a property, changed a type, or removed an enum member or class, old BHoM files may stop opening
 
 
 ### Test files
