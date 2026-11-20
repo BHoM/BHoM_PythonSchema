@@ -8,7 +8,9 @@ Python (Pydantic) classes generated from the BHoM C# object model (oM), the Pyth
 - `.ci/generation/py2cs`: the Python to C# converter, used by the linked-PR workflow to draft aligned C#.
 - `.ci/unit-tests`: NUnit and pytest tests, plus `run-all.ps1` that runs everything.
 - `.github/workflows`: the weekly generation, the PR checks and the linked C# pull request. See [docs/Workflows.md](docs/Workflows.md).
-- `docs/`: research notes and the coding plan.
+- `docs/`: research notes and the coding plan. **New to the package? Start with the user guides:**
+  [guide 1, from flat tables to BHoM gold tables with Genie Code](docs/User-Guide-1-From-Flat-Tables-To-Gold.md) and
+  [guide 2, reusing and extending the schema](docs/User-Guide-2-Extending-The-Schema.md).
 
 ## Development setup
 

@@ -279,12 +279,14 @@ def test_the_included_repositories_file_is_tidy():
     assert all(name == name.strip() for name in text.splitlines())
 
 def test_the_alpha_workflow_publishes_only_when_asked_and_only_the_publish_job_gets_an_identity_token():
-    """Checks that the alpha workflow starts on a schedule or by hand, is a dry run by default, publishes only when develop moved and not a dry run, gives an identity token to the publish job only, and stores no secret.
+    """Checks that the alpha workflow starts on a push to develop that touches the package, on a schedule or by hand, is a dry run by hand by default, publishes only when develop moved and not a dry run, gives an
+    identity token to the publish job only, and stores no secret.
 
-    Protects TestPyPI from an unplanned alpha and the identity token from the build job.
+    Protects TestPyPI from an unplanned alpha and the identity token from the build job, and keeps a merged Python change on its way to the notebooks.
     """
     workflow = load("alpha-release.yml")
-    assert set(workflow["on"]) == {"schedule", "workflow_dispatch"}
+    assert set(workflow["on"]) == {"push", "schedule", "workflow_dispatch"}
+    assert workflow["on"]["push"]["branches"] == ["develop"] and "src/bhom_schema/**" in workflow["on"]["push"]["paths"]
     assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
     assert workflow["permissions"] == {"contents": "read"}
     assert list(workflow["jobs"]) == ["build", "publish-testpypi", "mark"]

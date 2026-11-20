@@ -12,7 +12,7 @@ written to.** BHoM, BHoM_Engine and JSONSchema_Toolkit are only cloned and built
 | [linked-csharp-pr.yml](../.github/workflows/linked-csharp-pr.yml) | A pull request that changes `src/bhom_schema`, and by hand | One job, **Raise or update draft**: finds the C# repositories the change touches, raises or updates a linked **draft** pull request in each, and comments on the Python PR with its link. A class removed in Python is removed from its C# file (the file is deleted when nothing meaningful is left), so a removal-only change gets a draft too. The shared action `.github/actions/linked-pr-context` does the finding |
 | [linked-csharp-pr-close.yml](../.github/workflows/linked-csharp-pr-close.yml) | A Python pull request that changes `src/bhom_schema` is closed, and by hand | Closes the linked C# draft with a comment when the Python PR was closed unmerged, or only comments when it was merged. A separate workflow so that nothing of it shows on an open pull request |
 | [release.yml](../.github/workflows/release.yml) | By hand only (dry run by default) | Regenerates with `--release X.Y`, checks, builds the wheel and the release notes; when not a dry run, pushes branch `vX.Y` and tag `vX.Y.0`, creates the GitHub Release and publishes to TestPyPI. See "Making a release" |
-| [alpha-release.yml](../.github/workflows/alpha-release.yml) | Every day at 6 AM UTC, and by hand (dry run by default) | Publishes `develop` as it is, as the pre-release `X.Y.0aYYMMDDHHmm`, to TestPyPI. No C# build. Skipped when `develop` has not moved since the last alpha. See "Making an alpha release" |
+| [alpha-release.yml](../.github/workflows/alpha-release.yml) | A push to `develop` that changes the package, every day at 6 AM UTC, and by hand (dry run by default) | Publishes `develop` as it is, as the pre-release `X.Y.0aYYMMDDHHmm`, to TestPyPI. No C# build. Skipped when `develop` has not moved since the last alpha. See "Making an alpha release" |
 
 ## How they fit together
 
@@ -146,7 +146,8 @@ the alpha workflow fails on purpose: an alpha of `10.0` would sort below the rel
 
 ## Making an alpha release
 
-Alphas are made by `alpha-release.yml` every day at 6 AM UTC (after the Saturday generation has pushed), so nothing is done by hand. Python users install the
+Alphas are made by `alpha-release.yml` when a change to `src/bhom_schema` or `pyproject.toml` is pushed to `develop` (a merged pull request), and every day at 6 AM UTC (the
+weekly generation pushes with the workflow token, which starts no workflow, so the daily run picks it up), so nothing is done by hand. Python users install the
 latest alpha with `pip install --pre bhom-schema`; without `--pre` they get the release. pip has no `--alpha` option.
 
 - **Source.** `develop` as it is. Nothing is regenerated and no C# is built; `develop` is regenerated weekly and takes pull requests in between.

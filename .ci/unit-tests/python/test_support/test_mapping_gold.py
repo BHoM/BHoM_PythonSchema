@@ -284,6 +284,23 @@ def test_a_new_silver_row_is_added_and_the_others_are_left_alone(tmp_path: Path)
     assert replaced.written == {"Building": 4, "Storey": 4, "Beam": 13} and replaced.existing == {"Building": 0, "Storey": 0, "Beam": 0}
     assert any(statement.startswith("CREATE OR REPLACE TABLE") for statement in spark.statements)
 
+def test_writing_again_neither_updates_nor_removes_rows_but_replace_does(tmp_path: Path):
+    """Checks that after a value changes in silver and a building disappears from it, writing again leaves the gold rows as they were, and that replace=True makes gold follow silver.
+
+    Protects the guide that tells the engineer to replace the tables to bring a correction to gold.
+    """
+    spark, _ = written(tmp_path)
+    gold = "dev_catalog.precedents_gold.Building"
+    silver = spark.tables[TABLE]
+    silver.rows[:] = [{**row, "levels_above_ground": 30} for row in silver.rows if not (row["project_number"] == "P-1" and row["model_name"] == "Podium")]
+    again = write_gold(spark, TABLE, the_mapping())
+
+    assert again.written["Building"] == 0 and len(spark.tables[gold].rows) == 4
+    assert {row["StoreysAboveGround"] for row in spark.tables[gold].rows} == {4, 5, 24, 25}
+    write_gold(spark, TABLE, the_mapping(), replace=True)
+
+    assert len(spark.tables[gold].rows) == 3 and {row["StoreysAboveGround"] for row in spark.tables[gold].rows} == {30}
+
 def test_nothing_is_written_while_the_mapping_is_not_valid(tmp_path: Path):
     """Checks that write_gold raises GoldRefused with the report, runs no statement and writes no row, when the data has a value that does not fit.
 

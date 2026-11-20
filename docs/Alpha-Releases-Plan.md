@@ -38,7 +38,7 @@ Decided: a forgotten version bump fails the alpha (no fallback to `X.Y.0.post1.d
 
 ## The workflow: `.github/workflows/alpha-release.yml`
 
-Triggers: `schedule` daily (06:00 UTC, after Saturday's 04:00 generation has pushed) and `workflow_dispatch` with `dry_run` (default true) and `force` (publish even when nothing changed).
+Triggers: `push` to `develop` that changes `src/bhom_schema` or `pyproject.toml` (a merged pull request is published at once), `schedule` daily (06:00 UTC; the Saturday 04:00 generation pushes with the workflow token, which starts no workflow) and `workflow_dispatch` with `dry_run` (default true) and `force` (publish even when nothing changed).
 
 Concurrency: one group shared with `python-schema-generation.yml` and `release.yml`, `cancel-in-progress: false`, so an alpha never packages a half-pushed `develop` or races a beta.
 
