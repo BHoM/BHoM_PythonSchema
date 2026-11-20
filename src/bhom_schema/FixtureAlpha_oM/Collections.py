@@ -13,7 +13,6 @@ from bhom_schema.BHoM.BHoMObject import BHoMObject
 from bhom_schema.FixtureAlpha_oM.PointLike import PointLike
 from bhom_schema._support import ClrType
 
-
 class Collections(BHoMObject):
     __bhom__: ClassVar[dict[str, Any]] = {
         'clr_name': 'BH.oM.FixtureAlpha.Collections',
