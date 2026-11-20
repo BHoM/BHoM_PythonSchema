@@ -502,6 +502,26 @@ hand at first. Running it automatically needs an agent that can be driven from a
 `validate_mapping` and `write_gold` collect the rows of the silver table to the notebook. If a silver table grows past what a notebook can hold, the same validation can run on each partition with
 `mapInPandas` and the objects can be written without being collected. Not needed for the size of one Revit model.
 
+### Connectors (MCP servers) in Genie Code
+
+Genie Code offers to add connectors (MCP servers such as GitHub, Jira or Gmail) as extra tools. **The first version uses none**: everything the mapping work needs is in `bhom_schema.mapping`, which runs in the
+notebook. Engineers can dismiss the banner that offers them.
+
+Where a connector could help later, once engineers have used the skill on real tables:
+
+- **GitHub, read-only first.** The one step that points outside the notebook is "this column has no BHoM property". Today the agent only tells the engineer to follow the Python-to-C# procedure. A connector could let it
+  read the classes in the BHoM_PythonSchema repository and its open pull requests, and later draft the Python pull request for a new property (a write, so only after the read-only use has proved its worth, and with the
+  engineer's approval of every change).
+- **Jira or another tracker,** to file a request for a new property in the schema backlog, if that is how the team tracks it.
+- **Gmail and similar:** nothing in this workflow needs them.
+
+Reasons to hold off, to settle before turning any on:
+
+- **Reach.** Each connector widens what the agent can read and do, and the rules of the skill do not cover those tools; they would have to be extended ("never write to a repository without approval").
+- **Data leaving the workspace.** Whatever the agent passes to a connector goes to that service, which matters for client project data.
+- **Automatic runs.** The runs of the first Future section have auto-approve on, so connectors would act with nobody confirming each call.
+- **Who controls them.** It is not known whether workspace admins can control which connectors engineers see. If not, add a line to the workspace instructions: do not use connectors for mapping work.
+
 ### Our own agent (option B)
 
 An agent deployed with the Mosaic AI Agent Framework and Model Serving, calling the same tools. It can follow if Genie Code proves too variable, if the mapping work needs to run
